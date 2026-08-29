@@ -8,7 +8,7 @@ import { useSessions } from "@/composables/useSessions";
 import { useTerminals } from "@/composables/useTerminals";
 import type { SavedSession } from "@/domain/session";
 import "@xterm/xterm/css/xterm.css";
-import "@/styles/app.css";
+import "@/styles/app.scss";
 
 const dialogOpen = ref(false);
 const error = ref("");

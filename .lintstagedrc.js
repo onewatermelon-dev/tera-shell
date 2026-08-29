@@ -4,5 +4,6 @@
  */
 export default {
   "*.{js,ts,cjs,json,tsx,css,less,scss,vue,html,md}": ["cspell lint"],
-  "*.{js,ts,vue,md}": ["prettier --write", "eslint"]
+  "*.{js,ts,vue,md}": ["prettier --write", "eslint"],
+  "*.{css,scss,vue}": ["stylelint --fix"]
 };
