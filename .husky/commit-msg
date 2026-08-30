@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+# 强制通过 pnpm commit 提交：没有 CZ_GUARD 标记（由 scripts/precommit-check.mjs 注入）
+# 的直接 git commit 一律拒绝。合并/cherry-pick 产生的提交不经过该流程，予以放行。
+
+git_dir="$(git rev-parse --git-dir)"
+
+# 合并提交（MERGE_HEAD 在整个合并期间存在，无论是否带 -m）与 cherry-pick 放行
+if git rev-parse -q --verify MERGE_HEAD > /dev/null 2>&1 ||
+   [ -f "$git_dir/CHERRY_PICK_HEAD" ]; then
+  exit 0
+fi
+
+if [ -z "$CZ_GUARD" ]; then
+  echo "" >&2
+  echo "❌ 请使用 pnpm commit 提交（需先通过暂存区检查与提交向导）" >&2
+  echo "   直接 git commit 已被项目规范禁止；合并/ cherry-pick 不受影响" >&2
+  echo "" >&2
+  exit 1
+fi
+
+# 提交信息符合 conventional commits 规范（commitlint.config.js）
+npx --no -- commitlint --edit "$1"

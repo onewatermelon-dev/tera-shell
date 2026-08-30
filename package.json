@@ -12,8 +12,9 @@
     "lint:eslint": "eslint",
     "lint:stylelint": "stylelint --cache --fix \"**/*.{css,scss,vue}\" --cache-location node_modules/.cache/stylelint/",
     "lint:spellcheck": "cspell lint \"**/*.{js,ts,mjs,cjs,json,css,less,scss,vue,html,md,rs}\"",
-    "commit": "git-cz",
+    "commit": "node scripts/precommit-check.mjs",
     "precommit": "lint-staged",
+    "prepare": "husky",
     "test": "vitest"
   },
   "config": {
@@ -42,6 +43,7 @@
     "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
+    "@stylistic/stylelint-plugin": "^5.3.0",
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.3.0",
     "@vitejs/plugin-vue": "^5.2.1",

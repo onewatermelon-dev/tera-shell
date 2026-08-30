@@ -11,3 +11,5 @@ unlisteners
 Cascadia
 Consolas
 TAURI
+openpty
+USERPROFILE
