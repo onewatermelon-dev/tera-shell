@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Main window permissions for terminal commands, dialogs, storage, and opening Ctrl-clicked web URLs",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "shell:allow-open",
+    "opener:allow-open-url",
     "dialog:default",
     "store:default"
   ]

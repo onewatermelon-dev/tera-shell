@@ -8,7 +8,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "lint:prettier": "prettier --write \"**/*.{js,ts,mjs,cjs,json,tsx,css,less,scss,vue,html,md}\"",
+    "lint:prettier": "prettier --write \"**/*.{js,ts,mjs,cjs,json,tsx,vue,html,md}\"",
     "lint:eslint": "eslint",
     "lint:stylelint": "stylelint --cache --fix \"**/*.{css,scss,vue}\" --cache-location node_modules/.cache/stylelint/",
     "lint:spellcheck": "cspell lint \"**/*.{js,ts,mjs,cjs,json,css,less,scss,vue,html,md,rs}\"",

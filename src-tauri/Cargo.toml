@@ -23,6 +23,8 @@ tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
+# 使用操作系统默认浏览器打开经过 capability 授权的 HTTP/HTTPS 链接。
+tauri-plugin-opener = "2"
 
 # ── SSH ──
 russh = "0.49"

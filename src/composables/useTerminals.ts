@@ -7,6 +7,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/domain/session";
+import { registerTerminalLinks } from "@/utils/terminalLinks";
 
 /**
  * 已经打开的终端会话。
@@ -102,6 +103,8 @@ export function useTerminals(
     terminal.loadAddon(fit);
     // SearchAddon 当前提供搜索能力基础；后续搜索框可直接调用其 findNext/findPrevious。
     terminal.loadAddon(new SearchAddon());
+    // 给每个终端实例注册独立的 URL 提供器；识别、下划线和浏览器打开逻辑集中在工具模块中。
+    registerTerminalLinks(terminal, onError);
 
     // onData 会收到普通字符、快捷键和控制序列，必须原样写入 PTY，不能自行解析。
     terminal.onData(data =>
