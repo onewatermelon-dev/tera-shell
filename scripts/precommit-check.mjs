@@ -4,39 +4,70 @@
  * 2. 有未暂存文件时给出多选框，由人挑选要暂存哪些：
  *    ↑↓ 移动光标，空格 勾选/取消，a 全选/全不选，回车 确认
  */
-import { execFileSync, spawn } from "node:child_process";
+import {
+  execFileSync,
+  spawn
+} from "node:child_process";
 import { emitKeypressEvents } from "node:readline";
 
 function git(args) {
-  return execFileSync("git", args, { encoding: "utf8" }).trim();
+  return execFileSync("git", args, {
+    encoding: "utf8"
+  }).trim();
 }
 
 let staged = [];
 let unstaged = [];
 try {
-  staged = git(["diff", "--cached", "--name-only"]).split("\n").filter(Boolean);
+  staged = git([
+    "diff",
+    "--cached",
+    "--name-only"
+  ])
+    .split("\n")
+    .filter(Boolean);
   // 未暂存 = 已跟踪文件的改动（工作区 vs 暂存区）+ 未跟踪的新文件
-  const modified = git(["diff", "--name-only"]).split("\n").filter(Boolean);
-  const untracked = git(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean);
-  unstaged = [...new Set([...modified, ...untracked])];
+  const modified = git(["diff", "--name-only"])
+    .split("\n")
+    .filter(Boolean);
+  const untracked = git([
+    "ls-files",
+    "--others",
+    "--exclude-standard"
+  ])
+    .split("\n")
+    .filter(Boolean);
+  unstaged = [
+    ...new Set([...modified, ...untracked])
+  ];
 } catch {
-  console.error("⚠️  无法读取 git 暂存区（当前目录不是 git 仓库？）");
+  console.error(
+    "⚠️  无法读取 git 暂存区（当前目录不是 git 仓库？）"
+  );
   process.exit(1);
 }
 
 if (!staged.length && !unstaged.length) {
-  console.error("\n⚠️  工作区没有任何变更，没有可提交的内容\n");
+  console.error(
+    "\n⚠️  工作区没有任何变更，没有可提交的内容\n"
+  );
   process.exit(1);
 }
 
-console.log(`\n✅ 已暂存 ${staged.length} 个文件：`);
-for (const file of staged) console.log(`   • ${file}`);
+console.log(
+  `\n✅ 已暂存 ${staged.length} 个文件：`
+);
+for (const file of staged)
+  console.log(`   • ${file}`);
 
 if (unstaged.length) {
   if (!process.stdin.isTTY) {
     // 非交互环境（管道/钩子）无法进行按键交互，只提示不阻塞
-    console.log(`\n⚠️  未暂存 ${unstaged.length} 个文件（不会包含在本次提交中）：`);
-    for (const file of unstaged) console.log(`   • ${file}`);
+    console.log(
+      `\n⚠️  未暂存 ${unstaged.length} 个文件（不会包含在本次提交中）：`
+    );
+    for (const file of unstaged)
+      console.log(`   • ${file}`);
     launchCommitizen();
   } else {
     await pickUnstaged(unstaged);
@@ -57,10 +88,14 @@ async function pickUnstaged(unstaged) {
     const lines = [
       `❓ 选择要暂存的文件（↑↓ 移动，空格 勾选，a 全选，回车 确认）：`,
       ...unstaged.map(
-        (file, i) => `${i === cursor ? "\x1b[36m❯\x1b[0m" : " "} [${checked[i] ? "\x1b[32mx\x1b[0m" : " "}] ${file}`
+        (file, i) =>
+          `${i === cursor ? "\x1b[36m❯\x1b[0m" : " "} [${checked[i] ? "\x1b[32mx\x1b[0m" : " "}] ${file}`
       )
     ];
-    if (prevLines) process.stdout.write(`\x1b[${prevLines - 1}A\r\x1b[J`);
+    if (prevLines)
+      process.stdout.write(
+        `\x1b[${prevLines - 1}A\r\x1b[J`
+      );
     else process.stdout.write("\n");
     process.stdout.write(lines.join("\n"));
     return lines.length;
@@ -82,14 +117,23 @@ async function pickUnstaged(unstaged) {
         resolve("abort");
         return;
       }
-      if (key.name === "up" && cursor > 0) cursor--;
-      else if (key.name === "down" && cursor < unstaged.length - 1) cursor++;
-      else if (key.name === "space") checked[cursor] = !checked[cursor];
+      if (key.name === "up" && cursor > 0)
+        cursor--;
+      else if (
+        key.name === "down" &&
+        cursor < unstaged.length - 1
+      )
+        cursor++;
+      else if (key.name === "space")
+        checked[cursor] = !checked[cursor];
       else if (key.name === "a") {
         const allChecked = checked.every(Boolean);
         checked.fill(!allChecked);
       } else if (key.name === "return") {
-        unstaged.forEach((file, i) => checked[i] && picked.push(file));
+        unstaged.forEach(
+          (file, i) =>
+            checked[i] && picked.push(file)
+        );
         resolve("confirm");
         return;
       } else {
@@ -104,16 +148,25 @@ async function pickUnstaged(unstaged) {
   });
 
   // 清掉整个交互框，留下干净的确认清单
-  process.stdout.write(`\x1b[${frameLines - 1}A\r\x1b[J`);
+  process.stdout.write(
+    `\x1b[${frameLines - 1}A\r\x1b[J`
+  );
 
   if (done === "abort") {
     console.log("\n⚠️  已取消提交\n");
     process.exit(1);
   }
   if (picked.length) {
-    execFileSync("git", ["add", "--", ...picked], { stdio: "inherit" });
-    console.log(`\n✅ 本次额外暂存 ${picked.length} 个文件：`);
-    for (const file of picked) console.log(`   • ${file}`);
+    execFileSync(
+      "git",
+      ["add", "--", ...picked],
+      { stdio: "inherit" }
+    );
+    console.log(
+      `\n✅ 本次额外暂存 ${picked.length} 个文件：`
+    );
+    for (const file of picked)
+      console.log(`   • ${file}`);
   } else {
     console.log("\n✅ 未暂存文件已跳过");
   }
@@ -129,9 +182,13 @@ function launchCommitizen() {
     shell: true, // Windows 下解析 node_modules/.bin 里的 .cmd 需要 shell
     env: { ...process.env, CZ_GUARD: "1" }
   });
-  child.on("close", code => process.exit(code ?? 0));
+  child.on("close", code =>
+    process.exit(code ?? 0)
+  );
   child.on("error", err => {
-    console.error(`\n❌ 无法启动 git-cz：${err.message}`);
+    console.error(
+      `\n❌ 无法启动 git-cz：${err.message}`
+    );
     process.exit(1);
   });
 }

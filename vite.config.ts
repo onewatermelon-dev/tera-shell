@@ -14,11 +14,11 @@ export default defineConfig(async () => ({
     AutoImport({
       imports: ["vue", "vue-router", "pinia"],
       resolvers: [ElementPlusResolver()],
-      dts: "src/auto-imports.d.ts"
+      dts: "src/types/auto-imports.d.ts"
     }),
     Components({
       resolvers: [ElementPlusResolver()],
-      dts: "src/components.d.ts"
+      dts: "src/types/components.d.ts"
     })
   ],
 

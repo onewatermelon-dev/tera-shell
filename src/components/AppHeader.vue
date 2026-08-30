@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { MoreFilled, Setting } from "@element-plus/icons-vue";
+import {
+  MoreFilled,
+  Setting
+} from "@element-plus/icons-vue";
 </script>
 
 <template>
   <header class="titlebar">
-    <div class="brand"><span class="brand-mark">T</span><strong>Tera Shell</strong></div>
+    <div class="brand">
+      <span class="brand-mark">T</span
+      ><strong>Tera Shell</strong>
+    </div>
     <nav class="menu" aria-label="应用菜单">
       <button>文件</button>
       <button>编辑</button>

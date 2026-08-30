@@ -9,7 +9,9 @@ export default defineConfig({
         test: {
           globals: true,
           name: "utils",
-          include: ["packages/utils/__test__/**/*.{test,spec}.{ts,js,tsx,jsx}"],
+          include: [
+            "packages/utils/__test__/**/*.{test,spec}.{ts,js,tsx,jsx}"
+          ],
           environment: "node"
         }
       },
@@ -18,7 +20,9 @@ export default defineConfig({
         test: {
           globals: true,
           name: "ui",
-          include: ["packages/components/__test__/**/*.{test,spec}.{ts,js,tsx,jsx}"],
+          include: [
+            "packages/components/__test__/**/*.{test,spec}.{ts,js,tsx,jsx}"
+          ],
           browser: {
             enabled: true,
             provider: playwright(),

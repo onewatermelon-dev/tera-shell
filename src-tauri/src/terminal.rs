@@ -103,7 +103,7 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
         .filter(|value| !value.trim().is_empty())
         .map_or_else(|| host.clone(), |username| format!("{username}@{host}"));
     let mut command = CommandBuilder::new("ssh");
-    command.args(["-p", &config.port.unwrap_or(22).to_string(), &target]);
+    command.args(["-tt", "-p", &config.port.unwrap_or(22).to_string(), &target]);
     Ok(command)
 }
 

@@ -16,11 +16,12 @@ export const localSession: SavedSession = {
   username: ""
 };
 
-export const emptySshSession = (): SavedSession => ({
-  id: "",
-  name: "",
-  kind: "ssh",
-  host: "",
-  port: 22,
-  username: ""
-});
+export const emptySshSession =
+  (): SavedSession => ({
+    id: "",
+    name: "",
+    kind: "ssh",
+    host: "",
+    port: 22,
+    username: ""
+  });

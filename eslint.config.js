@@ -10,14 +10,25 @@ import eslintPluginPrettier from "eslint-plugin-prettier"; // 导入 Prettier �
 import globals from "globals"; // 导入 全局变量配置
 
 // 定义需要忽略的文件和目录
-const ignores = ["**/node_modules/**", "**/dist/**", ".*", "scripts/**", "**/*.d.ts", "**/src-tauri/**"];
+const ignores = [
+  "**/node_modules/**",
+  "**/dist/**",
+  ".*",
+  "scripts/**",
+  "**/*.d.ts",
+  "**/src-tauri/**"
+];
 
 // 导出 ESLint 配置
 export default defineConfig(
   //通用配置
   {
     ignores, // 忽略的文件和目录
-    extends: [eslint.configs.recommended, ...tseslint.configs.recommended, eslintConfigPrettier], // 继承的配置
+    extends: [
+      eslint.configs.recommended,
+      ...tseslint.configs.recommended,
+      eslintConfigPrettier
+    ], // 继承的配置
     plugins: {
       prettier: eslintPluginPrettier // 添加 Prettier 插件
     },
@@ -41,7 +52,10 @@ export default defineConfig(
   },
   //配置文件配置（Node.js 环境）
   {
-    files: ["**/*.config.{js,cjs,ts}", "**/build/**/*.{js,ts}"], // 配置文件
+    files: [
+      "**/*.config.{js,cjs,ts}",
+      "**/build/**/*.{js,ts}"
+    ], // 配置文件
     languageOptions: {
       globals: {
         ...globals.node // Node.js 环境的全局变量

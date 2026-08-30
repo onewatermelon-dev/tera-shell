@@ -1,5 +1,6 @@
 :root {
-  font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-family:
+    "Segoe UI Variable", "Segoe UI", sans-serif;
   font-synthesis: none;
   color: #d8dee9;
   background: #0b0e14;
@@ -580,7 +581,6 @@ button:active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   * {
     transition: none !important;
   }
