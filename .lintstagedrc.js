@@ -1,14 +1,39 @@
 /**
- * 配置对象，用于定义不同文件类型需要执行的处理命令
- * 该导出对象是项目构建或代码检查工具的配置，例如在ESLint、Prettier等工具中使用
+ * 只检查和格式化本次已经暂存的文件。
+ *
+ * lint-staged 会在任务成功后自动把格式化结果重新加入暂存区，因此提交中保存的是
+ * 格式化后的代码，而不是 git add 时的旧版本。下面的 glob 必须保持互斥，避免同一个
+ * 文件被多个任务组并发修改，产生格式覆盖或工作区残留。
  */
 export default {
-  "*.{js,ts,cjs,json,tsx,css,less,scss,vue,html,md}":
-    ["cspell lint"],
-  "*.{js,ts,vue,md}": [
+  // JavaScript/TypeScript：依次检查拼写、格式，再执行代码规则检查。
+  "*.{js,ts,cjs,mjs,tsx}": [
+    "cspell lint",
     "prettier --write",
     "eslint"
   ],
-  "*.{css,scss}": ["prettier --write"],
-  "*.{css,scss,vue}": ["stylelint --fix"]
+
+  // Vue 同时包含脚本和样式，必须在同一任务组中串行处理。
+  "*.vue": [
+    "cspell lint",
+    "prettier --write",
+    "eslint",
+    "stylelint --fix"
+  ],
+
+  // 样式文件不交给 ESLint；Stylelint 在 Prettier 之后修复样式规则。
+  "*.{css,scss}": [
+    "cspell lint",
+    "prettier --write",
+    "stylelint --fix"
+  ],
+
+  // 配置、模板和文档只需要拼写与格式检查。
+  "*.{json,html,md}": [
+    "cspell lint",
+    "prettier --write"
+  ],
+
+  // Rust 不由 Prettier 处理，目前只执行项目已有的拼写检查。
+  "*.rs": ["cspell lint"]
 };

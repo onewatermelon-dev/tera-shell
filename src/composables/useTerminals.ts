@@ -8,6 +8,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/domain/session";
 import { registerTerminalLinks } from "@/utils/terminalLinks";
+import { renderTextOnlySelection } from "@/utils/terminalSelection";
 
 /**
  * 已经打开的终端会话。
@@ -81,6 +82,136 @@ export function useTerminals(
     await mountActive();
   }
 
+  // ---- 终端右键菜单 ----
+  // 单例浮层挂在 body 上；菜单里操作的目标终端通过 contextmenu 事件传入。
+  let contextMenu: HTMLDivElement | undefined;
+  let menuCopyItem: HTMLDivElement;
+  let menuTerminal: Terminal;
+
+  /**
+   * 确保终端右键菜单浮层存在，返回该菜单。
+   *
+   * 菜单是挂在 body 上的单例：无论打开多少个终端，共用一个浮层，
+   * 操作目标通过 showContextMenu 传入。首次调用时创建 DOM 并注册
+   * "点击菜单外 / Escape 关闭"的全局监听器。
+   */
+  function ensureContextMenu(): HTMLDivElement {
+    if (contextMenu) return contextMenu;
+    contextMenu = document.createElement("div");
+    contextMenu.className =
+      "terminal-context-menu";
+
+    menuCopyItem = document.createElement("div");
+    menuCopyItem.className = "menu-item";
+    menuCopyItem.textContent = "复制 CTRL+C";
+    menuCopyItem.addEventListener("click", () => {
+      if (
+        !menuCopyItem.classList.contains(
+          "disabled"
+        )
+      )
+        navigator.clipboard
+          .writeText(menuTerminal.getSelection())
+          .catch(onError);
+      hideContextMenu();
+      menuTerminal.focus(); // 菜单项点击抢走的焦点还给终端
+    });
+
+    const pasteItem =
+      document.createElement("div");
+    pasteItem.className = "menu-item";
+    pasteItem.textContent = "粘贴 CTRL+V";
+    pasteItem.addEventListener("click", () => {
+      navigator.clipboard
+        .readText()
+        .then(text => {
+          if (text) menuTerminal.paste(text);
+        })
+        .catch(onError);
+      hideContextMenu();
+      menuTerminal.focus(); // 粘贴后焦点回到终端，可直接继续输入
+    });
+
+    contextMenu.append(menuCopyItem, pasteItem);
+    document.body.append(contextMenu);
+
+    // 点击菜单外或按 Escape 时关闭；mousedown 而非 click，避免与菜单项的 click 冲突。
+    window.addEventListener(
+      "mousedown",
+      event => {
+        if (
+          contextMenu &&
+          !contextMenu.contains(
+            event.target as Node
+          )
+        )
+          hideContextMenu();
+      }
+    );
+    // 捕获阶段监听：焦点在终端时，Escape 会被 xterm 的 keydown 处理器
+    // stopPropagation 截住，冒泡阶段到不了 window；捕获阶段先于目标执行，不受影响
+    window.addEventListener(
+      "keydown",
+      event => {
+        // 仅菜单打开时响应 Escape，避免平时按 Esc 抢走其他区域的焦点
+        if (
+          event.key === "Escape" &&
+          contextMenu?.style.display === "block"
+        ) {
+          hideContextMenu();
+          menuTerminal.focus();
+        }
+      },
+      true
+    );
+    return contextMenu;
+  }
+
+  /**
+   * 在鼠标位置显示终端右键菜单。
+   *
+   * @param event 原生 contextmenu 事件；阻止默认行为并停止冒泡，
+   *              防止 WebView 原生菜单和 main.ts 的全局拦截抢先处理。
+   * @param terminal 触发右键的终端实例，菜单的复制/粘贴都作用在它上面。
+   */
+  function showContextMenu(
+    event: MouseEvent,
+    terminal: Terminal
+  ) {
+    event.preventDefault();
+    event.stopPropagation(); // 阻止冒泡到 main.ts 的全局拦截
+    menuTerminal = terminal;
+    const menu = ensureContextMenu();
+    menuCopyItem.classList.toggle(
+      "disabled",
+      !terminal.hasSelection()
+    );
+    // 先隐藏定位再量尺寸，避免菜单闪现；贴近视口边缘时向内收
+    menu.style.visibility = "hidden";
+    menu.style.display = "block";
+    const rect = menu.getBoundingClientRect();
+    menu.style.left =
+      Math.min(
+        event.clientX,
+        window.innerWidth - rect.width - 4
+      ) + "px";
+    menu.style.top =
+      Math.min(
+        event.clientY,
+        window.innerHeight - rect.height - 4
+      ) + "px";
+    menu.style.visibility = "visible";
+    // 右键的 mousedown 会把焦点从 xterm 的 textarea 抢走，这里立即还给终端，
+    // 保证菜单开着时键盘输入（Ctrl+C/V）仍然直达终端
+    terminal.focus();
+  }
+
+  /** 隐藏右键菜单（保留 DOM，便于下次直接复用和测量尺寸）。 */
+  function hideContextMenu() {
+    if (contextMenu)
+      contextMenu.style.display = "none";
+  }
+
   /** 创建尚未挂载到页面的 xterm 实例，并建立“键盘输入 -> 后端 PTY”的通道。 */
   function createTerminal(
     session: SavedSession
@@ -96,15 +227,21 @@ export function useTerminals(
         background: "#0b0e14",
         foreground: "#c9d1d9",
         cursor: "#6ee7b7",
-        selectionBackground: "#2f4f46"
+        // 隐藏 xterm 原生的整行选区背景，由按实际文字宽度绘制的覆盖层替代。
+        selectionBackground: "#00000000",
+        selectionInactiveBackground: "#00000000"
       }
     });
+    // 每个终端保留自己的容器节点，切换标签时移动节点即可保留渲染和选区状态。
+    const element = document.createElement("div");
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     // SearchAddon 当前提供搜索能力基础；后续搜索框可直接调用其 findNext/findPrevious。
     terminal.loadAddon(new SearchAddon());
     // 给每个终端实例注册独立的 URL 提供器；识别、下划线和浏览器打开逻辑集中在工具模块中。
     registerTerminalLinks(terminal, onError);
+    // 原生选区继续负责复制；自定义覆盖层只绘制每行实际存在文字的部分。
+    renderTextOnlySelection(terminal, element);
 
     // onData 会收到普通字符、快捷键和控制序列，必须原样写入 PTY，不能自行解析。
     terminal.onData(data =>
@@ -113,23 +250,40 @@ export function useTerminals(
         data
       }).catch(onError)
     );
-    // 返回 false 让 WebView 执行原生粘贴；xterm 会从 paste 事件读取剪贴板并触发 onData。
+    // Ctrl+C：有选区时复制并拦截（不发 SIGINT），无选区时照常中断进程。
+    // Ctrl+V：返回 false 让 WebView 执行原生粘贴；xterm 会从 paste 事件读取剪贴板并触发 onData。
     terminal.attachCustomKeyEventHandler(
       event => {
         if (
           event.type !== "keydown" ||
-          !event.ctrlKey ||
-          event.key.toLowerCase() !== "v"
+          !event.ctrlKey
         )
           return true;
-        return false;
+        const key = event.key.toLowerCase();
+        if (key === "v") return false;
+        if (
+          key === "c" &&
+          terminal.hasSelection()
+        ) {
+          navigator.clipboard
+            .writeText(terminal.getSelection())
+            .catch(onError);
+          return false;
+        }
+        return true;
       }
+    );
+
+    // 右键菜单只在终端元素上唤起；其他区域的 contextmenu 由 main.ts 全局拦截。
+    element.addEventListener(
+      "contextmenu",
+      event => showContextMenu(event, terminal)
     );
     return {
       ...session,
       terminal,
       fit,
-      element: document.createElement("div"),
+      element,
       mounted: false
     };
   }

@@ -1,32 +1,5 @@
 #!/usr/bin/env sh
 
-echo "🔍 开始代码质量检查..."
-
-if pnpm lint:prettier; then
-  echo "✅ Prettier 检查通过"
-else
-  echo "❌ Prettier 检查失败，请运行: pnpm lint:prettier:fix"
-  exit 1
-fi
-
-if pnpm lint:eslint; then
-  echo "✅ ESLint 检查通过"
-else
-  echo "❌ ESLint 检查失败，请运行: pnpm lint:eslint:fix"
-  exit 1
-fi
-
-if pnpm lint:stylelint; then
-  echo "✅ StyleLint 检查通过"
-else
-  echo "❌ StyleLint 检查失败，请运行: pnpm lint:stylelint:fix"
-  exit 1
-fi
-
-if pnpm lint:spellcheck; then
-  echo "✅ 拼写检查通过"
-  echo "🎉 所有检查通过！"
-else
-  echo "❌ 拼写检查失败"
-  exit 1
-fi
+# 只处理已暂存文件。lint-staged 会自动把 Prettier、ESLint 和 Stylelint 的
+# 修复结果重新加入暂存区，确保本次提交包含格式化后的最终版本。
+pnpm precommit

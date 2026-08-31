@@ -10,6 +10,13 @@ import {
 } from "node:child_process";
 import { emitKeypressEvents } from "node:readline";
 
+/**
+ * 执行 git 子命令并返回裁掉首尾空白的 stdout。
+ * 同步调用：检查脚本里的每次 git 查询都很快，且后续逻辑依赖查询结果。
+ *
+ * @param {string[]} args git 参数列表（不含子命令名本身之前的 "git"）
+ * @returns {string} 命令的标准输出
+ */
 function git(args) {
   return execFileSync("git", args, {
     encoding: "utf8"
@@ -77,7 +84,16 @@ if (unstaged.length) {
   launchCommitizen();
 }
 
-/** 多选框：↑↓ 移动、空格勾选、a 全选/全不选、回车确认 */
+/**
+ * 终端多选框：让用户从未暂存文件中挑选要暂存的文件。
+ * 交互：↑↓ 移动光标，空格 勾选/取消，a 全选/全不选，回车 确认，
+ * Ctrl+C 取消整个提交（进程以非零码退出）。
+ * 通过 stdin 的 raw 模式逐键捕获；无论正常确认还是异常退出，
+ * 都在 finally 中关闭 raw 模式，保证终端状态一定被还原。
+ *
+ * @param {string[]} unstaged 未暂存文件路径列表（工作区改动 + 未跟踪文件）
+ * @returns {Promise<string[]>} 用户勾选的文件路径；未勾选任何文件时为空数组
+ */
 async function pickUnstaged(unstaged) {
   const checked = unstaged.map(() => false); // 每个文件的勾选状态
   let cursor = 0; // 光标所在行
@@ -172,10 +188,17 @@ async function pickUnstaged(unstaged) {
   }
 }
 
-// 所有分支（仅已暂存/挑选后/跳过）最终都从这里打开提交向导。
-// 注入 CZ_GUARD 标记：husky 的 commit-msg 钩子据此放行，
-// 环境变量沿 本脚本 → git-cz → git → 钩子 进程链自然继承，
-// 绕过本脚本直接 git commit 时没有标记，会被钩子拒绝。
+/**
+ * 启动 git-cz 提交向导并透传其退出码。
+ * 所有分支（仅已暂存/挑选后/跳过）最终都从这里进入提交向导。
+ *
+ * 启动前注入 CZ_GUARD 环境变量作为放行标记：husky 的 commit-msg
+ * 钩子据此区分"走过本脚本"和"直接 git commit"两种提交路径。
+ * 环境变量沿 本脚本 → git-cz → git → 钩子 进程链自然继承，
+ * 因此绕过本脚本直接 git commit 时没有标记，会被钩子拒绝。
+ *
+ * @returns {void} 不返回；git-cz 退出后以相同退出码结束本进程
+ */
 function launchCommitizen() {
   const child = spawn("git-cz", {
     stdio: "inherit",
