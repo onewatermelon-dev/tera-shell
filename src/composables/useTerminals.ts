@@ -182,9 +182,11 @@ export function useTerminals(
     event.stopPropagation(); // 阻止冒泡到 main.ts 的全局拦截
     menuTerminal = terminal;
     const menu = ensureContextMenu();
+    // 无选区、或选区全是空白（拖过行尾空白产生）时，复制置灰
     menuCopyItem.classList.toggle(
       "disabled",
-      !terminal.hasSelection()
+      !terminal.hasSelection() ||
+        !terminal.getSelection().trim()
     );
     // 先隐藏定位再量尺寸，避免菜单闪现；贴近视口边缘时向内收
     menu.style.visibility = "hidden";
@@ -279,6 +281,14 @@ export function useTerminals(
       "contextmenu",
       event => showContextMenu(event, terminal)
     );
+    // 网格内拖过行尾空白产生的"纯空白选区"（复制出来只有空格）在松开鼠标时清除
+    element.addEventListener("mouseup", () => {
+      if (
+        terminal.hasSelection() &&
+        !terminal.getSelection().trim()
+      )
+        terminal.clearSelection();
+    });
     return {
       ...session,
       terminal,

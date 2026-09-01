@@ -381,9 +381,17 @@ button {
   overflow: hidden;
 }
 
-.terminal-instance,
-.terminal-host .xterm {
+.terminal-instance {
   height: 100%;
+}
+
+// .xterm 收缩到网格实际大小：网格右侧/下方的空白区域归 .terminal-instance（普通
+// div）所有，鼠标事件不再被 xterm 映射成选区，"文字后面的区域"因此不可滑选。
+// fit 插件测量的是父容器 .terminal-instance 的尺寸，不受此处收缩影响。
+
+.terminal-host .xterm {
+  width: fit-content;
+  height: fit-content;
 }
 
 .terminal-host .xterm-viewport {
