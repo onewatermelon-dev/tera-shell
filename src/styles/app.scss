@@ -52,6 +52,12 @@ button {
   font-size: 13px;
 }
 
+// Tauri 的拖拽判定只看 mousedown 事件目标本身是否带 drag-region 属性，
+// 品牌区的文本子元素会吞掉事件导致拖不动——让它们穿透到带属性的父级
+.titlebar [data-tauri-drag-region] * {
+  pointer-events: none;
+}
+
 .brand-mark {
   display: grid;
   place-items: center;
@@ -589,7 +595,6 @@ button:active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   * {
     transition: none !important;
   }

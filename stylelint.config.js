@@ -18,7 +18,9 @@ export default {
     // 通用规则
     "function-url-quotes": "always", // URL 必须加引号
     "color-hex-length": "long", // 16 进制颜色用扩写形式（#ffffff 而非 #fff）
-    "rule-empty-line-before": "always-multi-line", // 多行规则之前必须有空行（原配置为 never，会删光所有空行，不建议）
+    // rule-empty-line-before 不覆盖：继承 stylelint-config-standard 的
+    // ['always-multi-line', { except: ['first-nested'], ignore: ['after-comment'] }]。
+    // 裸 "always-multi-line" 会丢掉二级选项，与 prettier"删块首空行"无限冲突
     "font-family-no-missing-generic-family-keyword":
       null, // 不强制通用字体族关键字（如 sans-serif）
     "property-no-unknown": null, // 不校验未知属性（兼容实验性 CSS 属性）
