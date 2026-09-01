@@ -108,6 +108,11 @@ button {
 
 .workspace {
   display: grid;
+
+  // 强制唯一行高等于容器高度：隐式行高（auto）会按内容走，
+  // 终端网格的 fit-content 高度会把整列反推成内容高度，
+  // 窗口缩小时内容溢出、fit() 因宿主高度不变而不再触发，输入行被裁掉
+  grid-template-rows: 100%;
   grid-template-columns: 224px 1fr;
   height: calc(100% - 46px);
 }

@@ -344,6 +344,9 @@ export function useTerminals(
   function resize(current = active.value) {
     if (!current) return;
     current.fit.fit();
+    // 缩小窗口（行数变少）后 xterm 的视口不一定跟随光标，
+    // 输入行会留在可视区下方；滚到底部保证输入行始终可见
+    current.terminal.scrollToBottom();
     invoke("terminal_resize", {
       id: current.id,
       rows: current.terminal.rows,

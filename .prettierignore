@@ -5,3 +5,7 @@ public
 node_modules
 pnpm-lock.yaml
 src-tauri
+# 自动生成文件：格式由生成器（unplugin-*）决定，prettier 不要改写，
+# 否则每次 build 重新生成后 lint-staged 又会格式化回去，造成无意义 diff
+src/types/auto-imports.d.ts
+src/types/components.d.ts
