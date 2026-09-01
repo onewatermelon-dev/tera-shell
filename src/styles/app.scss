@@ -405,9 +405,17 @@ button {
   height: fit-content;
 }
 
-.terminal-host .xterm-viewport {
-  scrollbar-color: #313b47 #0b0e14;
-  scrollbar-width: thin;
+// xterm 6 的滚动条是自绘 DOM（VS Code ScrollableElement），
+// ::-webkit-scrollbar 对它无效；滑块颜色走 theme.scrollbarSlider*（useTerminals.ts）。
+// 宽度由 JS 以内联样式写入，CSS 覆盖必须 !important。
+// 选择器保持两段以内：prettier 会把三段以上的选择器强制展开，与缩进规则冲突
+.xterm-scrollable-element .scrollbar.vertical {
+  width: 6px !important;
+}
+
+.vertical .slider {
+  width: 6px !important;
+  border-radius: 3px;
 }
 
 .terminal-status {

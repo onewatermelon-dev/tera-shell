@@ -231,7 +231,15 @@ export function useTerminals(
         cursor: "#6ee7b7",
         // 隐藏 xterm 原生的整行选区背景，由按实际文字宽度绘制的覆盖层替代。
         selectionBackground: "#00000000",
-        selectionInactiveBackground: "#00000000"
+        selectionInactiveBackground: "#00000000",
+        // xterm 6 的滚动条是自绘 DOM（VS Code ScrollableElement），
+        // 颜色必须走主题 token；宽度/圆角在 app.scss 里覆盖
+        scrollbarSliderBackground:
+          "rgb(41 103 206)",
+        scrollbarSliderHoverBackground:
+          "rgb(41 103 206)",
+        scrollbarSliderActiveBackground:
+          "rgb(41 103 206)"
       }
     });
     // 每个终端保留自己的容器节点，切换标签时移动节点即可保留渲染和选区状态。
