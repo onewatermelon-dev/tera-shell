@@ -82,6 +82,32 @@ export function useTerminals(
     await mountActive();
   }
 
+  /**
+   * 多开一个相同配置的连接（双击侧边栏会话触发）。
+   *
+   * 生成全新的运行时 id 和标签名：第一个实例用原名，
+   * 之后依次加 (2)(3) 后缀。只创建新的终端标签和后端 PTY，
+   * 不写入持久化的会话列表。
+   */
+  async function duplicate(
+    session: SavedSession
+  ) {
+    let n = 1;
+    const nameAt = (i: number) =>
+      i === 1
+        ? session.name
+        : `${session.name} (${i})`;
+    while (
+      opened.some(item => item.name === nameAt(n))
+    )
+      n++;
+    await open({
+      ...session,
+      id: `dup-${session.id}-${Date.now()}`,
+      name: nameAt(n)
+    });
+  }
+
   // ---- 终端右键菜单 ----
   // 单例浮层挂在 body 上；菜单里操作的目标终端通过 contextmenu 事件传入。
   let contextMenu: HTMLDivElement | undefined;
@@ -423,6 +449,7 @@ export function useTerminals(
     active,
     terminalHost,
     open,
+    duplicate,
     activate,
     close
   };

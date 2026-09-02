@@ -1,8 +1,15 @@
 import { defineConfig } from "vitest/config";
 import vue from "@vitejs/plugin-vue";
 import { playwright } from "@vitest/browser-playwright";
+import { resolve } from "node:path";
 
 export default defineConfig({
+  // 与 vite.config.ts 保持一致的路径别名，tests/ 里 import "@/..." 才可用
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "src")
+    }
+  },
   test: {
     projects: [
       {
@@ -10,7 +17,7 @@ export default defineConfig({
           globals: true,
           name: "utils",
           include: [
-            "packages/utils/__test__/**/*.{test,spec}.{ts,js,tsx,jsx}"
+            "tests/**/*.{test,spec}.{ts,js}"
           ],
           environment: "node"
         }

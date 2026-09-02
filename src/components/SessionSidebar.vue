@@ -17,7 +17,7 @@ const query = defineModel<string>("query", {
   required: true
 });
 defineEmits<{
-  open: [session: SavedSession];
+  duplicate: [session: SavedSession];
   remove: [id: string];
   create: [];
 }>();
@@ -57,7 +57,7 @@ defineEmits<{
         :class="{
           active: activeId === session.id
         }"
-        @click="$emit('open', session)"
+        @dblclick="$emit('duplicate', session)"
       >
         <span class="session-icon"
           ><Connection

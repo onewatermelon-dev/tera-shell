@@ -39,7 +39,7 @@ onMounted(() => {
         :sessions="filteredSessions"
         :active-id="terminals.activeId.value"
         :opened-count="terminals.opened.length"
-        @open="terminals.open"
+        @duplicate="terminals.duplicate"
         @remove="remove"
         @create="dialogOpen = true"
       />
