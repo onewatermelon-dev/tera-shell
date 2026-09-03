@@ -49,9 +49,28 @@ onMounted(() => {
         "
         :opened="terminals.opened"
         :active="terminals.active.value"
+        :search-open="terminals.searchOpen.value"
+        :search-result="
+          terminals.searchResult.value
+        "
+        :search-error="
+          terminals.searchError.value
+        "
+        :search-case-sensitive="
+          terminals.searchCaseSensitive.value
+        "
+        :search-regex="
+          terminals.searchRegex.value
+        "
         @activate="terminals.activate"
         @close="terminals.close"
         @create="dialogOpen = true"
+        @search="terminals.search"
+        @close-search="terminals.closeSearch"
+        @toggle-case-sensitive="
+          terminals.toggleCaseSensitive
+        "
+        @toggle-regex="terminals.toggleRegex"
       />
     </section>
     <SessionDialog

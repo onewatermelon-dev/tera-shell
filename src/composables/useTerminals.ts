@@ -7,6 +7,10 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/domain/session";
+import {
+  clearSearchTextOverlays,
+  paintSearchTextOverlays
+} from "@/utils/searchTextOverlay";
 import { registerTerminalLinks } from "@/utils/terminalLinks";
 import { renderTextOnlySelection } from "@/utils/terminalSelection";
 
@@ -22,6 +26,7 @@ import { renderTextOnlySelection } from "@/utils/terminalSelection";
 export type OpenSession = SavedSession & {
   terminal: Terminal;
   fit: FitAddon;
+  search: SearchAddon;
   element: HTMLDivElement;
   mounted: boolean;
 };
@@ -54,6 +59,8 @@ export function useTerminals(
   // Tauri 的 listen() 返回取消监听函数，组件卸载时必须逐个调用。
   let unlisteners: UnlistenFn[] = [];
   let resizeObserver: ResizeObserver | undefined;
+  let documentShortcutHandler:
+    ((event: KeyboardEvent) => void) | undefined;
 
   /**
    * 打开或激活一个会话。
@@ -158,7 +165,20 @@ export function useTerminals(
       menuTerminal.focus(); // 粘贴后焦点回到终端，可直接继续输入
     });
 
-    contextMenu.append(menuCopyItem, pasteItem);
+    const findItem =
+      document.createElement("div");
+    findItem.className = "menu-item";
+    findItem.textContent = "查找 CTRL+F";
+    findItem.addEventListener("click", () => {
+      hideContextMenu();
+      openSearch();
+    });
+
+    contextMenu.append(
+      menuCopyItem,
+      pasteItem,
+      findItem
+    );
     document.body.append(contextMenu);
 
     // 点击菜单外或按 Escape 时关闭；mousedown 而非 click，避免与菜单项的 click 冲突。
@@ -240,12 +260,167 @@ export function useTerminals(
       contextMenu.style.display = "none";
   }
 
+  // ---- 终端内搜索（封装 SearchAddon，UI 在 TerminalWorkspace）----
+  const searchOpen = ref(false);
+  const searchError = ref("");
+  const searchCaseSensitive = ref(false);
+  const searchRegex = ref(true);
+  // 各会话的搜索结果按 id 存放；reactive 深层代理保证写入能触发更新
+  const searchResults = reactive<
+    Record<
+      string,
+      { index: number; count: number }
+    >
+  >({});
+
+  /** 活动会话的搜索结果：index 是当前第几个（0 起），count 是总数。 */
+  const searchResult = computed(
+    () =>
+      searchResults[active.value?.id ?? ""] ?? {
+        index: -1,
+        count: 0
+      }
+  );
+
+  function openSearch() {
+    searchError.value = "";
+    searchOpen.value = true;
+  }
+
+  /**
+   * 清除某会话的全部搜索视觉标记：命中背景和当前选区。
+   */
+  function clearSearchMarks(
+    session: OpenSession
+  ) {
+    session.search.clearDecorations();
+    clearSearchTextOverlays();
+    session.terminal.clearSelection();
+    session.terminal.refresh(
+      0,
+      session.terminal.rows - 1
+    );
+  }
+
+  function closeSearch() {
+    searchOpen.value = false;
+    searchError.value = "";
+    const session = active.value;
+    if (session) clearSearchMarks(session);
+  }
+
+  // 切换搜索选项后必须清掉 SearchAddon 的缓存搜索词：
+  // findNext 先覆盖 lastSearchOptions 再判断"是否需重新高亮"，词不变选项变时
+  // 会被误判为无需更新，导致开关不生效。clearDecorations 清缓存词后强制重算。
+  function clearSearchCache() {
+    const session = active.value;
+    if (!session) return;
+    clearSearchMarks(session);
+    searchResults[session.id] = {
+      index: -1,
+      count: 0
+    };
+  }
+
+  function toggleCaseSensitive() {
+    searchCaseSensitive.value =
+      !searchCaseSensitive.value;
+    clearSearchCache();
+  }
+
+  function toggleRegex() {
+    searchRegex.value = !searchRegex.value;
+    clearSearchCache();
+  }
+
+  /** 命中项醒目底色，当前项用主题绿区分（xterm 要求 #RRGGBB）。 */
+  const searchDecorations = {
+    matchBackground: "#f2c94c",
+    matchOverviewRuler: "#f2c94c",
+    activeMatchBackground: "#6ee7b7",
+    activeMatchColorOverviewRuler: "#6ee7b7"
+  };
+
+  /**
+   * 在活动会话全文中查找，正则模式（不区分大小写）。
+   * 非法正则只提示不执行；空查询清除高亮。
+   *
+   * @param query 搜索词（正则表达式）
+   * @param direction next 向下 / prev 向上
+   */
+  function search(
+    query: string,
+    direction: "next" | "prev" | "input" = "next"
+  ) {
+    const current = active.value;
+    if (!current) return;
+    if (!query) {
+      clearSearchMarks(current);
+      searchResults[current.id] = {
+        index: -1,
+        count: 0
+      };
+      searchError.value = "";
+      return;
+    }
+    if (searchRegex.value) {
+      // 仅正则模式需要校验表达式
+      try {
+        new RegExp(query);
+        searchError.value = "";
+      } catch {
+        searchError.value = "正则无效";
+        return;
+      }
+    } else {
+      searchError.value = "";
+    }
+    const options = {
+      regex: searchRegex.value,
+      caseSensitive: searchCaseSensitive.value,
+      decorations: searchDecorations
+    };
+    if (direction === "input")
+      // 打字时原地扩展当前匹配，不向前跳，避免边输入边越过唯一匹配
+      current.search.findNext(query, {
+        ...options,
+        incremental: true
+      });
+    else {
+      if (direction === "prev")
+        current.search.findPrevious(
+          query,
+          options
+        );
+      else
+        current.search.findNext(query, options);
+
+      // SearchAddon 切换当前项时会销毁旧的活动装饰，但某些重叠
+      // 装饰不会恢复成普通黄色背景。保留刚选中的终端选区，清空并
+      // 从该位置重建全部装饰；incremental 使当前项仍停在原位。
+      current.search.clearDecorations();
+      current.search.findNext(query, {
+        ...options,
+        incremental: true
+      });
+    }
+    // 用可直接移除的 DOM 覆盖层显示黑色命中文字，不污染画布前景色。
+    paintSearchTextOverlays(
+      current.terminal,
+      query,
+      searchRegex.value,
+      searchCaseSensitive.value
+    );
+  }
+
   /** 创建尚未挂载到页面的 xterm 实例，并建立“键盘输入 -> 后端 PTY”的通道。 */
   function createTerminal(
     session: SavedSession
   ): OpenSession {
     const terminal = new Terminal({
       cursorBlink: true,
+      // 搜索高亮（decorations）走 xterm proposed API（registerDecoration），必须开启
+      allowProposedApi: true,
       fontFamily:
         '"Cascadia Code", "JetBrains Mono", Consolas, monospace',
       fontSize: 14,
@@ -272,8 +447,16 @@ export function useTerminals(
     const element = document.createElement("div");
     const fit = new FitAddon();
     terminal.loadAddon(fit);
-    // SearchAddon 当前提供搜索能力基础；后续搜索框可直接调用其 findNext/findPrevious。
-    terminal.loadAddon(new SearchAddon());
+    // 搜索：命中高亮用醒目底色，当前命中项用主题绿色区分。
+    const search = new SearchAddon();
+    terminal.loadAddon(search);
+    // 搜索结果（第几个/共几个）写入按会话 id 索引的 reactive 记录
+    search.onDidChangeResults(event => {
+      searchResults[session.id] = {
+        index: event.resultIndex,
+        count: event.resultCount
+      };
+    });
     // 给每个终端实例注册独立的 URL 提供器；识别、下划线和浏览器打开逻辑集中在工具模块中。
     registerTerminalLinks(terminal, onError);
     // 原生选区继续负责复制；自定义覆盖层只绘制每行实际存在文字的部分。
@@ -297,6 +480,13 @@ export function useTerminals(
           return true;
         const key = event.key.toLowerCase();
         if (key === "v") return false;
+        // Ctrl+F 打开查找框；必须 preventDefault，否则 WebView 自带的
+        // 页面查找栏也会弹出（返回 false 只阻止 xterm 处理，不阻止浏览器默认）
+        if (key === "f") {
+          event.preventDefault();
+          openSearch();
+          return false;
+        }
         if (
           key === "c" &&
           terminal.hasSelection()
@@ -325,9 +515,12 @@ export function useTerminals(
     });
     return {
       ...session,
-      terminal,
-      fit,
-      element,
+      // xterm 及其插件是类实例，放进 reactive 数组会被 Proxy 包裹，
+      // SearchAddon.findNext 走 _core 私有 API 时会静默失效——markRaw 跳过代理
+      terminal: markRaw(terminal),
+      fit: markRaw(fit),
+      search: markRaw(search),
+      element: markRaw(element),
       mounted: false
     };
   }
@@ -434,12 +627,46 @@ export function useTerminals(
     resizeObserver = new ResizeObserver(() =>
       resize()
     );
+
+    // 全局快捷键：浏览器级快捷键已在 Rust 侧禁用（AreBrowserAcceleratorKeysEnabled=false），
+    // 这些键会到达页面，捕获阶段统一接管：
+    // - Ctrl+F：路由到应用查找框（避免浏览器查找栏——不过已被原生禁用，这里是功能入口）
+    // - F12 / Ctrl+Shift+I：打开 DevTools（原本由浏览器接管，禁用后需要手动调命令）
+    documentShortcutHandler = (
+      event: KeyboardEvent
+    ) => {
+      const key = event.key.toLowerCase();
+      const ctrl = event.ctrlKey || event.metaKey;
+      if (ctrl && key === "f") {
+        event.preventDefault();
+        openSearch();
+        return;
+      }
+      if (
+        event.key === "F12" ||
+        (ctrl && event.shiftKey && key === "i")
+      ) {
+        event.preventDefault();
+        invoke("open_devtools").catch(() => {});
+      }
+    };
+    window.addEventListener(
+      "keydown",
+      documentShortcutHandler,
+      true
+    );
   });
 
   onBeforeUnmount(() => {
     // 防止页面重新挂载后重复接收输出，也避免 ResizeObserver 持有已销毁的 DOM。
     unlisteners.forEach(unlisten => unlisten());
     resizeObserver?.disconnect();
+    if (documentShortcutHandler)
+      window.removeEventListener(
+        "keydown",
+        documentShortcutHandler,
+        true
+      );
   });
 
   // 只暴露页面装配需要的状态和操作，xterm/Tauri 的实现细节保留在本文件中。
@@ -451,6 +678,16 @@ export function useTerminals(
     open,
     duplicate,
     activate,
-    close
+    close,
+    searchOpen,
+    searchError,
+    searchResult,
+    searchCaseSensitive,
+    searchRegex,
+    openSearch,
+    closeSearch,
+    toggleCaseSensitive,
+    toggleRegex,
+    search
   };
 }

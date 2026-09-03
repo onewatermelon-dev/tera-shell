@@ -66,3 +66,8 @@ tracing-subscriber = "0.3"
 chrono = "0.4"
 parking_lot = "0.12"
 bytes = "1"
+
+# ── Windows 专用：WebView2 COM（禁用浏览器级快捷键，避免 Ctrl+F 弹出页面查找栏）──
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows-core = "0.61"

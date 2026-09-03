@@ -320,10 +320,74 @@ button {
 }
 
 .terminal-pane {
+  position: relative;
   display: grid;
   grid-template-rows: 38px 1fr 25px;
   min-width: 0;
   background: #0b0e14;
+}
+
+// 查找浮层：右上角，压在终端内容之上。
+// 类名用 find-* 而非 search-*，避免与侧栏"搜索会话"的 .search-box 冲突
+.find-box {
+  position: absolute;
+  top: 46px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: #161b26;
+  border: 1px solid #2a3142;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 40%);
+}
+
+.find-input {
+  width: 180px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #d8dee9;
+  background: #0b0e14;
+  border: 1px solid #2a3142;
+  border-radius: 4px;
+}
+
+// 查找框 5 个按钮（↑ ↓ Aa .* ×）统一样式：等宽等高的方形按钮
+.find-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font:
+    12px Consolas,
+    monospace;
+  color: #8f9baa;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid #2a3142;
+  border-radius: 4px;
+
+  &:hover {
+    color: #ffffff;
+    background: #1b2029;
+  }
+
+  // Aa / .* 开关开启时用主题绿高亮
+  &.on {
+    color: #0b0e14;
+    background: #6ee7b7;
+    border-color: #6ee7b7;
+  }
+}
+
+.find-count {
+  min-width: 44px;
+  font-size: 12px;
+  color: #8f9baa;
 }
 
 .tabs {

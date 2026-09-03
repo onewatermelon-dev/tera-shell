@@ -1,5 +1,12 @@
 mod terminal;
 
+/// 前端 F12 / Ctrl+Shift+I 打开 DevTools。
+/// 浏览器级快捷键被禁用后 F12 不再生效，需要走这个命令手动打开。
+#[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) {
+    window.open_devtools();
+}
+
 /// 创建并运行 Tauri 桌面应用。
 ///
 /// 插件必须在应用启动阶段注册，前端才能调用对应的 JavaScript API；
@@ -18,8 +25,44 @@ pub fn run() {
             terminal::start,
             terminal::write,
             terminal::resize,
-            terminal::close
+            terminal::close,
+            open_devtools
         ])
+        .setup(|app| {
+            // WebView2 的浏览器级快捷键（Ctrl+F 页面查找栏等）会抢在页面 JS 之前
+            // 响应，preventDefault 拦不住；原生禁用后查找统一走应用内实现。
+            #[cfg(target_os = "windows")]
+            {
+                use tauri::Manager;
+                if let Some(window) =
+                    app.get_webview_window("main")
+                {
+                    let _ = window.with_webview(|webview| {
+                        #[cfg(target_os = "windows")]
+                        unsafe {
+                            use windows_core::Interface;
+                            let controller = webview.controller();
+                            if let Ok(webview2) =
+                                controller.CoreWebView2()
+                            {
+                                if let Ok(settings) =
+                                    webview2.Settings()
+                                {
+                                    let _ = settings
+                                        .cast::<webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3>()
+                                        .and_then(|s| {
+                                            s.SetAreBrowserAcceleratorKeysEnabled(
+                                                false
+                                            )
+                                        });
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
