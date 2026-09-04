@@ -13,7 +13,10 @@ import {
   sweepStaleDecorations
 } from "@/utils/searchTextOverlay";
 import { registerTerminalLinks } from "@/utils/terminalLinks";
-import { renderTextOnlySelection } from "@/utils/terminalSelection";
+import {
+  markSearchSelection,
+  renderTextOnlySelection
+} from "@/utils/terminalSelection";
 
 /**
  * 已经打开的终端会话。
@@ -339,8 +342,8 @@ export function useTerminals(
   const searchDecorations = {
     matchBackground: "#f2c94c",
     matchOverviewRuler: "#f2c94c",
-    activeMatchBackground: "#6ee7b7",
-    activeMatchColorOverviewRuler: "#6ee7b7"
+    activeMatchBackground: "#ef4444",
+    activeMatchColorOverviewRuler: "#ef4444"
   };
 
   /**
@@ -382,6 +385,9 @@ export function useTerminals(
       caseSensitive: searchCaseSensitive.value,
       decorations: searchDecorations
     };
+    // SearchAddon 会把当前命中项写入 xterm 选区；在触发选区变化前先标记
+    // 其来源，使自定义选区覆盖层使用红色而非鼠标框选的青绿色。
+    markSearchSelection(current.terminal);
     if (direction === "input")
       // 打字时原地扩展当前匹配，不向前跳，避免边输入边越过唯一匹配
       current.search.findNext(query, {

@@ -4,6 +4,18 @@ import type {
   Terminal
 } from "@xterm/xterm";
 
+const searchSelection = new WeakMap<
+  Terminal,
+  boolean
+>();
+
+/** 标记终端下一次选区变化来自搜索导航，需使用红色背景。 */
+export function markSearchSelection(
+  terminal: Terminal
+) {
+  searchSelection.set(terminal, true);
+}
+
 /** 返回一行中最后一个可见字符之后的终端列下标。 */
 function getTextEnd(
   line: IBufferLine,
@@ -128,7 +140,10 @@ export function renderTextOnlySelection(
 
       const range = document.createElement("div");
       range.className =
-        "terminal-selection-range";
+        "terminal-selection-range" +
+        (searchSelection.get(terminal) === true
+          ? " search"
+          : "");
       range.style.left = `${startColumn * cellWidth}px`;
       range.style.top = `${(row - viewportStart) * cellHeight}px`;
       range.style.width = `${(endColumn - startColumn) * cellWidth}px`;
@@ -243,6 +258,8 @@ export function renderTextOnlySelection(
     "mousedown",
     event => {
       if (event.button !== 0) return;
+      //鼠标开始框选：当前选区不再来自搜索，恢复青绿松色
+      searchSelection.delete(terminal);
       dragStart = locateMouse(event);
       if (!dragStart) return;
       dragging = true;

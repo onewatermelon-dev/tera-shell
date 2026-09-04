@@ -720,6 +720,11 @@ button:active {
 .terminal-selection-range {
   position: absolute;
 
-  // 覆盖层位于字形上方，使用半透明背景保证被选文字仍然清晰可读。
+  // 鼠标框选：青绿松花，半透明背景保证被选文字仍然清晰可读。
   background: rgb(47 79 70 / 65%);
+}
+
+.terminal-selection-range.search {
+  // 搜索上下箭头选中的当前项：红色，与 SearchAddon 活动背景一致。
+  background: rgb(239 68 68 / 65%);
 }
