@@ -1,6 +1,13 @@
-import type { Terminal } from "@xterm/xterm";
+import type {
+  IDecoration,
+  IMarker,
+  Terminal
+} from "@xterm/xterm";
 
-const overlays: Array<{ dispose(): void }> = [];
+const overlays: Array<{
+  decoration: IDecoration;
+  marker: IMarker;
+}> = [];
 
 export interface SearchCell {
   getChars(): string;
@@ -54,7 +61,56 @@ export function buildSearchRowMap(
 export function clearSearchTextOverlays() {
   overlays
     .splice(0)
-    .forEach(marker => marker.dispose());
+    .forEach(({ decoration, marker }) => {
+      // 必须先销毁装饰器 marker: xterm 6 的装饰表在删除条目时按 marker.line
+      // 二分查找，marker 先销毁会让 line 变成 -1，导致旧条目删除失败而永久滞留，
+      // 破坏表的有序性，使后续按行查找装饰随机落空（黄色高亮间歇性丢失）
+      decoration.dispose();
+      marker.dispose();
+    });
+}
+
+/**
+ * 清扫装饰服务里的“幽灵条目”
+ *
+ * xterm 6 的装饰表用惰性删除维护有序性：同一行多个条目在同一次同步批次里被销毁
+ * 时，先前被销毁条目的 marker 已变为 line = -1，会阻断后续同 key 条目的二分查找，
+ * 使其删除失败，永久滞留，滞留条目破坏表的有序性，导致渲染时按行查装饰随机落空
+ * （黄色高亮间接性丢失），本函数在每次搜索动作结束后物理移除这些幽灵排序，
+ * 使下一次渲染永远读到干净的表，依赖内部结构，因此版本锁定 ^6.0.0 切未升级前有效。
+ * @param terminal
+ */
+export function sweepStaleDecorations(
+  terminal: Terminal
+) {
+  const list = (
+    terminal as unknown as {
+      _core: {
+        _decorationService: {
+          _decorations: {
+            _array: Array<{
+              marker: { line: number };
+            }>;
+            _insertedValues: unknown[];
+            _deletedIndices: unknown[];
+            _flushCleanupInserted?: () => void;
+          };
+        };
+      };
+    }
+  )._core._decorationService._decorations;
+  list._flushCleanupInserted?.();
+  const live = list._array
+    .filter(d => d.marker.line !== -1)
+    .sort(
+      (a, b) => a.marker.line - b.marker.line
+    );
+  list._array.splice(
+    0,
+    list._array.length,
+    ...live
+  );
+  list._deletedIndices.length = 0;
 }
 
 /**
@@ -163,5 +219,5 @@ function addOverlay(
     element.style.overflow = "hidden";
     element.style.pointerEvents = "none";
   });
-  overlays.push(marker);
+  overlays.push({ decoration, marker });
 }

@@ -9,7 +9,8 @@ import { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/domain/session";
 import {
   clearSearchTextOverlays,
-  paintSearchTextOverlays
+  paintSearchTextOverlays,
+  sweepStaleDecorations
 } from "@/utils/searchTextOverlay";
 import { registerTerminalLinks } from "@/utils/terminalLinks";
 import { renderTextOnlySelection } from "@/utils/terminalSelection";
@@ -300,6 +301,7 @@ export function useTerminals(
       0,
       session.terminal.rows - 1
     );
+    sweepStaleDecorations(session.terminal);
   }
 
   function closeSearch() {
@@ -386,24 +388,9 @@ export function useTerminals(
         ...options,
         incremental: true
       });
-    else {
-      if (direction === "prev")
-        current.search.findPrevious(
-          query,
-          options
-        );
-      else
-        current.search.findNext(query, options);
-
-      // SearchAddon 切换当前项时会销毁旧的活动装饰，但某些重叠
-      // 装饰不会恢复成普通黄色背景。保留刚选中的终端选区，清空并
-      // 从该位置重建全部装饰；incremental 使当前项仍停在原位。
-      current.search.clearDecorations();
-      current.search.findNext(query, {
-        ...options,
-        incremental: true
-      });
-    }
+    else if (direction === "prev")
+      current.search.findPrevious(query, options);
+    else current.search.findNext(query, options);
     // 用可直接移除的 DOM 覆盖层显示黑色命中文字，不污染画布前景色。
     paintSearchTextOverlays(
       current.terminal,
@@ -411,6 +398,10 @@ export function useTerminals(
       searchRegex.value,
       searchCaseSensitive.value
     );
+    // SearchAddon 切换当前项和重建高亮时会批量销毁装饰，xterm 6 的装饰表
+    // 惰性删除在同行多条目场景下会残留幽灵条目（见 searchTextOverlay.ts），
+    // 必须在渲染前物理清除，否则黄色高亮会间接性丢失
+    sweepStaleDecorations(current.terminal);
   }
 
   /** 创建尚未挂载到页面的 xterm 实例，并建立“键盘输入 -> 后端 PTY”的通道。 */
