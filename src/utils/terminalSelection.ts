@@ -186,10 +186,13 @@ export function renderTextOnlySelection(
         0,
         Math.min(
           terminal.cols,
+          // 与 xterm 原生选区的吸附算法一致：按最近的字符边界取整
+          // （点在单元格右半时从下一格开始），避免拖拽中覆盖于真实选区差一格
           Math.floor(
             ((event.clientX - rect.left) /
               rect.width) *
-              terminal.cols
+              terminal.cols +
+              0.5
           )
         )
       ),

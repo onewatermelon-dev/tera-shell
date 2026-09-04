@@ -393,9 +393,17 @@ button {
 .tabs {
   display: flex;
   align-items: stretch;
-  overflow-x: auto;
+  overflow: auto hidden;
+
+  // 标签溢出时仍可横向滚动，但隐藏浏览器原生滚动条：
+  // overflow-y 明确 hidden，避免 overflow-x:auto 把纵向隐式升级成 auto
+  scrollbar-width: none;
   background: #12161d;
   border-bottom: 1px solid #252b34;
+}
+
+.tab::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
