@@ -5,22 +5,46 @@ import {
   type SavedSession
 } from "@/domain/session";
 
-defineProps<{ open: boolean }>();
+const props = defineProps<{
+  open: boolean;
+  session?: SavedSession | null;
+}>();
 const emit = defineEmits<{
   close: [];
   save: [session: SavedSession];
 }>();
 const form = reactive(emptySshSession());
 const error = ref("");
+const editing = computed(
+  () => props.session != null
+);
+
+//打开对话框时按会话预填表单；未传会话则新建
+watch(
+  () => props.open,
+  open => {
+    if (!open) return;
+    error.value = "";
+    if (props.session) {
+      Object.assign(form, props.session);
+    } else {
+      Object.assign(form, emptySshSession());
+    }
+  }
+);
 
 function submit() {
   error.value = "";
-  if (!form.name.trim() || !form.host.trim()) {
-    error.value = "请填写会话名称和主机地址";
+  if (!form.host.trim()) {
+    error.value = "请填写主机地址";
     return;
   }
-  emit("save", { ...form });
-  Object.assign(form, emptySshSession());
+  // 会话名称可留空跟随主机地址：用户名留空默认 root
+  emit("save", {
+    ...form,
+    name: form.name.trim() || form.host.trim(),
+    username: form.username.trim() || "root"
+  });
 }
 </script>
 
@@ -33,7 +57,9 @@ function submit() {
     <form class="dialog" @submit.prevent="submit">
       <div class="dialog-head">
         <div>
-          <span>新建连接</span>
+          <span>{{
+            editing ? "编辑连接" : "新建连接"
+          }}</span>
           <h2>SSH 会话</h2>
         </div>
         <button
@@ -47,7 +73,7 @@ function submit() {
         >会话名称<input
           v-model="form.name"
           autofocus
-          placeholder="例如：生产服务器"
+          placeholder="选填，留空使用主机地址"
       /></label>
       <div class="form-row">
         <label class="grow"

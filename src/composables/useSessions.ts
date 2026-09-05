@@ -40,6 +40,15 @@ export function useSessions() {
     persist();
   }
 
+  function update(session: SavedSession) {
+    const index = sessions.value.findIndex(
+      item => item.id === session.id
+    );
+    if (index === -1) return;
+    sessions.value[index] = { ...session };
+    persist();
+  }
+
   function remove(id: string) {
     if (id === localSession.id) return;
     sessions.value = sessions.value.filter(
@@ -60,6 +69,7 @@ export function useSessions() {
     query,
     filteredSessions,
     save,
+    update,
     remove
   };
 }

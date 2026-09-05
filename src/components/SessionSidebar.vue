@@ -2,6 +2,7 @@
 import {
   Connection,
   Delete,
+  Edit,
   FolderOpened,
   Plus,
   Search
@@ -18,6 +19,7 @@ const query = defineModel<string>("query", {
 });
 defineEmits<{
   duplicate: [session: SavedSession];
+  edit: [session: SavedSession];
   remove: [id: string];
   create: [];
 }>();
@@ -70,6 +72,13 @@ defineEmits<{
               : `${session.username ? session.username + "@" : ""}${session.host}:${session.port}`
           }}</small></span
         >
+        <span
+          v-if="session.id !== 'local'"
+          class="edit"
+          title="编辑"
+          @click.stop="$emit('edit', session)"
+          ><Edit
+        /></span>
         <span
           v-if="session.id !== 'local'"
           class="delete"

@@ -278,13 +278,15 @@ button {
   color: #677587;
 }
 
-.delete {
+.delete,
+.edit {
   display: none;
   width: 15px;
   color: #8b98a8;
 }
 
-.session-item:hover .delete {
+.session-item:hover .delete,
+.session-item:hover .edit {
   display: block;
 }
 

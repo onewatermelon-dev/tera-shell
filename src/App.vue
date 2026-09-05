@@ -8,19 +8,34 @@ import "@/styles/app.scss";
 
 const dialogOpen = ref(false);
 const error = ref("");
+const editingSession = ref<SavedSession | null>(
+  null
+);
 const {
   sessions,
   query,
   filteredSessions,
   save,
+  update,
   remove
 } = useSessions();
 const terminals = useTerminals(
   reason => (error.value = String(reason))
 );
 
+function openCreate() {
+  editingSession.value = null;
+  dialogOpen.value = true;
+}
+
+function openEdit(session: SavedSession) {
+  editingSession.value = session;
+  dialogOpen.value = true;
+}
+
 function saveSession(session: SavedSession) {
-  save(session);
+  if (editingSession.value) update(session);
+  else save(session);
   dialogOpen.value = false;
 }
 
@@ -37,11 +52,15 @@ onMounted(() => {
       <SessionSidebar
         v-model:query="query"
         :sessions="filteredSessions"
-        :active-id="terminals.activeId.value"
+        :active-id="
+          terminals.active.value
+            ?.sourceSessionId ?? ''
+        "
         :opened-count="terminals.opened.length"
         @duplicate="terminals.duplicate"
+        @edit="openEdit"
         @remove="remove"
-        @create="dialogOpen = true"
+        @create="openCreate"
       />
       <TerminalWorkspace
         v-model:terminal-host="
@@ -64,7 +83,7 @@ onMounted(() => {
         "
         @activate="terminals.activate"
         @close="terminals.close"
-        @create="dialogOpen = true"
+        @create="openCreate"
         @search="terminals.search"
         @close-search="terminals.closeSearch"
         @toggle-case-sensitive="
@@ -75,6 +94,7 @@ onMounted(() => {
     </section>
     <SessionDialog
       :open="dialogOpen"
+      :session="editingSession"
       @close="dialogOpen = false"
       @save="saveSession"
     />

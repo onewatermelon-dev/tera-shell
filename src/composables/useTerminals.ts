@@ -26,6 +26,7 @@ import {
  * - fit：根据容器尺寸计算终端的行数和列数。
  * - element：该终端专用的 DOM 容器，切换标签时会被移动到可见区域。
  * - mounted：记录 terminal.open() 是否执行过，避免对同一个 xterm 实例重复挂载。
+ * - sourceSessionId：标签来自的持久化会话 ID，双开标签也保留原 ID。
  */
 export type OpenSession = SavedSession & {
   terminal: Terminal;
@@ -33,6 +34,7 @@ export type OpenSession = SavedSession & {
   search: SearchAddon;
   element: HTMLDivElement;
   mounted: boolean;
+  sourceSessionId: string;
 };
 
 /**
@@ -72,12 +74,18 @@ export function useTerminals(
    * 同一个 session.id 只创建一个前端 xterm 和一个后端 PTY；再次点击会话时只切换标签。
    * 如果后端进程启动失败，会同步移除刚创建的前端标签，避免留下不可用的空会话。
    */
-  async function open(session: SavedSession) {
+  async function open(
+    session: SavedSession,
+    sourceSessionId = session.id
+  ) {
     let current = opened.find(
       item => item.id === session.id
     );
     if (!current) {
-      current = createTerminal(session);
+      current = createTerminal(
+        session,
+        sourceSessionId
+      );
       opened.push(current);
       try {
         await invoke("terminal_start", {
@@ -112,11 +120,14 @@ export function useTerminals(
       opened.some(item => item.name === nameAt(n))
     )
       n++;
-    await open({
-      ...session,
-      id: `dup-${session.id}-${Date.now()}`,
-      name: nameAt(n)
-    });
+    await open(
+      {
+        ...session,
+        id: `dup-${session.id}-${Date.now()}`,
+        name: nameAt(n)
+      },
+      session.id
+    );
   }
 
   // ---- 终端右键菜单 ----
@@ -410,9 +421,15 @@ export function useTerminals(
     sweepStaleDecorations(current.terminal);
   }
 
-  /** 创建尚未挂载到页面的 xterm 实例，并建立“键盘输入 -> 后端 PTY”的通道。 */
+  /**
+   * 创建尚未挂载到页面的 xterm 实例和键盘输入通道。
+   *
+   * @param session 标签的运行时会话配置。
+   * @param sourceSessionId 侧边栏中对应的持久化会话 ID。
+   */
   function createTerminal(
-    session: SavedSession
+    session: SavedSession,
+    sourceSessionId: string
   ): OpenSession {
     const terminal = new Terminal({
       cursorBlink: true,
@@ -518,7 +535,8 @@ export function useTerminals(
       fit: markRaw(fit),
       search: markRaw(search),
       element: markRaw(element),
-      mounted: false
+      mounted: false,
+      sourceSessionId
     };
   }
 
