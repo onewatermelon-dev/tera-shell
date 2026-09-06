@@ -1,5 +1,6 @@
-mod terminal;
+mod logging;
 mod secret;
+mod terminal;
 
 /// 前端 F12 / Ctrl+Shift+I 打开 DevTools。
 /// 浏览器级快捷键被禁用后 F12 不再生效，需要走这个命令手动打开。
@@ -32,6 +33,8 @@ pub fn run() {
             open_devtools
         ])
         .setup(|app| {
+            // 优先初始化日志，后续启动阶段的错误都能被记录。
+            logging::init(app);
             // WebView2 的浏览器级快捷键（Ctrl+F 页面查找栏等）会抢在页面 JS 之前
             // 响应，preventDefault 拦不住；原生禁用后查找统一走应用内实现。
             #[cfg(target_os = "windows")]

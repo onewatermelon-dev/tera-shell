@@ -7,7 +7,7 @@ use base64::Engine;
 fn dpapi_encrypt(plain: &[u8]) -> Result<Vec<u8>, String> {
     use windows::Win32::Foundation::{HLOCAL, LocalFree};
     use windows::Win32::Security::Cryptography::{
-        CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData,
     };
 
     let input = CRYPT_INTEGER_BLOB {
@@ -42,7 +42,7 @@ fn dpapi_encrypt(plain: &[u8]) -> Result<Vec<u8>, String> {
 fn dpapi_decrypt(cipher: &[u8]) -> Result<Vec<u8>, String> {
     use windows::Win32::Foundation::{HLOCAL, LocalFree};
     use windows::Win32::Security::Cryptography::{
-        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData,
     };
 
     let input = CRYPT_INTEGER_BLOB {
@@ -77,7 +77,11 @@ fn dpapi_decrypt(cipher: &[u8]) -> Result<Vec<u8>, String> {
 pub fn encrypt(plain: String) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        let cipher = dpapi_encrypt(plain.as_bytes())?;
+        let cipher = dpapi_encrypt(plain.as_bytes()).map_err(|error| {
+            tracing::error!("SSH 密码加密失败：{error}");
+            error
+        })?;
+        tracing::debug!("SSH 密码加密成功");
         Ok(base64::engine::general_purpose::STANDARD.encode(cipher))
     }
     #[cfg(not(target_os = "windows"))]
@@ -92,11 +96,22 @@ pub fn encrypt(plain: String) -> Result<String, String> {
 pub fn decrypt(encoded: String) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
+        // 解密失败常见于换了 Windows 用户/机器导致凭据失效，此时前端会退回弹窗输入密码。
         let cipher = base64::engine::general_purpose::STANDARD
             .decode(encoded.as_bytes())
-            .map_err(|e| e.to_string())?;
-        let plain = dpapi_decrypt(&cipher)?;
-        String::from_utf8(plain).map_err(|e| e.to_string())
+            .map_err(|error| {
+                tracing::warn!("SSH 密码密文解码失败：{error}");
+                error.to_string()
+            })?;
+        let plain = dpapi_decrypt(&cipher).map_err(|error| {
+            tracing::warn!("SSH 密码解密失败：{error}");
+            error
+        })?;
+        tracing::debug!("SSH 密码解密成功");
+        String::from_utf8(plain).map_err(|error| {
+            tracing::error!("SSH 密码明文不是合法 UTF-8：{error}");
+            error.to_string()
+        })
     }
     #[cfg(not(target_os = "windows"))]
     {

@@ -38,8 +38,10 @@ export default {
   ],
 
   // 配置、模板和文档只需要拼写与格式检查。
+  // cspell.json 的 ignorePaths 排除了 *.md 等文档，暂存 md 时会因为
+  // “没有文件被实际检查”而让 cspell 以退出码 1 失败，故加 --no-must-find-files。
   "*.{json,html,md}": [
-    "cspell lint",
+    "cspell lint --no-must-find-files",
     "prettier --write"
   ],
 
