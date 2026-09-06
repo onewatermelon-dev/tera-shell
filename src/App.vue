@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TerminalWorkspace from "@/components/TerminalWorkspace.vue";
+import PasswordDialog from "@/components/PasswordDialog.vue";
 import { useSessions } from "@/composables/useSessions";
 import { useTerminals } from "@/composables/useTerminals";
 import type { SavedSession } from "@/domain/session";
@@ -20,7 +21,15 @@ const {
   remove
 } = useSessions();
 const terminals = useTerminals(
-  reason => (error.value = String(reason))
+  reason => (error.value = String(reason)),
+  // 首次连接输入的密码加密后写回对应会话，下次双击直接解密连接。
+  (sourceSessionId, encrypted) => {
+    const session = sessions.value.find(
+      item => item.id === sourceSessionId
+    );
+    if (session)
+      update({ ...session, password: encrypted });
+  }
 );
 
 function openCreate() {
@@ -97,6 +106,14 @@ onMounted(() => {
       :session="editingSession"
       @close="dialogOpen = false"
       @save="saveSession"
+    />
+    <PasswordDialog
+      v-if="terminals.passwordRequest.value"
+      :session="
+        terminals.passwordRequest.value.session
+      "
+      @submit="terminals.submitPassword"
+      @cancel="terminals.cancelPassword"
     />
     <div
       v-if="error"

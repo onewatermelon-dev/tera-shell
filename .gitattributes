@@ -1,0 +1,9 @@
+# 统一换行符：提交存 LF，检出时 Windows 转 CRLF（默认行为显式化）
+* text=auto
+
+# 自动生成的类型声明与构建产物：不参与换行符转换，避免 lint-staged stash 恢复冲突
+src/types/*.d.ts text eol=lf
+src-tauri/Cargo.lock -text
+*.png binary
+*.ico binary
+*.icns binary

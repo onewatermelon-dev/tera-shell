@@ -71,3 +71,8 @@ bytes = "1"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"
+# DPAPI：用当前 Windows 用户凭据加密保存 SSH 密码（CryptProtectData）
+windows = { version = "0.61", features = [
+    "Win32_Security_Cryptography",
+    "Win32_System_Memory"
+] }

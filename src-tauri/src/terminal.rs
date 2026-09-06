@@ -1,10 +1,14 @@
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, io::Write, sync::Mutex};
+use std::{
+    collections::HashMap,
+    io::Write,
+    sync::{Arc, Mutex},
+};
 use tauri::{AppHandle, Emitter, State};
 
 struct Session {
-    writer: Box<dyn Write + Send>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
 }
@@ -20,6 +24,8 @@ pub struct Config {
     host: Option<String>,
     port: Option<u16>,
     username: Option<String>,
+    /// 已保存的明文密码；由前端解密后传入，用于 SSH 登录时自动应答。
+    password: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -54,26 +60,53 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
         .master
         .take_writer()
         .map_err(|error| error.to_string())?;
+    let writer = Arc::new(Mutex::new(writer));
     let id = config.id;
+    let password = config.password.clone();
     terminals.0.lock().map_err(|_| "终端状态不可用")?.insert(
         id.clone(),
         Session {
-            writer,
+            writer: writer.clone(),
             master: pty.master,
             child,
         },
     );
     std::thread::spawn(move || {
         let mut buffer = [0_u8; 8192];
+        // 保存的密码自动应答：累积输出尾部，识别 ssh 登录提示后一次性写入密码。
+        // 只应答一次；密码错误时 ssh 会再次提示，后续由用户手动输入。
+        let mut answer_buf = String::new();
+        let mut answered = false;
         while let Ok(size) = std::io::Read::read(&mut reader, &mut buffer) {
             if size == 0 {
                 break;
+            }
+            let chunk = &buffer[..size];
+            if !answered {
+                let lossy = String::from_utf8_lossy(chunk).to_lowercase();
+                answer_buf.push_str(&lossy);
+                if answer_buf.len() > 256 {
+                    answer_buf = answer_buf[answer_buf.len() - 256..].to_string();
+                }
+                if answer_buf.contains("password:")
+                    || answer_buf.contains("password for")
+                    || answer_buf.contains("passphrase for")
+                {
+                    if let Some(password) = password.as_ref() {
+                        if let Ok(mut writer) = writer.lock() {
+                            let _ = writer.write_all(password.as_bytes());
+                            let _ = writer.write_all(b"\r");
+                            let _ = writer.flush();
+                            answered = true;
+                        }
+                    }
+                }
             }
             let _ = app.emit(
                 "terminal-output",
                 Output {
                     id: id.clone(),
-                    data: String::from_utf8_lossy(&buffer[..size]).into_owned(),
+                    data: String::from_utf8_lossy(chunk).into_owned(),
                 },
             );
         }
@@ -103,7 +136,14 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
         .filter(|value| !value.trim().is_empty())
         .map_or_else(|| host.clone(), |username| format!("{username}@{host}"));
     let mut command = CommandBuilder::new("ssh");
-    command.args(["-tt", "-p", &config.port.unwrap_or(22).to_string(), &target]);
+    command.args([
+        "-tt",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-p",
+        &config.port.unwrap_or(22).to_string(),
+        &target,
+    ]);
     Ok(command)
 }
 
@@ -111,11 +151,11 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 pub fn write(id: String, data: String, terminals: State<Terminals>) -> Result<(), String> {
     let mut sessions = terminals.0.lock().map_err(|_| "终端状态不可用")?;
     let session = sessions.get_mut(&id).ok_or("终端会话不存在")?;
-    session
-        .writer
+    let mut writer = session.writer.lock().map_err(|_| "终端写入通道不可用")?;
+    writer
         .write_all(data.as_bytes())
         .map_err(|error| error.to_string())?;
-    session.writer.flush().map_err(|error| error.to_string())
+    writer.flush().map_err(|error| error.to_string())
 }
 
 #[tauri::command(rename = "terminal_resize")]

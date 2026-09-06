@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { invoke } from "@tauri-apps/api/core";
 import { Connection } from "@element-plus/icons-vue";
 import {
   emptySshSession,
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 }>();
 const form = reactive(emptySshSession());
 const error = ref("");
+const newPassword = ref("");
 const editing = computed(
   () => props.session != null
 );
@@ -25,26 +27,43 @@ watch(
   open => {
     if (!open) return;
     error.value = "";
+    newPassword.value = "";
     if (props.session) {
       Object.assign(form, props.session);
     } else {
       Object.assign(form, emptySshSession());
+      // 新建会话不带密码：清掉上一次编辑残留的 password，否则保存后会直接免密连接。
+      delete form.password;
     }
   }
 );
 
-function submit() {
+async function submit() {
   error.value = "";
   if (!form.host.trim()) {
     error.value = "请填写主机地址";
     return;
   }
-  // 会话名称可留空跟随主机地址：用户名留空默认 root
-  emit("save", {
+  const session: SavedSession = {
     ...form,
     name: form.name.trim() || form.host.trim(),
     username: form.username.trim() || "root"
-  });
+  };
+  // 编辑会话时新填的密码加密后写回；留空保持原密码。
+  if (newPassword.value) {
+    try {
+      session.password = await invoke<string>(
+        "encrypt",
+        {
+          plain: newPassword.value
+        }
+      );
+    } catch (reason) {
+      error.value = String(reason);
+      return;
+    }
+  }
+  emit("save", session);
 }
 </script>
 
@@ -92,6 +111,15 @@ function submit() {
         >用户名<input
           v-model="form.username"
           placeholder="root"
+      /></label>
+      <label
+        v-if="editing && form.password"
+        class="password-field"
+        >修改密码<input
+          v-model="newPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="留空保持原密码"
       /></label>
       <p class="hint">
         身份验证由系统 SSH 处理，支持已有密钥和

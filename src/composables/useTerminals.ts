@@ -46,9 +46,14 @@ export type OpenSession = SavedSession & {
  * 3. 容器尺寸改变 -> ResizeObserver -> fit() -> Tauri terminal_resize。
  *
  * @param onError 由页面提供的统一错误处理函数，避免该组合式函数耦合具体提示组件。
+ * @param onSavePassword 首次连接输入密码后回调，把加密密文写回持久化会话（sourceSessionId 定位）。
  */
 export function useTerminals(
-  onError: (reason: unknown) => void
+  onError: (reason: unknown) => void,
+  onSavePassword?: (
+    sourceSessionId: string,
+    encrypted: string
+  ) => void
 ) {
   // 同时保持多个终端进程；数组顺序就是标签栏显示顺序。
   const opened = reactive<OpenSession[]>([]);
@@ -68,37 +73,119 @@ export function useTerminals(
   let documentShortcutHandler:
     ((event: KeyboardEvent) => void) | undefined;
 
+  // 等待输入密码的 SSH 会话；由 PasswordDialog 组件渲染并调用 submitPassword。
+  const passwordRequest = ref<{
+    session: SavedSession;
+    sourceSessionId: string;
+  } | null>(null);
+
   /**
    * 打开或激活一个会话。
    *
    * 同一个 session.id 只创建一个前端 xterm 和一个后端 PTY；再次点击会话时只切换标签。
+   * SSH 会话没有保存密码时先弹密码框，输入后加密保存并自动应答登录。
    * 如果后端进程启动失败，会同步移除刚创建的前端标签，避免留下不可用的空会话。
    */
   async function open(
     session: SavedSession,
     sourceSessionId = session.id
   ) {
-    let current = opened.find(
+    const current = opened.find(
       item => item.id === session.id
     );
-    if (!current) {
-      current = createTerminal(
+    if (current) {
+      activeId.value = session.id;
+      await mountActive();
+      return;
+    }
+    if (session.kind === "ssh") {
+      if (session.password) {
+        // 已有保存的密码：解密后直接连接，不再询问。
+        try {
+          const plain = await invoke<string>(
+            "decrypt",
+            {
+              encoded: session.password
+            }
+          );
+          await startSession(
+            { ...session, password: plain },
+            sourceSessionId
+          );
+          return;
+        } catch {
+          // 解密失败（如凭据失效）时退回弹窗重新输入。
+        }
+      }
+      passwordRequest.value = {
         session,
         sourceSessionId
-      );
-      opened.push(current);
-      try {
-        await invoke("terminal_start", {
-          config: session
-        });
-      } catch (reason) {
-        opened.splice(opened.indexOf(current), 1);
-        onError(reason);
-        return;
-      }
+      };
+      return;
+    }
+    await startSession(session, sourceSessionId);
+  }
+
+  /**
+   * 真正创建后端 PTY 并挂载终端。
+   *
+   * 与 open 分离：SSH 会话必须等到拿到明文密码（解密或弹窗输入）后才能启动，
+   * 本地会话直接走这里。
+   */
+  async function startSession(
+    session: SavedSession & { password?: string },
+    sourceSessionId: string
+  ) {
+    const current = createTerminal(
+      session,
+      sourceSessionId
+    );
+    opened.push(current);
+    try {
+      await invoke("terminal_start", {
+        config: session
+      });
+    } catch (reason) {
+      opened.splice(opened.indexOf(current), 1);
+      onError(reason);
+      return;
     }
     activeId.value = session.id;
     await mountActive();
+  }
+
+  /**
+   * 密码框提交：加密保存，然后用明文密码连接。
+   */
+  async function submitPassword(
+    password: string
+  ) {
+    const request = passwordRequest.value;
+    if (!request) return;
+    passwordRequest.value = null;
+    try {
+      const encrypted = await invoke<string>(
+        "encrypt",
+        {
+          plain: password
+        }
+      );
+      onSavePassword?.(
+        request.sourceSessionId,
+        encrypted
+      );
+    } catch (reason) {
+      onError(reason);
+    }
+    await startSession(
+      { ...request.session, password },
+      request.sourceSessionId
+    );
+  }
+
+  /** 取消密码输入，不建立连接。 */
+  function cancelPassword() {
+    passwordRequest.value = null;
   }
 
   /**
@@ -694,6 +781,9 @@ export function useTerminals(
     duplicate,
     activate,
     close,
+    passwordRequest,
+    submitPassword,
+    cancelPassword,
     searchOpen,
     searchError,
     searchResult,

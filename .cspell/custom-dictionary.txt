@@ -24,3 +24,8 @@ unlisten
 unlisteners
 RRGGBB
 nsis
+dpapi
+HLOCAL
+CRYPTPROTECT
+PCWSTR
+DPAPI

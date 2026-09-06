@@ -5,6 +5,8 @@ export type SavedSession = {
   host: string;
   port: number;
   username: string;
+  /** DPAPI 加密后的密码密文（base64），未保存过则为空。 */
+  password?: string;
 };
 
 export const localSession: SavedSession = {

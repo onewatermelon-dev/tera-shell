@@ -36,6 +36,7 @@ onBeforeUnmount(() => unlistenResized?.());
 
 <template>
   <header class="titlebar" data-tauri-drag-region>
+    <!-- .brand 的文本子元素由 CSS pointer-events:none 穿透，详见 app.scss -->
     <div class="brand" data-tauri-drag-region>
       <span class="brand-mark">T</span
       ><strong>Tera Shell</strong>

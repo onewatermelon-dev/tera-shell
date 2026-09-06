@@ -7,11 +7,20 @@
  */
 export default {
   // JavaScript/TypeScript：依次检查拼写、格式，再执行代码规则检查。
-  "*.{js,ts,cjs,mjs,tsx}": [
-    "cspell lint",
-    "prettier --write",
-    "eslint"
-  ],
+  // 用函数过滤掉自动生成的 *.d.ts（与 .prettierignore 保持一致），
+  // 返回的命令需自己拼好文件名——函数任务不会追加暂存文件。
+  "*.{js,ts,cjs,mjs,tsx}": files => {
+    const sources = files.filter(
+      file => !file.endsWith(".d.ts")
+    );
+    return sources.length
+      ? [
+          `cspell lint ${sources.join(" ")}`,
+          `prettier --write ${sources.join(" ")}`,
+          `eslint ${sources.join(" ")}`
+        ]
+      : [];
+  },
 
   // Vue 同时包含脚本和样式，必须在同一任务组中串行处理。
   "*.vue": [
