@@ -326,6 +326,7 @@ button {
   display: grid;
   grid-template-rows: 38px 1fr 25px;
   min-width: 0;
+  height: 100%;
   background: #0b0e14;
 }
 
@@ -392,16 +393,29 @@ button {
   color: #8f9baa;
 }
 
+// 标签栏外层容器：作为更多按钮的 absolute 定位锚点，
+// 使按钮脱离 .tabs 的滚动流，始终固定在可视区右侧。
+.tabs-bar {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-bottom: 1px solid #252b34;
+}
+
 .tabs {
+  position: relative;
   display: flex;
   align-items: stretch;
+  width: 100%;
+  height: 100%;
   overflow: auto hidden;
 
   // 标签溢出时仍可横向滚动，但隐藏浏览器原生滚动条：
   // overflow-y 明确 hidden，避免 overflow-x:auto 把纵向隐式升级成 auto
   scrollbar-width: none;
   background: #12161d;
-  border-bottom: 1px solid #252b34;
+  border-bottom: none;
 }
 
 .tab::-webkit-scrollbar {
@@ -459,9 +473,90 @@ button {
   background: #1b2029;
 }
 
+// 标签溢出时固定在标签栏可视区右侧的"更多"按钮，下拉列出超出可视区域的会话。
+// 用 absolute 而非 sticky：sticky 在 overflow 容器里会随内容滚动。
+.tabs-more {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding-left: 18px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    #12161d 30%
+  );
+}
+
+.more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 100%;
+  color: #718093;
+  cursor: pointer;
+  background: #151a21;
+  border: 0;
+  border-left: 1px solid #252b34;
+}
+
+.more-btn:hover,
+.more-btn.open {
+  color: #ffffff;
+  background: #1b2029;
+}
+
+.more-list {
+  position: fixed;
+  z-index: 5;
+  min-width: 200px;
+  max-height: 280px;
+  padding: 6px;
+  overflow-y: auto;
+  background: #151a21;
+  border: 1px solid #252b34;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+}
+
+.more-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #8290a1;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+
+.more-item span:nth-child(2) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-item:hover {
+  color: #dbe3ec;
+  background: #1c222b;
+}
+
+.more-item.active {
+  color: #6ee7b7;
+}
+
 .terminal-host {
   min-height: 0;
-  padding: 13px 10px 4px 14px;
+  padding: 0 10px 4px 14px;
   overflow: hidden;
 }
 

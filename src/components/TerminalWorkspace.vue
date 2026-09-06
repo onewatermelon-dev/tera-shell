@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  ArrowDown,
   Connection,
   Plus
 } from "@element-plus/icons-vue";
@@ -57,31 +58,206 @@ watch(
     });
   }
 );
+
+// ---- 标签溢出处理 ----
+// 标签超过标签栏宽度时，右侧出现"更多"下拉按钮，列出当前不可见的会话；
+// 鼠标滚轮在标签栏上可横向滚动标签。
+const tabsRef = ref<HTMLElement>();
+const moreButtonRef = ref<HTMLButtonElement>();
+const dropdownOpen = ref(false);
+const overflowed = ref<OpenSession[]>([]);
+
+/** 重新计算当前被挤出可视区域的标签（滚动位置变化时调用）。 */
+function computeOverflow() {
+  const container = tabsRef.value;
+  if (!container) return;
+  const start = container.scrollLeft;
+  const end = start + container.clientWidth;
+  const hidden: OpenSession[] = [];
+  // .tab 顺序与 opened 一一对应（v-for 渲染），未完整落在可视区内即视为溢出。
+  container
+    .querySelectorAll<HTMLElement>(".tab")
+    .forEach((el, index) => {
+      const left = el.offsetLeft;
+      const right = left + el.offsetWidth;
+      const session = props.opened[index];
+      if (
+        session &&
+        (left < start || right > end)
+      )
+        hidden.push(session);
+    });
+  overflowed.value = hidden;
+  if (!hidden.length) dropdownOpen.value = false;
+}
+
+watch(
+  () => props.opened.length,
+  () => nextTick(computeOverflow),
+  { flush: "post" }
+);
+
+/** 滚轮垂直滚动转为标签栏横向滚动。 */
+function onTabsWheel(event: WheelEvent) {
+  const container = tabsRef.value;
+  if (!container) return;
+  container.scrollLeft +=
+    event.deltaY + event.deltaX;
+}
+
+// 下拉列表用 fixed 定位在按钮下方（tabs 容器的 overflow 会裁切 absolute 子元素）
+const moreListPos = reactive({
+  top: 0,
+  right: 0
+});
+
+function toggleDropdown() {
+  dropdownOpen.value = !dropdownOpen.value;
+  if (dropdownOpen.value) positionMoreList();
+}
+
+function positionMoreList() {
+  if (!moreButtonRef.value) return;
+  const rect =
+    moreButtonRef.value.getBoundingClientRect();
+  moreListPos.top = rect.bottom + 4;
+  moreListPos.right =
+    window.innerWidth - rect.right;
+}
+
+/** 激活下拉列表中的会话，并将对应标签滚动到标签栏可视区。 */
+function activateOverflow(id: string) {
+  const index = props.opened.findIndex(
+    tab => tab.id === id
+  );
+  const tab =
+    tabsRef.value?.querySelectorAll<HTMLElement>(
+      ".tab"
+    )[index];
+  dropdownOpen.value = false;
+  emit("activate", id);
+  tab?.scrollIntoView({
+    block: "nearest",
+    inline: "nearest"
+  });
+}
+
+let resizeObserver: ResizeObserver | undefined;
+let documentMousedown:
+  ((e: MouseEvent) => void) | undefined;
+let windowResize: (() => void) | undefined;
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => {
+    computeOverflow();
+    if (dropdownOpen.value) positionMoreList();
+  });
+  if (tabsRef.value)
+    resizeObserver.observe(tabsRef.value);
+  // 点击标签栏外部时收起下拉
+  documentMousedown = (event: MouseEvent) => {
+    const target = event.target as Node;
+    const more =
+      moreButtonRef.value?.parentElement;
+    if (
+      !tabsRef.value?.contains(target) &&
+      !more?.contains(target)
+    )
+      dropdownOpen.value = false;
+  };
+  document.addEventListener(
+    "mousedown",
+    documentMousedown
+  );
+  windowResize = () => {
+    if (dropdownOpen.value) positionMoreList();
+  };
+  window.addEventListener("resize", windowResize);
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  if (documentMousedown)
+    document.removeEventListener(
+      "mousedown",
+      documentMousedown
+    );
+  if (windowResize)
+    window.removeEventListener(
+      "resize",
+      windowResize
+    );
+});
 </script>
 
 <template>
   <section class="terminal-pane">
-    <div class="tabs">
-      <button
-        v-for="tab in opened"
-        :key="tab.id"
-        class="tab"
-        :class="{ active: active?.id === tab.id }"
-        @click="$emit('activate', tab.id)"
+    <!-- 外层 relative 容器让更多按钮脱离滚动流，固定钉在标签栏可视区右侧 -->
+    <div class="tabs-bar">
+      <div
+        ref="tabsRef"
+        class="tabs"
+        @scroll="computeOverflow"
+        @wheel="onTabsWheel"
       >
-        <span class="status-dot"></span
-        ><span>{{ tab.name }}</span
-        ><i @click.stop="$emit('close', tab.id)"
-          >×</i
+        <button
+          v-for="tab in opened"
+          :key="tab.id"
+          class="tab"
+          :class="{
+            active: active?.id === tab.id
+          }"
+          @click="$emit('activate', tab.id)"
         >
-      </button>
-      <button
-        class="new-tab"
-        title="新建会话"
-        @click="$emit('create')"
+          <span class="status-dot"></span
+          ><span>{{ tab.name }}</span
+          ><i @click.stop="$emit('close', tab.id)"
+            >×</i
+          >
+        </button>
+        <button
+          class="new-tab"
+          title="新建会话"
+          @click="$emit('create')"
+        >
+          <Plus />
+        </button>
+      </div>
+      <div
+        v-if="overflowed.length"
+        class="tabs-more"
       >
-        <Plus />
-      </button>
+        <button
+          ref="moreButtonRef"
+          class="more-btn"
+          :class="{ open: dropdownOpen }"
+          :title="`${overflowed.length} 个标签超出显示`"
+          @click.stop="toggleDropdown"
+        >
+          <ArrowDown />
+        </button>
+        <div
+          v-if="dropdownOpen"
+          class="more-list"
+          :style="{
+            top: `${moreListPos.top}px`,
+            right: `${moreListPos.right}px`
+          }"
+        >
+          <button
+            v-for="tab in overflowed"
+            :key="tab.id"
+            class="more-item"
+            :class="{
+              active: active?.id === tab.id
+            }"
+            @click="activateOverflow(tab.id)"
+          >
+            <span class="status-dot"></span
+            ><span>{{ tab.name }}</span>
+          </button>
+        </div>
+      </div>
     </div>
     <div
       v-if="opened.length"
