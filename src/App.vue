@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TerminalWorkspace from "@/components/TerminalWorkspace.vue";
 import PasswordDialog from "@/components/PasswordDialog.vue";
+import AppLoading from "@/components/AppLoading.vue";
 import { useSessions } from "@/composables/useSessions";
 import { useTerminals } from "@/composables/useTerminals";
 import type { SavedSession } from "@/domain/session";
@@ -12,6 +13,10 @@ const error = ref("");
 const editingSession = ref<SavedSession | null>(
   null
 );
+const appReady = ref(false);
+const appLoading = ref<InstanceType<
+  typeof AppLoading
+> | null>(null);
 const {
   sessions,
   query,
@@ -48,10 +53,22 @@ function saveSession(session: SavedSession) {
   dialogOpen.value = false;
 }
 
-onMounted(() => {
+onMounted(async () => {
   const first = sessions.value[0];
   if (first) terminals.open(first);
+  // 动效至少播放 2 秒：主界面渲染就绪后等待剩余时间，再淡出进入应用。
+  await Promise.all([
+    nextTick(),
+    new Promise(resolve =>
+      setTimeout(resolve, 5000)
+    )
+  ]);
+  appLoading.value?.finish();
 });
+
+function loadingFinished() {
+  appReady.value = true;
+}
 </script>
 
 <template>
@@ -122,5 +139,10 @@ onMounted(() => {
     >
       {{ error }}
     </div>
+    <AppLoading
+      v-if="!appReady"
+      ref="appLoading"
+      @finished="loadingFinished"
+    />
   </main>
 </template>

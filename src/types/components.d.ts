@@ -12,6 +12,8 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppHeader: typeof import('./../components/AppHeader.vue')['default']
+    AppLoading: typeof import('./../components/AppLoading.vue')['default']
+    MagicRings: typeof import('./../components/MagicRings.vue')['default']
     PasswordDialog: typeof import('./../components/PasswordDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
