@@ -1,6 +1,6 @@
-mod logging;
+pub mod logging;
 mod secret;
-mod terminal;
+pub mod terminal;
 
 /// 前端 F12 / Ctrl+Shift+I 打开 DevTools。
 /// 浏览器级快捷键被禁用后 F12 不再生效，需要走这个命令手动打开。

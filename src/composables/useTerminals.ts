@@ -17,6 +17,7 @@ import {
   markSearchSelection,
   renderTextOnlySelection
 } from "@/utils/terminalSelection";
+import { stripPrompt } from "@/utils/stripPrompt";
 
 /**
  * 已经打开的终端会话。
@@ -564,12 +565,28 @@ export function useTerminals(
     renderTextOnlySelection(terminal, element);
 
     // onData 会收到普通字符、快捷键和控制序列，必须原样写入 PTY，不能自行解析。
-    terminal.onData(data =>
+    terminal.onData(data => {
+      let command: string | null = null;
+      if (
+        data === "\r" ||
+        data === "\n" ||
+        data === "\r\n"
+      ) {
+        const buffer = terminal.buffer.active;
+        const line = buffer.getLine(
+          buffer.baseY + buffer.cursorY
+        );
+        command =
+          stripPrompt(
+            line?.translateToString(true) ?? ""
+          ) || null;
+      }
       invoke("terminal_write", {
         id: session.id,
-        data
-      }).catch(onError)
-    );
+        data,
+        command
+      }).catch(onError);
+    });
     // Ctrl+C：有选区时复制并拦截（不发 SIGINT），无选区时照常中断进程。
     // Ctrl+V：返回 false 让 WebView 执行原生粘贴；xterm 会从 paste 事件读取剪贴板并触发 onData。
     terminal.attachCustomKeyEventHandler(

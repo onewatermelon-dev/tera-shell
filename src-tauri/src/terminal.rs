@@ -189,10 +189,15 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 }
 
 #[tauri::command(rename = "terminal_write")]
-pub fn write(id: String, data: String, terminals: State<Terminals>) -> Result<(), String> {
+pub fn write(
+    id: String,
+    data: String,
+    command: Option<String>,
+    terminals: State<Terminals>,
+) -> Result<(), String> {
     let mut sessions = terminals.0.lock().map_err(|_| "终端状态不可用")?;
     let session = sessions.get_mut(&id).ok_or("终端会话不存在")?;
-    record_input(&id, session, &data);
+    record_input(&id, session, &data, command.as_deref());
     let mut writer = session.writer.lock().map_err(|_| "终端写入通道不可用")?;
     writer
         .write_all(data.as_bytes())
@@ -200,11 +205,35 @@ pub fn write(id: String, data: String, terminals: State<Terminals>) -> Result<()
     writer.flush().map_err(|error| error.to_string())
 }
 
+/// 归一化行内编辑键：Tab 补全留下的制表符变单个字符，退格（DEL）回删前一字符
+pub fn normalize_command_line(text: &str) -> String {
+    text.chars().fold(String::new(), |mut acc, c| {
+        match c {
+            '\t' => acc.push(' '),
+            '\x7f' => {
+                acc.pop();
+            }
+            _ => acc.push(c),
+        }
+        acc
+    })
+}
+
+/// 从第一次回车里得出要记录的文本：优先前端抓到的完整命令行
+/// （含 Tab 补全展开），否则用输入流重建（剥 ANSI，去边缘空白，归一化编辑键
+pub fn resolve_command_line(command: Option<&str>, raw: &str) -> String {
+    match command.filter(|c| !c.trim().is_empty()) {
+        Some(text) => normalize_command_line(text.trim()),
+        None => normalize_command_line(
+            &strip_ansi(raw).trim_matches(|c: char| c.is_whitespace() || c.is_control()),
+        ),
+    }
+}
 /// 按回车切分终端输入并按行记录命令；密码提示后的输入行只记一条"跳过"。
 ///
-/// 方向键/F 键等会以 ANSI 转义序列混入输入流，记录前统一剥除；
-/// 输入缓冲过长（如全屏应用刷新）时放弃累积，避免日志状态失真。
-fn record_input(id: &str, session: &mut Session, data: &str) {
+/// 回车时前端会连同缓存区内的完整命令行（含 Tab 补全展开）一并送来，
+/// 优先使用它：否则用输入流重建,输入缓冲过长（如全屏应用刷新）时放弃积累
+fn record_input(id: &str, session: &mut Session, data: &str, command: Option<&str>) {
     let mut buf = match session.input_buf.lock() {
         Ok(buf) => buf,
         Err(_) => return,
@@ -217,9 +246,8 @@ fn record_input(id: &str, session: &mut Session, data: &str) {
     while let Some(pos) = buf.iter().position(|&b| b == b'\r' || b == b'\n') {
         let line: Vec<u8> = buf.drain(..=pos).collect();
         // 先剥掉 ANSI 转义序列（方向键/F 键残留），再去行首行尾空白与控制字符。
-        let text = strip_ansi(&String::from_utf8_lossy(&line))
-            .trim_matches(|c: char| c.is_whitespace() || c.is_control())
-            .to_string();
+        // 最后归一化行内编辑键（Tab/退格），日志才接近实际执行单独命令
+        let text = resolve_command_line(command, &String::from_utf8_lossy(&line));
         if text.is_empty() {
             continue;
         }
@@ -271,7 +299,7 @@ pub fn close(id: String, terminals: State<Terminals>) -> Result<(), String> {
 }
 
 /// 去除 ANSI 转义序列（CSI/OSC/SS3 等），返回只含可见字符的文本。
-fn strip_ansi(input: &str) -> String {
+pub fn strip_ansi(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut rest = input;
     while let Some(pos) = rest.find('\x1b') {
@@ -327,18 +355,5 @@ fn skip_escape(seq: &str) -> &str {
         &tail[i..]
     } else {
         tail
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::strip_ansi;
-
-    #[test]
-    fn strips_ansi_sequences() {
-        assert_eq!(strip_ansi("\x1b[O           ls"), "           ls");
-        assert_eq!(strip_ansi("git\x1b[A status"), "git status");
-        assert_eq!(strip_ansi("echo\x1b]0;title\x07!"), "echo!");
-        assert_eq!(strip_ansi("ls -la"), "ls -la");
     }
 }

@@ -65,7 +65,7 @@ fn log_dir(app: &tauri::App) -> PathBuf {
 /// 用一个 writer 实例写完该事件后丢弃；因此在 writer 的 `Drop` 里递增计数，
 /// 恰好等于已落盘的日志事件条数。
 #[derive(Clone)]
-struct RotatingWriter(Arc<Mutex<RotatingState>>);
+pub struct RotatingWriter(Arc<Mutex<RotatingState>>);
 
 struct RotatingState {
     /// 日志根目录，其下按 `yyyy-MM-dd` 建日期子目录。
@@ -81,7 +81,7 @@ struct RotatingState {
 }
 
 impl RotatingWriter {
-    fn new(base: PathBuf) -> Self {
+    pub fn new(base: PathBuf) -> Self {
         RotatingWriter(Arc::new(Mutex::new(RotatingState {
             base,
             file: None,
@@ -146,7 +146,7 @@ impl RotatingState {
 }
 
 /// 单次日志事件的写入句柄：写入由 fmt layer 一条事件内连续调用完成，句柄丢弃时计数。
-struct EventWriter {
+pub struct EventWriter {
     state: Arc<Mutex<RotatingState>>,
     /// 本次事件是否实际写入了字节（空事件不计条数）。
     wrote: bool,
@@ -209,48 +209,6 @@ impl<'a> MakeWriter<'a> for RotatingWriter {
 }
 
 /// 本地日期，格式 `yyyy-MM-dd`，用作日志归档目录名。
-fn today() -> String {
+pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use std::io::Write as _;
-
-    use super::*;
-
-    #[test]
-    fn rolls_over_when_file_full() {
-        let base = std::env::temp_dir().join(format!(
-            "tera-shell-log-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let writer = RotatingWriter::new(base.clone());
-        // 模拟 10001 条日志事件：每条事件取一次 writer，写完即丢弃。
-        for _ in 0..10_001 {
-            let mut event = writer.make_writer();
-            event.write_all(b"event\n").unwrap();
-            event.flush().unwrap();
-        }
-        drop(writer);
-
-        let dir = base.join(today());
-        let mut counts: Vec<u64> = fs::read_dir(&dir)
-            .unwrap()
-            .map(|entry| {
-                let path = entry.unwrap().path();
-                fs::read_to_string(&path).unwrap().lines().count() as u64
-            })
-            .collect();
-        // 9999 条写满后应滚动出第二个文件；两个文件按创建先后为 9999 / 2 条。
-        counts.sort_unstable();
-        assert_eq!(counts.len(), 2, "写满 9999 条后应新建日志文件：{counts:?}");
-        assert_eq!(counts, vec![2, 9999], "滚动后新文件从 0 重新计数：{counts:?}");
-
-        fs::remove_dir_all(&base).unwrap();
-    }
 }

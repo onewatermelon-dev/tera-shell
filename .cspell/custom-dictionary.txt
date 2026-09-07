@@ -31,3 +31,4 @@ PCWSTR
 DPAPI
 highp
 fract
+hella
