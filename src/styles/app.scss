@@ -2,8 +2,8 @@
   font-family:
     "Segoe UI Variable", "Segoe UI", sans-serif;
   font-synthesis: none;
-  color: #d8dee9;
-  background: #0b0e14;
+  color: var(--foreground);
+  background: var(--background);
 }
 
 * {
@@ -30,16 +30,20 @@ button {
 
 .shell-app {
   height: 100%;
-  background: #0b0e14;
+  background: var(--background);
 }
 
 .titlebar {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   height: 46px;
   user-select: none;
-  background: #12161d;
-  border-bottom: 1px solid #242a33;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border);
+
+  // HeroUI 全局 header 规则会强加 justify-content:space-between，
+  // 把中间菜单推到右侧；上面显式 flex-start 还原，右侧对齐交给 .title-actions 的 margin-left:auto。
 }
 
 .brand {
@@ -63,35 +67,43 @@ button {
   width: 24px;
   height: 24px;
   font-weight: 800;
-  color: #07110d;
-  background: #34d399;
+  color: var(--accent-foreground);
+  background: var(--accent);
   border-radius: 6px;
 }
 
-.menu,
+.main-menu,
 .title-actions {
   display: flex;
+  gap: 0;
   height: 100%;
+  padding-inline: 0;
+
+  // HeroUI 全局 nav 规则会加 gap 与 padding-inline，让菜单按钮互相分开，
+  // 本项目按钮间距由各自 padding 控制，上面清零避免被 hero 污染。
 }
 
 .title-actions {
   margin-left: auto;
 }
 
-.menu button,
+.main-menu button,
 .title-actions button {
+  height: 100%; // HeroUI Button 自带固定高度，标题栏内需撑满 46px
   padding: 0 13px;
   font-size: 12px;
-  color: #8f9baa;
+  font-weight: 400;
+  color: var(--muted);
   cursor: pointer;
   background: transparent;
   border: 0;
+  border-radius: 0;
 }
 
-.menu button:hover,
+.main-menu button:hover,
 .title-actions button:hover {
-  color: #ffffff;
-  background: #1b2029;
+  color: var(--foreground);
+  background: var(--surface-hover);
 }
 
 .title-actions button {
@@ -100,7 +112,6 @@ button {
 }
 
 .title-actions svg,
-.icon-button svg,
 .new-tab svg {
   width: 16px;
 }
@@ -113,6 +124,10 @@ button {
   // 窗口缩小时内容溢出、fit() 因宿主高度不变而不再触发，输入行被裁掉
   grid-template-rows: 100%;
   grid-template-columns: 224px 1fr;
+
+  // HeroUI 的全局 section 规则带 align-items:flex-start，会覆盖本容器的
+  // grid 默认 stretch，导致 sidebar / 终端面板不撑满高度。显式还原。
+  align-items: stretch;
   height: calc(100% - 46px);
 }
 
@@ -120,8 +135,8 @@ button {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: #11151b;
-  border-right: 1px solid #252b34;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
 }
 
 .sidebar-head {
@@ -142,53 +157,35 @@ button {
 
 .sidebar-head small {
   font-size: 11px;
-  color: #627080;
+  color: var(--muted);
 }
 
-.icon-button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  background: #1c222b;
-  border: 0;
-  border-radius: 5px;
-}
-
-.icon-button.primary {
-  color: #07140f;
-  background: #2ab77d;
-}
-
+// 搜索框：HeroUI Input 自身就是完整字段样式，外层 TextField 不再画边框/背景，
+// 只做布局 + 图标绝对定位进输入框左侧。
 .search-box {
+  position: relative;
   display: flex;
-  gap: 7px;
-  align-items: center;
-  height: 32px;
-  padding: 0 9px;
-  margin: 0 10px 12px;
-  background: #171c24;
-  border: 1px solid #2a313c;
-  border-radius: 5px;
-}
 
-.search-box:focus-within {
-  border-color: #3dcf91;
+  // HeroUI 全局 label 规则是 flex-direction:column；搜索框需要横向排布，显式还原。
+  flex-direction: row;
+  gap: 0;
+  align-items: center;
+  margin: 0 10px 12px;
 }
 
 .search-box svg {
+  position: absolute;
+  left: 10px;
+  z-index: 1;
   width: 14px;
-  color: #687688;
+  color: var(--muted);
+  pointer-events: none;
 }
 
 .search-box input {
   width: 100%;
+  padding-left: 30px;
   font-size: 12px;
-  color: #d5dbe4;
-  outline: 0;
-  background: transparent;
-  border: 0;
 }
 
 .group-title {
@@ -198,7 +195,7 @@ button {
   padding: 7px 15px;
   font-size: 10px;
   font-weight: 700;
-  color: #687587;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.8px;
 }
@@ -228,12 +225,12 @@ button {
 }
 
 .session-item:hover {
-  background: #1a2028;
+  background: var(--surface-hover);
 }
 
 .session-item.active {
-  background: #202831;
-  box-shadow: inset 2px 0 #34d399;
+  background: var(--default);
+  box-shadow: inset 2px 0 var(--accent);
 }
 
 .session-icon {
@@ -241,8 +238,8 @@ button {
   place-items: center;
   width: 27px;
   height: 27px;
-  color: #61d7a3;
-  background: #252d37;
+  color: var(--accent);
+  background: var(--default);
   border-radius: 5px;
 }
 
@@ -268,21 +265,21 @@ button {
 .session-copy strong {
   font-size: 12px;
   font-weight: 550;
-  color: #cdd5df;
+  color: var(--foreground);
 }
 
 .session-copy small {
   font:
     10px Consolas,
     monospace;
-  color: #677587;
+  color: var(--muted);
 }
 
 .delete,
 .edit {
   display: none;
   width: 15px;
-  color: #8b98a8;
+  color: var(--muted);
 }
 
 .session-item:hover .delete,
@@ -293,7 +290,7 @@ button {
 .empty-list {
   padding-top: 30px;
   font-size: 11px;
-  color: #657283;
+  color: var(--muted);
   text-align: center;
 }
 
@@ -304,8 +301,8 @@ button {
   height: 32px;
   padding: 0 13px;
   font-size: 10px;
-  color: #718093;
-  border-top: 1px solid #252b34;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
 }
 
 .sidebar-foot small {
@@ -316,18 +313,26 @@ button {
   flex: none;
   width: 6px;
   height: 6px;
-  background: #34d399;
+  background: var(--success);
   border-radius: 50%;
-  box-shadow: 0 0 8px #34d39980;
+}
+
+// 会话断开连接：标签状态变红
+.status-dot.off {
+  background: var(--danger);
 }
 
 .terminal-pane {
   position: relative;
   display: grid;
   grid-template-rows: 38px 1fr 25px;
+
+  // 同 .workspace：还原 grid 默认 stretch，避免 HeroUI 全局 section 规则
+  // 的 align-items:flex-start 让 .tabs-bar / 终端宿主不撑满各自行。
+  align-items: stretch;
   min-width: 0;
   height: 100%;
-  background: #0b0e14;
+  background: var(--background);
 }
 
 // 查找浮层：右上角，压在终端内容之上。
@@ -341,19 +346,19 @@ button {
   gap: 6px;
   align-items: center;
   padding: 6px 8px;
-  background: #161b26;
-  border: 1px solid #2a3142;
+  background: var(--overlay);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 40%);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
 }
 
 .find-input {
   width: 180px;
   padding: 4px 8px;
   font-size: 12px;
-  color: #d8dee9;
-  background: #0b0e14;
-  border: 1px solid #2a3142;
+  color: var(--field-foreground);
+  background: var(--field-background);
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 
@@ -368,29 +373,29 @@ button {
   font:
     12px Consolas,
     monospace;
-  color: #8f9baa;
+  color: var(--muted);
   cursor: pointer;
   background: transparent;
-  border: 1px solid #2a3142;
+  border: 1px solid var(--border);
   border-radius: 4px;
 
   &:hover {
-    color: #ffffff;
-    background: #1b2029;
+    color: var(--foreground);
+    background: var(--surface-hover);
   }
 
-  // Aa / .* 开关开启时用主题绿高亮
+  // Aa / .* 开关开启时用主题色高亮
   &.on {
-    color: #0b0e14;
-    background: #6ee7b7;
-    border-color: #6ee7b7;
+    color: var(--accent-foreground);
+    background: var(--accent);
+    border-color: var(--accent);
   }
 }
 
 .find-count {
   min-width: 44px;
   font-size: 12px;
-  color: #8f9baa;
+  color: var(--muted);
 }
 
 // 标签栏外层容器：作为更多按钮的 absolute 定位锚点，
@@ -400,12 +405,13 @@ button {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border-bottom: 1px solid #252b34;
+  border-bottom: 1px solid var(--border);
 }
 
 .tabs {
   position: relative;
   display: flex;
+  gap: 0; // HeroUI 组件库也有 .tabs 类（gap:8px），显式清零还原无缝标签栏
   align-items: stretch;
   width: 100%;
   height: 100%;
@@ -414,7 +420,7 @@ button {
   // 标签溢出时仍可横向滚动，但隐藏浏览器原生滚动条：
   // overflow-y 明确 hidden，避免 overflow-x:auto 把纵向隐式升级成 auto
   scrollbar-width: none;
-  background: #12161d;
+  background: var(--surface-secondary);
   border-bottom: none;
 }
 
@@ -428,19 +434,31 @@ button {
   align-items: center;
   min-width: 150px;
   max-width: 210px;
+  height: 100%; // HeroUI Button 自带 sm 高度类，标签栏内需撑满
   padding: 0 10px;
   font-size: 11px;
-  color: #8290a1;
+  color: var(--muted);
   cursor: pointer;
-  background: #151a21;
+  background: var(--surface-tertiary);
   border: 0;
-  border-right: 1px solid #252b34;
+  border-right: 1px solid var(--border);
+  border-radius: 0; // HeroUI button--md 的 24px 圆角会把激活态 inset 顶线包成 U 形环
 }
 
 .tab.active {
-  color: #dbe3ec;
-  background: #0b0e14;
-  box-shadow: inset 0 2px #34d399;
+  color: var(--foreground);
+  background: var(--background);
+  box-shadow: inset 0 2px var(--accent);
+}
+
+// 标签聚焦时会出现主题色圆角环（RAC data-focus-visible 的 ring 类 / UA outline），
+// 叠加在激活态上显得冗余。统一关掉 outline 并用激活态同款 inset 顶线
+// 作为焦点指示（:focus / :focus-visible / data-focus-visible 三种来源全覆盖）。
+.tab:focus,
+.tab:focus-visible,
+.tab[data-focus-visible] {
+  outline: none;
+  box-shadow: inset 0 2px var(--accent);
 }
 
 .tab span:nth-child(2) {
@@ -457,20 +475,22 @@ button {
 }
 
 .tab i:hover {
-  color: #ffffff;
+  color: var(--foreground);
 }
 
 .new-tab {
   width: 38px;
-  color: #718093;
+  height: 100%;
+  color: var(--muted);
   cursor: pointer;
   background: transparent;
   border: 0;
+  border-radius: 0;
 }
 
 .new-tab:hover {
-  color: #ffffff;
-  background: #1b2029;
+  color: var(--foreground);
+  background: var(--surface-hover);
 }
 
 // 标签溢出时固定在标签栏可视区右侧的"更多"按钮，下拉列出超出可视区域的会话。
@@ -487,7 +507,7 @@ button {
   background: linear-gradient(
     to right,
     transparent,
-    #12161d 30%
+    var(--surface-secondary) 30%
   );
 }
 
@@ -497,17 +517,18 @@ button {
   justify-content: center;
   width: 30px;
   height: 100%;
-  color: #718093;
+  color: var(--muted);
   cursor: pointer;
-  background: #151a21;
+  background: var(--surface-tertiary);
   border: 0;
-  border-left: 1px solid #252b34;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
 }
 
 .more-btn:hover,
 .more-btn.open {
-  color: #ffffff;
-  background: #1b2029;
+  color: var(--foreground);
+  background: var(--surface-hover);
 }
 
 .more-list {
@@ -517,10 +538,10 @@ button {
   max-height: 280px;
   padding: 6px;
   overflow-y: auto;
-  background: #151a21;
-  border: 1px solid #252b34;
+  background: var(--overlay);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 15%);
 }
 
 .more-item {
@@ -530,7 +551,7 @@ button {
   width: 100%;
   padding: 8px 10px;
   font-size: 12px;
-  color: #8290a1;
+  color: var(--muted);
   text-align: left;
   cursor: pointer;
   background: transparent;
@@ -546,18 +567,19 @@ button {
 }
 
 .more-item:hover {
-  color: #dbe3ec;
-  background: #1c222b;
+  color: var(--foreground);
+  background: var(--surface-hover);
 }
 
 .more-item.active {
-  color: #6ee7b7;
+  color: var(--accent);
 }
 
 .terminal-host {
   min-height: 0;
   padding: 0 10px 4px 14px;
   overflow: hidden;
+  background: #0b0e14; // 终端保持黑底，padding 缝隙与 xterm 背景融为一体
 }
 
 .terminal-instance {
@@ -595,8 +617,8 @@ button {
   font:
     9px Consolas,
     monospace;
-  color: #5f6d7e;
-  border-top: 1px solid #202630;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
 }
 
 .empty-terminal {
@@ -604,18 +626,18 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #657385;
+  color: var(--muted);
 }
 
-.empty-terminal > svg {
+.empty-terminal svg {
   width: 42px;
-  color: #2f3a46;
+  color: var(--border);
 }
 
 .empty-terminal h2 {
   margin: 18px 0 4px;
   font-size: 15px;
-  color: #9da8b6;
+  color: var(--muted);
 }
 
 .empty-terminal p {
@@ -623,93 +645,34 @@ button {
   font-size: 11px;
 }
 
-.empty-terminal button,
-.connect-button {
-  display: inline-flex;
-  gap: 7px;
-  align-items: center;
-  padding: 8px 13px;
-  font-weight: 650;
-  color: #07140f;
-  cursor: pointer;
-  background: #2ab77d;
-  border: 0;
-  border-radius: 5px;
-}
+// ---- HeroUI Modal 对话框的少量补充样式 ----
+// 面板/字段/按钮外观全部交给 Modal + TextField + Button，
+// 这里只保留宽度、字段间距与文案色。
 
-.empty-terminal button svg,
-.connect-button svg {
-  width: 14px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: grid;
-  place-items: center;
-  background: #030509b8;
-  backdrop-filter: blur(3px);
-}
-
-.dialog {
+.session-dialog {
   width: 430px;
-  padding: 22px;
-  background: #171c23;
-  border: 1px solid #303844;
-  border-radius: 8px;
-  box-shadow: 0 30px 80px #00000099;
 }
 
-.dialog-head {
+.dialog-fields {
   display: flex;
-  justify-content: space-between;
-  margin-bottom: 20px;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.dialog-head span {
+.dialog-eyebrow {
   font-size: 10px;
   font-weight: 700;
-  color: #34d399;
+  color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
-.dialog-head h2 {
-  margin: 3px 0 0;
-  font-size: 19px;
+.dialog-hint {
+  color: var(--muted);
 }
 
-.dialog-head button {
-  align-self: flex-start;
-  font-size: 20px;
-  color: #7b899a;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-}
-
-.dialog label {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin-bottom: 14px;
-  font-size: 11px;
-  color: #8896a7;
-}
-
-.dialog input {
-  height: 36px;
-  padding: 0 10px;
-  color: #e1e7ee;
-  outline: 0;
-  background: #10141a;
-  border: 1px solid #313a46;
-  border-radius: 5px;
-}
-
-.dialog input:focus {
-  border-color: #34d399;
+.dialog-error {
+  color: var(--danger);
 }
 
 .form-row {
@@ -721,54 +684,56 @@ button {
   flex: 1;
 }
 
-.form-row label:last-child {
+.port-field {
   width: 90px;
-}
-
-.hint {
-  margin: -3px 0 15px;
-  font-size: 10px;
-  color: #637183;
-}
-
-.form-error {
-  font-size: 11px;
-  color: #fb7185;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.dialog-actions > button {
-  min-height: 34px;
-  padding: 0 13px;
-  cursor: pointer;
-  background: #202630;
-  border: 1px solid #333c48;
-  border-radius: 5px;
-}
-
-.dialog-actions .connect-button {
-  background: #2ab77d;
-  border: 0;
 }
 
 .toast {
   position: fixed;
   right: 18px;
   bottom: 18px;
+  z-index: 20;
   max-width: 420px;
-  padding: 11px 14px;
-  font-size: 12px;
-  color: #fda4af;
   cursor: pointer;
-  background: #341c22;
-  border: 1px solid #713b45;
-  border-radius: 6px;
+}
+
+// 开屏加载遮罩（Vue→React 迁移时丢失的样式，在此补回）：
+// 全屏盖住白屏，finish() 后加 .fading 淡出 500ms 再卸载。
+.app-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--background);
+  transition: opacity 0.5s ease;
+}
+
+.app-loading.fading {
+  pointer-events: none;
+  opacity: 0;
+}
+
+// MagicRings 按容器 clientWidth/Height 自适应，铺满即全屏；
+// 内层 mount div 必须撑满，否则 canvas 高度塌陷
+.app-loading-rings {
+  position: absolute;
+  inset: 0;
+}
+
+.magic-rings {
+  width: 100%;
+  height: 100%;
+}
+
+.app-loading-text {
+  position: absolute;
+  bottom: 40px;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  letter-spacing: 2px;
 }
 
 button:active {
@@ -787,23 +752,23 @@ button:active {
   display: none;
   min-width: 120px;
   padding: 4px 0;
-  background: #161b26;
-  border: 1px solid #2a3142;
+  background: var(--overlay);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 40%);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
 
   .menu-item {
     padding: 6px 16px;
     font-size: 13px;
-    color: #c9d1d9;
+    color: var(--foreground);
     cursor: pointer;
 
     &:hover {
-      background: #2f4f46;
+      background: var(--surface-hover);
     }
 
     &.disabled {
-      color: #555c6b;
+      color: var(--muted);
       cursor: not-allowed;
 
       &:hover {
@@ -825,8 +790,8 @@ button:active {
 .terminal-selection-range {
   position: absolute;
 
-  // 鼠标框选：青绿松花，半透明背景保证被选文字仍然清晰可读。
-  background: rgb(47 79 70 / 65%);
+  // 鼠标框选：半透明主题蓝，保证黑底终端里被选文字仍然清晰可读。
+  background: rgb(41 103 206 / 45%);
 }
 
 .terminal-selection-range.search {

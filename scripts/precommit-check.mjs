@@ -11,39 +11,42 @@ import {
 import { emitKeypressEvents } from "node:readline";
 
 /**
- * 执行 git 子命令并返回裁掉首尾空白的 stdout。
- * 同步调用：检查脚本里的每次 git 查询都很快，且后续逻辑依赖查询结果。
+ * 执行 git 子命令并按 NUL 切分 -z 输出。
+ * 必须用 -z：git 默认 core.quotePath=true 会把中文路径转成
+ * "docs/\344\273\216…" 转义形式，原样回传给 git add 会匹配不到文件。
  *
- * @param {string[]} args git 参数列表（不含子命令名本身之前的 "git"）
- * @returns {string} 命令的标准输出
+ * @param {string[]} args git 参数列表（须含 -z）
+ * @returns {string[]} 路径列表
  */
-function git(args) {
+function gitZ(args) {
   return execFileSync("git", args, {
     encoding: "utf8"
-  }).trim();
+  })
+    .split("\0")
+    .filter(Boolean);
 }
 
 let staged = [];
 let unstaged = [];
 try {
-  staged = git([
+  staged = gitZ([
     "diff",
     "--cached",
-    "--name-only"
-  ])
-    .split("\n")
-    .filter(Boolean);
+    "--name-only",
+    "-z"
+  ]);
   // 未暂存 = 已跟踪文件的改动（工作区 vs 暂存区）+ 未跟踪的新文件
-  const modified = git(["diff", "--name-only"])
-    .split("\n")
-    .filter(Boolean);
-  const untracked = git([
+  const modified = gitZ([
+    "diff",
+    "--name-only",
+    "-z"
+  ]);
+  const untracked = gitZ([
     "ls-files",
     "--others",
-    "--exclude-standard"
-  ])
-    .split("\n")
-    .filter(Boolean);
+    "--exclude-standard",
+    "-z"
+  ]);
   unstaged = [
     ...new Set([...modified, ...untracked])
   ];

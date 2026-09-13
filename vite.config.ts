@@ -1,30 +1,18 @@
 import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
-import AutoImport from "unplugin-auto-import/vite";
-import Components from "unplugin-vue-components/vite";
-import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
 const host = process.env.TAURI_DEV_HOST;
+const root = import.meta.dirname;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [
-    vue(),
-    AutoImport({
-      imports: ["vue", "vue-router", "pinia"],
-      resolvers: [ElementPlusResolver()],
-      dts: "src/types/auto-imports.d.ts"
-    }),
-    Components({
-      resolvers: [ElementPlusResolver()],
-      dts: "src/types/components.d.ts"
-    })
-  ],
+  plugins: [react(), tailwindcss()],
 
   resolve: {
     alias: {
-      "@": resolve(__dirname, "src")
+      "@": resolve(root, "src")
     }
   },
   // 为 Tauri 开发量身定制的 Vite 选项，仅适用于 `tauri dev` 或 `tauri build`

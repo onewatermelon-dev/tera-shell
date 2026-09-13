@@ -28,3 +28,9 @@ Desktop.ini
 .git/
 .reasonix
 AGENTS.md
+# heroui-agents-md
+.heroui-docs/
+
+# 工具产物
+*.tsbuildinfo
+.zcode/

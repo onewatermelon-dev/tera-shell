@@ -22,14 +22,6 @@ export default {
       : [];
   },
 
-  // Vue 同时包含脚本和样式，必须在同一任务组中串行处理。
-  "*.vue": [
-    "cspell lint",
-    "prettier --write",
-    "eslint",
-    "stylelint --fix"
-  ],
-
   // 样式文件不交给 ESLint；Stylelint 在 Prettier 之后修复样式规则。
   "*.{css,scss}": [
     "cspell lint",

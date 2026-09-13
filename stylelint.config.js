@@ -1,12 +1,11 @@
 /**
  * Stylelint 配置文件
- * 项目样式：SCSS（src/styles/app.scss）+ Vue SFC 内联 <style lang="scss">
+ * 项目样式：SCSS（src/styles/app.scss）
  */
 export default {
   extends: [
     "stylelint-config-standard", // 标准规则（基础 CSS）
     "stylelint-config-standard-scss", // 标准 SCSS 规则（含 recommended-scss）
-    "stylelint-config-recommended-vue/scss", // Vue SFC <style> 支持（postcss-html 解析）
     "stylelint-config-recess-order" // 属性顺序（布局 → 盒模型 → 视觉 → 排版）
   ],
   plugins: ["@stylistic/stylelint-plugin"], // 格式化规则（缩进、分号等，stylelint 16 起从核心移至社区插件）
@@ -27,25 +26,11 @@ export default {
     "no-empty-source": null, // 允许空样式源（如空 <style> 块）
     "value-no-vendor-prefix": null, // 允许浏览器前缀（多行省略 -webkit-box 等需要）
     "selector-class-pattern": null, // 不限制类名格式（项目已有 kebab-case 命名，无需强制）
-    "no-descending-specificity": null, // 关闭选择器优先级递减检查（终端主题类样式常互相覆盖）
-    "selector-pseudo-class-no-unknown": [
-      // 允许 Vue 深度选择器等伪类
-      true,
-      {
-        ignorePseudoClasses: [
-          "global",
-          "v-deep",
-          "deep",
-          "slotted"
-        ]
-      }
-    ]
+    "no-descending-specificity": null // 关闭选择器优先级递减检查（终端主题类样式常互相覆盖）
   },
   ignoreFiles: [
     "**/node_modules/**",
     "**/dist/**",
-    "**/src-tauri/**",
-    "src/types/auto-imports.d.ts",
-    "src/types/components.d.ts"
+    "**/src-tauri/**"
   ]
 };

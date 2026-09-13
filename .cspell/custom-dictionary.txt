@@ -32,3 +32,5 @@ DPAPI
 highp
 fract
 hella
+heroui
+Dismissable
