@@ -1,0 +1,169 @@
+// 文件列表：表头 + 内容同处一个滚动容器，表头 sticky 吸顶。
+// 放在同一个容器里，列的可用宽度天然一致，不必手动补偿滚动条宽度。
+.sftp-file-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+// 列宽只定义一次，表头与行共用，保证逐列严格对齐
+.file-head,
+.file-row {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  padding: 0 8px;
+}
+
+// 列宽按栏分别定义，表头与行共用同一套，保证逐列严格对齐。
+// 远程：名称 / 大小 / 权限 / 所有者 / 修改时间（修改时间在最后）
+.file-grid--remote {
+  grid-template-columns:
+    minmax(0, 1fr)
+    64px 78px 72px 92px;
+}
+
+// 本地没有 Unix 权限与所有者：名称 / 大小 / 修改时间
+.file-grid--local {
+  grid-template-columns:
+    minmax(0, 1fr)
+    64px 92px;
+}
+
+// 固定表头：背景继承容器色，滚动时下面的行不会透出来
+.file-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 28px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: inherit;
+  border-bottom: 1px solid var(--border);
+}
+
+// 文件行：hover 高亮 + 跳过屏幕外行的渲染（大目录更流畅）
+.file-row {
+  height: 30px;
+  contain-intrinsic-size: auto 30px;
+  content-visibility: auto;
+  cursor: default;
+  border-radius: 6px;
+}
+
+.file-row:hover {
+  background: var(--default);
+}
+
+// 名称列：图标 + 文件名，宽度自适应并允许截断
+.cell-name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+// 行内图标统一尺寸与弱化配色，让文件名（前景色）成为视觉主体
+.cell-name svg {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+}
+
+// 系统原生图标（后端从 Windows Shell 取到的 BMP），显示尺寸与线性图标对齐
+.file-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 信息列：等宽小字，数字与权限串不会因比例字体而参差
+.cell-size,
+.cell-time,
+.cell-perm,
+.cell-owner {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font:
+    10px Consolas,
+    monospace;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.file-head .cell-end,
+.cell-size {
+  text-align: right;
+}
+
+// 表头之外的整宽提示（错误文案等）
+.pane-message {
+  padding: 12px;
+}
+
+// 栏内空状态：撑满剩余高度并居中
+.pane-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.dialog-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialog-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.dialog-hint {
+  color: var(--muted);
+}
+
+.dialog-error {
+  color: var(--danger);
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row .grow {
+  flex: 1;
+}
+
+.port-field {
+  width: 90px;
+}
+
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  max-width: 420px;
+  cursor: pointer;
+}

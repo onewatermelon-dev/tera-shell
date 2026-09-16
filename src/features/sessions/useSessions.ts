@@ -6,7 +6,7 @@ import {
 import {
   localSession,
   type SavedSession
-} from "@/domain/session";
+} from "@/features/sessions/session";
 
 const storageKey = "tera-sessions";
 
@@ -21,6 +21,29 @@ function loadSessions(): SavedSession[] {
       : [localSession];
   } catch {
     return [localSession];
+  }
+}
+
+/**
+ * 按 id 取一个已保存的会话。
+ *
+ * 独立的 SFTP 窗口没有父级状态可继承，只能自己从本地存储里找 ——
+ * 同一 origin 的多个窗口共用 localStorage，所以读得到主窗口存下的那份。
+ */
+export function loadSession(
+  id: string
+): SavedSession | null {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const list = JSON.parse(
+      raw
+    ) as SavedSession[];
+    return (
+      list.find(item => item.id === id) ?? null
+    );
+  } catch {
+    return null;
   }
 }
 

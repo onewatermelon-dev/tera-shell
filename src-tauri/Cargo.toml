@@ -55,6 +55,8 @@ rand = "0.8"
 
 # ── 编码转换 ──
 encoding_rs = "0.8"
+# 把取到的图标位图编码成 PNG（必须带 alpha，BMP 的 32bpp 不解释 alpha 会出黑框）
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # ── 工具库 ──
 uuid = { version = "1", features = ["v4"] }
@@ -74,5 +76,13 @@ windows-core = "0.61"
 # DPAPI：用当前 Windows 用户凭据加密保存 SSH 密码（CryptProtectData）
 windows = { version = "0.61", features = [
     "Win32_Security_Cryptography",
-    "Win32_System_Memory"
+    "Win32_System_Memory",
+    "Win32_Foundation",
+    # 文件列表用系统原生图标：SHGetFileInfo 取图标 + DrawIconEx 画到 DIB
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
+    # CoTaskMemFree：释放 SHGetSpecialFolderLocation 返回的 PIDL
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging"
 ] }

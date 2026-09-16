@@ -1,20 +1,26 @@
 import {
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
-  useState
+  useState,
+  useSyncExternalStore
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Alert } from "@heroui/react";
-import { useSessions } from "@/hooks/useSessions";
-import { useTerminals } from "@/hooks/useTerminals";
-import type { SavedSession } from "@/domain/session";
-import AppHeader from "@/components/AppHeader";
-import SessionSidebar from "@/components/SessionSidebar";
-import TerminalWorkspace from "@/components/TerminalWorkspace";
-import SessionDialog from "@/components/SessionDialog";
-import PasswordDialog from "@/components/PasswordDialog";
+import { useSessions } from "@/features/sessions/useSessions";
+import { useTerminals } from "@/features/terminal/useTerminals";
+import type { SavedSession } from "@/features/sessions/session";
+import AppHeader, {
+  type HeaderActions
+} from "@/app/components/AppHeader";
+import SessionSidebar from "@/features/sessions/SessionSidebar";
+import TerminalWorkspace from "@/features/terminal/TerminalWorkspace";
+import SessionDialog from "@/features/sessions/SessionDialog";
+import PasswordDialog from "@/features/sessions/PasswordDialog";
 import AppLoading, {
   type AppLoadingHandle
-} from "@/components/AppLoading";
+} from "@/app/components/AppLoading";
 import "@xterm/xterm/css/xterm.css";
 import "@/styles/app.scss";
 import "@/styles/main.css";
@@ -69,6 +75,15 @@ export default function App() {
     setDialogOpen(false);
   }
 
+  /** 打开本机终端：会话列表里固定的 local 会话，标题栏菜单与空状态共用。 */
+  function openLocal() {
+    const local = sessions.find(
+      session => session.kind === "local"
+    );
+    if (local) terminals.open(local);
+    else setError("未找到本机终端会话");
+  }
+
   const loadingTimerRef =
     useRef<ReturnType<typeof setTimeout>>(
       undefined
@@ -91,9 +106,110 @@ export default function App() {
     setAppReady(true);
   }
 
+  // 菜单"复制"的可用性跟随终端选区：xterm 只发选区事件、没有可轮询的状态，
+  // 用 useSyncExternalStore 订阅活动终端（订阅外部系统的标准做法，
+  // 也避免在 effect 里同步 setState 造成的级联渲染）。
+  const activeTerminal =
+    terminals.active?.terminal;
+  const subscribeSelection = useCallback(
+    (onChange: () => void) => {
+      if (!activeTerminal) return () => {};
+      const disposable =
+        activeTerminal.onSelectionChange(
+          onChange
+        );
+      return () => disposable.dispose();
+    },
+    [activeTerminal]
+  );
+  const readSelection = useCallback(
+    () =>
+      Boolean(
+        activeTerminal?.hasSelection() &&
+        activeTerminal.getSelection().trim()
+      ),
+    [activeTerminal]
+  );
+  const hasSelection = useSyncExternalStore(
+    subscribeSelection,
+    readSelection
+  );
+
+  const menuState = useMemo(
+    () => ({
+      hasActive: Boolean(terminals.active),
+      hasSelection,
+      caseSensitive:
+        terminals.searchCaseSensitive,
+      regex: terminals.searchRegex
+    }),
+    [
+      terminals.active,
+      hasSelection,
+      terminals.searchCaseSensitive,
+      terminals.searchRegex
+    ]
+  );
+
+  // 标题栏菜单动作：读写剪贴板失败统一走右下角错误提示
+  const fail = (reason: unknown) =>
+    setError(String(reason));
+  const headerActions: HeaderActions = {
+    newSession: openCreate,
+    openLocal,
+    closeActive: () => {
+      if (terminals.active)
+        terminals.close(terminals.active.id);
+    },
+    find: terminals.openSearch,
+    toggleCaseSensitive:
+      terminals.toggleCaseSensitive,
+    toggleRegex: terminals.toggleRegex,
+    copy: () => {
+      const terminal = terminals.active?.terminal;
+      if (!terminal?.hasSelection()) return;
+      navigator.clipboard
+        .writeText(terminal.getSelection())
+        .catch(fail);
+    },
+    paste: () => {
+      const terminal = terminals.active?.terminal;
+      if (!terminal) return;
+      navigator.clipboard
+        .readText()
+        .then(text => {
+          if (text) terminal.paste(text);
+        })
+        .catch(fail);
+    },
+    selectAll: () =>
+      terminals.active?.terminal.selectAll(),
+    clear: () =>
+      terminals.active?.terminal.clear(),
+    devtools: () => {
+      invoke("open_devtools").catch(fail);
+    },
+    openSftp: () => {
+      const active = terminals.active;
+      if (!active) {
+        setError("请先打开一个会话");
+        return;
+      }
+      // 每个 SFTP 会话开一个真正的系统窗口：会出现在任务栏里，
+      // 可以并排摆放，也不会挡住主窗口里的终端
+      invoke("open_sftp_window", {
+        sessionId: active.id,
+        title: active.name
+      }).catch(fail);
+    }
+  };
+
   return (
     <main className="shell-app">
-      <AppHeader />
+      <AppHeader
+        actions={headerActions}
+        menuState={menuState}
+      />
       <section className="workspace">
         <SessionSidebar
           sessions={filteredSessions}
@@ -121,8 +237,12 @@ export default function App() {
           }
           searchRegex={terminals.searchRegex}
           onActivate={terminals.activate}
+          onFocusTerminal={
+            terminals.focusTerminal
+          }
           onClose={terminals.close}
           onCreate={openCreate}
+          onOpenLocal={openLocal}
           onSearch={terminals.search}
           onCloseSearch={terminals.closeSearch}
           onToggleCaseSensitive={

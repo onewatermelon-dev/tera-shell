@@ -1,11 +1,12 @@
-import type { SavedSession } from "@/domain/session";
+import type { SavedSession } from "@/features/sessions/session";
 import {
   Button,
+  Header,
   Input,
   ListBox,
   TextField
 } from "@heroui/react";
-import Hint from "@/components/Hint";
+import Hint from "@/shared/components/Hint";
 import {
   PlusOutlined,
   SearchOutlined,
@@ -39,8 +40,9 @@ export default function SessionSidebar({
   onCreate
 }: Props) {
   return (
+    // aside 保留 complementary 语义；面板底色/描边/圆角走 .sidebar（HeroUI token）
     <aside className="sidebar">
-      <div className="sidebar-head">
+      <Header className="sidebar-head">
         <div>
           <span>会话</span>
           <small>{sessions.length}</small>
@@ -55,7 +57,7 @@ export default function SessionSidebar({
             <PlusOutlined />
           </Button>
         </Hint>
-      </div>
+      </Header>
       <TextField
         className="search-box"
         aria-label="搜索会话"
@@ -73,8 +75,12 @@ export default function SessionSidebar({
         <ListBox
           aria-label="我的会话"
           className="session-list"
-          // 高亮由父级 activeId（已打开标签）驱动，不用 ListBox 自身选中态
-          selectionMode="none"
+          // 受控单选：高亮跟随 activeId（已打开标签），点击不改变选中
+          selectionMode="single"
+          selectedKeys={
+            activeId ? [activeId] : []
+          }
+          onSelectionChange={() => {}}
         >
           {sessions.map(session => (
             <ListBox.Item
@@ -82,11 +88,7 @@ export default function SessionSidebar({
               id={session.id}
               // RAC 无障碍：复合内容项需提供纯文本值（type-to-select）
               textValue={session.name}
-              className={`session-item${
-                activeId === session.id
-                  ? " active"
-                  : ""
-              }`}
+              className="session-item"
               onDoubleClick={() =>
                 onDuplicate(session)
               }

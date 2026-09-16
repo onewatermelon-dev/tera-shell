@@ -13,35 +13,16 @@ import {
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
-import type { SavedSession } from "@/domain/session";
-import {
-  clearSearchTextOverlays,
-  paintSearchTextOverlays,
-  sweepStaleDecorations
-} from "@/utils/searchTextOverlay";
-import { registerTerminalLinks } from "@/utils/terminalLinks";
-import {
-  markSearchSelection,
-  renderTextOnlySelection
-} from "@/utils/terminalSelection";
-import { stripPrompt } from "@/utils/stripPrompt";
+import type { SavedSession } from "@/features/sessions/session";
+import { registerTerminalLinks } from "@/features/terminal/terminalLinks";
+import { renderTextOnlySelection } from "@/features/terminal/terminalSelection";
+import { stripPrompt } from "@/features/terminal/stripPrompt";
+import { createTerminalMenu } from "@/features/terminal/terminalContextMenu";
+import { useTerminalSearch } from "@/features/terminal/useTerminalSearch";
+import type { OpenSession } from "@/features/terminal/terminalTypes";
 
-export type OpenSession = SavedSession & {
-  terminal: Terminal;
-  fit: FitAddon;
-  search: SearchAddon;
-  element: HTMLDivElement;
-  mounted: boolean;
-  sourceSessionId: string;
-};
-
-// 搜索高亮装饰（常量，不随渲染变化）
-const searchDecorations = {
-  matchBackground: "#f2c94c",
-  matchOverviewRuler: "#f2c94c",
-  activeMatchBackground: "#ef4444",
-  activeMatchColorOverviewRuler: "#ef4444"
-};
+// 会话类型定义在 terminalTypes，这里重新导出，外部仍从 useTerminals 引入
+export type { OpenSession } from "@/features/terminal/terminalTypes";
 
 export function useTerminals(
   onError: (reason: unknown) => void,
@@ -61,28 +42,9 @@ export function useTerminals(
       session: SavedSession;
       sourceSessionId: string;
     } | null>(null);
-  const [searchOpen, setSearchOpen] =
-    useState(false);
-  const [searchError, setSearchError] =
-    useState("");
-  const [
-    searchCaseSensitive,
-    setSearchCaseSensitive
-  ] = useState(false);
-  const [searchRegex, setSearchRegex] =
-    useState(true);
-  const [searchResults, setSearchResults] =
-    useState<
-      Record<
-        string,
-        { index: number; count: number }
-      >
-    >({});
-
   const openedRef = useRef(opened);
   const activeIdRef = useRef(activeId);
   const disconnectedRef = useRef(disconnected);
-  const searchResultsRef = useRef(searchResults);
   useEffect(() => {
     openedRef.current = opened;
   }, [opened]);
@@ -92,9 +54,12 @@ export function useTerminals(
   useEffect(() => {
     disconnectedRef.current = disconnected;
   }, [disconnected]);
-  useEffect(() => {
-    searchResultsRef.current = searchResults;
-  }, [searchResults]);
+
+  // 查找能力（搜索框开关、高亮与结果计数），内部自带状态
+  const search = useTerminalSearch(
+    openedRef,
+    activeIdRef
+  );
 
   const unlisteners = useRef<UnlistenFn[]>([]);
   const resizeObserver = useRef<
@@ -105,15 +70,11 @@ export function useTerminals(
   >(undefined);
   const terminalHostRef =
     useRef<HTMLElement | null>(null);
-  const contextMenu = useRef<
-    HTMLDivElement | undefined
-  >(undefined);
-  const menuCopyItem = useRef<
-    HTMLDivElement | undefined
-  >(undefined);
-  const menuTerminal = useRef<
-    Terminal | undefined
-  >(undefined);
+  // 终端右键菜单（命令式 DOM，逻辑见 terminalContextMenu）：
+  // 首次用到时才创建，那时 openSearch 已经定义好
+  const terminalMenu = useRef<ReturnType<
+    typeof createTerminalMenu
+  > | null>(null);
 
   const setTerminalHost = useCallback(
     (el: HTMLElement | null) => {
@@ -125,9 +86,12 @@ export function useTerminals(
   const active = opened.find(
     s => s.id === activeId
   );
-  const searchResult = searchResults[
+  const searchResult = search.results[
     activeId
-  ] ?? { index: -1, count: 0 };
+  ] ?? {
+    index: -1,
+    count: 0
+  };
 
   // ---- 1. Tab management ----
   const resize = useCallback(
@@ -177,243 +141,7 @@ export function useTerminals(
     current.terminal.focus();
   }, [opened, activeId, resize]);
 
-  // ---- 2. Context menu ----
-  const hideContextMenu = useCallback(() => {
-    if (contextMenu.current)
-      contextMenu.current.style.display = "none";
-  }, []);
-
-  // ---- 3. Search helpers ----
-  const clearSearchMarks = useCallback(
-    (session: OpenSession) => {
-      session.search.clearDecorations();
-      clearSearchTextOverlays();
-      session.terminal.clearSelection();
-      session.terminal.refresh(
-        0,
-        session.terminal.rows - 1
-      );
-      sweepStaleDecorations(session.terminal);
-    },
-    []
-  );
-
-  const openSearch = useCallback(() => {
-    setSearchError("");
-    setSearchOpen(true);
-  }, []);
-
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    setSearchError("");
-    const session = openedRef.current.find(
-      s => s.id === activeIdRef.current
-    );
-    if (session) clearSearchMarks(session);
-  }, [clearSearchMarks]);
-
-  const clearSearchCache = useCallback(() => {
-    const session = openedRef.current.find(
-      s => s.id === activeIdRef.current
-    );
-    if (!session) return;
-    clearSearchMarks(session);
-    setSearchResults(prev => {
-      const next = {
-        ...prev,
-        [session.id]: { index: -1, count: 0 }
-      };
-      searchResultsRef.current = next;
-      return next;
-    });
-  }, [clearSearchMarks]);
-
-  const toggleCaseSensitive = useCallback(() => {
-    setSearchCaseSensitive(prev => !prev);
-    clearSearchCache();
-  }, [clearSearchCache]);
-
-  const toggleRegex = useCallback(() => {
-    setSearchRegex(prev => !prev);
-    clearSearchCache();
-  }, [clearSearchCache]);
-
-  const search = useCallback(
-    (
-      query: string,
-      direction:
-        "next" | "prev" | "input" = "next"
-    ) => {
-      const current = openedRef.current.find(
-        s => s.id === activeIdRef.current
-      );
-      if (!current) return;
-      if (!query) {
-        clearSearchMarks(current);
-        setSearchResults(prev => {
-          const next = {
-            ...prev,
-            [current.id]: { index: -1, count: 0 }
-          };
-          searchResultsRef.current = next;
-          return next;
-        });
-        setSearchError("");
-        return;
-      }
-      if (searchRegex) {
-        try {
-          new RegExp(query);
-          setSearchError("");
-        } catch {
-          setSearchError("正则无效");
-          return;
-        }
-      } else {
-        setSearchError("");
-      }
-      const options = {
-        regex: searchRegex,
-        caseSensitive: searchCaseSensitive,
-        decorations: searchDecorations
-      };
-      markSearchSelection(current.terminal);
-      if (direction === "input")
-        current.search.findNext(query, {
-          ...options,
-          incremental: true
-        });
-      else if (direction === "prev")
-        current.search.findPrevious(
-          query,
-          options
-        );
-      else
-        current.search.findNext(query, options);
-      paintSearchTextOverlays(
-        current.terminal,
-        query,
-        searchRegex,
-        searchCaseSensitive
-      );
-      sweepStaleDecorations(current.terminal);
-    },
-    [
-      searchRegex,
-      searchCaseSensitive,
-      clearSearchMarks
-    ]
-  );
-
-  // ---- 4. Context menu (uses openSearch) ----
-  const ensureContextMenu =
-    useCallback((): HTMLDivElement => {
-      if (contextMenu.current)
-        return contextMenu.current;
-      const menu = document.createElement("div");
-      menu.className = "terminal-context-menu";
-      const copyItem =
-        document.createElement("div");
-      copyItem.className = "menu-item";
-      copyItem.textContent = "复制 CTRL+C";
-      copyItem.addEventListener("click", () => {
-        if (
-          !copyItem.classList.contains("disabled")
-        )
-          navigator.clipboard
-            .writeText(
-              menuTerminal.current?.getSelection() ??
-                ""
-            )
-            .catch(onError);
-        hideContextMenu();
-        menuTerminal.current?.focus();
-      });
-      menuCopyItem.current = copyItem;
-      const pasteItem =
-        document.createElement("div");
-      pasteItem.className = "menu-item";
-      pasteItem.textContent = "粘贴 CTRL+V";
-      pasteItem.addEventListener("click", () => {
-        navigator.clipboard
-          .readText()
-          .then(text => {
-            if (text)
-              menuTerminal.current?.paste(text);
-          })
-          .catch(onError);
-        hideContextMenu();
-        menuTerminal.current?.focus();
-      });
-      const findItem =
-        document.createElement("div");
-      findItem.className = "menu-item";
-      findItem.textContent = "查找 CTRL+F";
-      findItem.addEventListener("click", () => {
-        hideContextMenu();
-        openSearch();
-      });
-      menu.append(copyItem, pasteItem, findItem);
-      document.body.append(menu);
-      window.addEventListener(
-        "mousedown",
-        event => {
-          if (
-            menu &&
-            !menu.contains(event.target as Node)
-          )
-            hideContextMenu();
-        }
-      );
-      window.addEventListener(
-        "keydown",
-        event => {
-          if (
-            event.key === "Escape" &&
-            menu.style.display === "block"
-          ) {
-            hideContextMenu();
-            menuTerminal.current?.focus();
-          }
-        },
-        true
-      );
-      contextMenu.current = menu;
-      return menu;
-    }, [onError, hideContextMenu, openSearch]);
-
-  const showContextMenu = useCallback(
-    (event: MouseEvent, terminal: Terminal) => {
-      event.preventDefault();
-      event.stopPropagation();
-      menuTerminal.current = terminal;
-      const menu = ensureContextMenu();
-      if (menuCopyItem.current)
-        menuCopyItem.current.classList.toggle(
-          "disabled",
-          !terminal.hasSelection() ||
-            !terminal.getSelection().trim()
-        );
-      menu.style.visibility = "hidden";
-      menu.style.display = "block";
-      const rect = menu.getBoundingClientRect();
-      menu.style.left =
-        Math.min(
-          event.clientX,
-          window.innerWidth - rect.width - 4
-        ) + "px";
-      menu.style.top =
-        Math.min(
-          event.clientY,
-          window.innerHeight - rect.height - 4
-        ) + "px";
-      menu.style.visibility = "visible";
-      terminal.focus();
-    },
-    [ensureContextMenu]
-  );
-
-  // ---- 5. Terminal creation (uses openSearch, showContextMenu) ----
+  // ---- 5. Terminal creation (uses openSearch) ----
   const createTerminal = useCallback(
     (
       session: SavedSession,
@@ -448,19 +176,13 @@ export function useTerminals(
       terminal.loadAddon(fit);
       const searchAddon = new SearchAddon();
       terminal.loadAddon(searchAddon);
-      searchAddon.onDidChangeResults(event => {
-        setSearchResults(prev => {
-          const next = {
-            ...prev,
-            [session.id]: {
-              index: event.resultIndex,
-              count: event.resultCount
-            }
-          };
-          searchResultsRef.current = next;
-          return next;
-        });
-      });
+      searchAddon.onDidChangeResults(event =>
+        search.reportResults(
+          session.id,
+          event.resultIndex,
+          event.resultCount
+        )
+      );
       registerTerminalLinks(terminal, onError);
       renderTextOnlySelection(terminal, element);
       terminal.onData(data => {
@@ -496,7 +218,7 @@ export function useTerminals(
           if (key === "v") return false;
           if (key === "f") {
             event.preventDefault();
-            openSearch();
+            search.openSearch();
             return false;
           }
           if (
@@ -513,7 +235,17 @@ export function useTerminals(
       );
       element.addEventListener(
         "contextmenu",
-        event => showContextMenu(event, terminal)
+        event => {
+          terminalMenu.current ??=
+            createTerminalMenu({
+              onError,
+              onFind: search.openSearch
+            });
+          terminalMenu.current.show(
+            event,
+            terminal
+          );
+        }
       );
       element.addEventListener("mouseup", () => {
         if (
@@ -532,7 +264,7 @@ export function useTerminals(
         sourceSessionId
       };
     },
-    [onError, openSearch, showContextMenu]
+    [onError, search]
   );
 
   // ---- 6. Core session management ----
@@ -683,6 +415,22 @@ export function useTerminals(
     setActiveId(id);
   }, []);
 
+  /**
+   * 把键盘焦点交回指定会话的终端。
+   *
+   * 切换标签时挂载用的 layout effect 已经 focus 过一次，但 RAC 的 Tab 会在
+   * press 阶段把焦点留在自己身上，且点击**已激活**的标签不会改变 activeId、
+   * layout effect 根本不跑。两种情况下都需要由点击方显式抢回焦点。
+   */
+  const focusTerminal = useCallback(
+    (id: string) => {
+      openedRef.current
+        .find(session => session.id === id)
+        ?.terminal.focus();
+    },
+    []
+  );
+
   const close = useCallback(
     async (id: string) => {
       const index = openedRef.current.findIndex(
@@ -758,7 +506,7 @@ export function useTerminals(
           event.ctrlKey || event.metaKey;
         if (ctrl && key === "f") {
           event.preventDefault();
-          openSearch();
+          search.openSearch();
           return;
         }
         if (
@@ -786,7 +534,7 @@ export function useTerminals(
           true
         );
     };
-  }, [resize, openSearch]);
+  }, [resize, search]);
 
   return {
     opened,
@@ -797,19 +545,23 @@ export function useTerminals(
     open,
     duplicate,
     activate,
+    focusTerminal,
     close,
     passwordRequest,
     submitPassword,
     cancelPassword,
-    searchOpen,
-    searchError,
+    // 查找相关的状态与操作都来自 useTerminalSearch
+    searchOpen: search.searchOpen,
+    searchError: search.searchError,
     searchResult,
-    searchCaseSensitive,
-    searchRegex,
-    openSearch,
-    closeSearch,
-    toggleCaseSensitive,
-    toggleRegex,
-    search
+    searchCaseSensitive:
+      search.searchCaseSensitive,
+    searchRegex: search.searchRegex,
+    openSearch: search.openSearch,
+    closeSearch: search.closeSearch,
+    toggleCaseSensitive:
+      search.toggleCaseSensitive,
+    toggleRegex: search.toggleRegex,
+    search: search.search
   };
 }

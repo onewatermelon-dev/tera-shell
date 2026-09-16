@@ -1,5 +1,10 @@
-pub mod logging;
-mod secret;
+// 后端按功能域分目录：每个域一个模块目录，域内再按职责拆文件。
+// 模块路径与原先的 `xxx.rs` 完全一致，所以域内代码无需改动。
+pub mod fs;
+pub mod icons;
+/// 基础设施（日志、凭据加解密）
+pub mod infra;
+pub mod sftp;
 pub mod terminal;
 
 /// 前端 F12 / Ctrl+Shift+I 打开 DevTools。
@@ -22,19 +27,50 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 所有终端共享同一份后端 PTY 会话表，命令通过 session id 定位具体会话。
         .manage(terminal::Terminals::default())
+        // SFTP 连接按目标缓存，避免每次进目录都重新握手认证。
+        .manage(sftp::SftpPool::default())
+        // 进行中的传输任务表，供暂停 / 恢复 / 取消命令定位任务。
+        .manage(sftp::Transfers::default())
+        // 正在被本地编辑的远程文件，保存后自动回传。
+        .manage(sftp::open::EditWatchers::default())
         // 暴露给前端 invoke() 的最小终端命令集合。
         .invoke_handler(tauri::generate_handler![
             terminal::start,
             terminal::write,
             terminal::resize,
             terminal::close,
-            secret::encrypt,
-            secret::decrypt,
+            fs::list_dir,
+            fs::places,
+            fs::drives,
+            fs::open_path,
+            fs::open_notepad,
+            fs::make_dir,
+            fs::create_file,
+            fs::remove_path,
+            fs::copy_path,
+            fs::rename::rename_local,
+            sftp::list,
+            sftp::upload,
+            sftp::download,
+            sftp::make_remote_dir,
+            sftp::create_remote_file,
+            sftp::remove_remote_path,
+            sftp::chmod,
+            sftp::pause_transfer,
+            sftp::open::edit_remote,
+            sftp::open::stop_edit,
+            sftp::open::stop_all_edits,
+            sftp::rename::rename_remote,
+            sftp::window::open_sftp_window,
+            sftp::resume_transfer,
+            sftp::cancel_transfer,
+            infra::secret::encrypt,
+            infra::secret::decrypt,
             open_devtools
         ])
         .setup(|app| {
             // 优先初始化日志，后续启动阶段的错误都能被记录。
-            logging::init(app);
+            infra::logging::init(app);
             // WebView2 的浏览器级快捷键（Ctrl+F 页面查找栏等）会抢在页面 JS 之前
             // 响应，preventDefault 拦不住；原生禁用后查找统一走应用内实现。
             #[cfg(target_os = "windows")]

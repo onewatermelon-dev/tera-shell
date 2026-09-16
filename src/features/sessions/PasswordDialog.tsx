@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { SavedSession } from "@/domain/session";
+import type { SavedSession } from "@/features/sessions/session";
 import {
   Button,
   Form,

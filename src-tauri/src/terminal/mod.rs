@@ -45,6 +45,9 @@ struct Output {
 	data: String,
 }
 
+/// 密码提示检测缓冲区保留的尾部字节数：够覆盖 "xxx@host's password:" 这类提示即可。
+const PASSWORD_HINT_TAIL: usize = 256;
+
 #[tauri::command(rename = "terminal_start")]
 pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Result<(), String> {
 	// 只记录连接目标，密码和终端输入内容一律不进日志。
@@ -139,8 +142,11 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 			if !answered {
 				let lossy = String::from_utf8_lossy(chunk).to_lowercase();
 				answer_buf.push_str(&lossy);
-				if answer_buf.len() > 256 {
-					answer_buf = answer_buf[answer_buf.len() - 256..].to_string();
+				// 只保留尾部若干字节即可覆盖提示串，避免缓冲无限增长。
+				// 必须按字符边界切分：提示串里常带用户名/路径（如 C:\Users\中文名），
+				// 直接按字节下标切会落在多字节字符中间导致 panic。
+				if answer_buf.len() > PASSWORD_HINT_TAIL {
+					answer_buf = tail_bytes(&answer_buf, PASSWORD_HINT_TAIL);
 				}
 				if answer_buf.contains("password:")
 					|| answer_buf.contains("password for")
@@ -340,6 +346,21 @@ pub fn close(id: String, terminals: State<Terminals>) -> Result<(), String> {
 	Ok(())
 }
 
+/// 取字符串尾部至多 `max_bytes` 字节。
+///
+/// 起点会向后对齐到字符边界（多字节字符可能被让出），保证结果是合法 UTF-8
+/// 片段；因此实际返回长度可能略小于 `max_bytes`，但绝不会切在多字节字符中间。
+pub fn tail_bytes(text: &str, max_bytes: usize) -> String {
+	if text.len() <= max_bytes {
+		return text.to_string();
+	}
+	let mut start = text.len() - max_bytes;
+	while !text.is_char_boundary(start) {
+		start += 1;
+	}
+	text[start..].to_string()
+}
+
 /// 去除 ANSI 转义序列（CSI/OSC/SS3 等），返回只含可见字符的文本。
 pub fn strip_ansi(input: &str) -> String {
 	let mut out = String::with_capacity(input.len());
@@ -356,13 +377,17 @@ pub fn strip_ansi(input: &str) -> String {
 fn skip_escape(seq: &str) -> &str {
 	let tail = &seq[1..];
 	if let Some(csi) = tail.strip_prefix('[') {
-		// CSI：ESC [ 参数区(0x20-0x3f) 终结字节(0x40-0x7e)
+		// CSI：ESC [ 参数区(0x30-0x3f) 终结字节(0x40-0x7e)
+		// 参数区只认数字、`;`、`?` 等 0x30-0x3f 字节；紧随其后若不是终结字节，
+		// 说明这是残留的半截序列（如 ConPTY 输出的 `ESC [0` 后跟空格与命令行），
+		// 就此截断。若按 0x40-0x7e 一路找下去，会把后面命令的首字母当成
+		// 终结字节一并吃掉（`cat` 变成 `at`）。
 		let bytes = csi.as_bytes();
 		let mut i = 0;
-		while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
+		while i < bytes.len() && (0x30..=0x3f).contains(&bytes[i]) {
 			i += 1;
 		}
-		if i < bytes.len() {
+		if i < bytes.len() && (0x40..=0x7e).contains(&bytes[i]) {
 			i += 1; // 终结字节
 		}
 		&csi[i..]

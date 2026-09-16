@@ -13,7 +13,7 @@ import {
 import {
   emptySshSession,
   type SavedSession
-} from "@/domain/session";
+} from "@/features/sessions/session";
 
 type Props = {
   open: boolean;

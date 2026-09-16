@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stripPrompt } from "../src/utils/stripPrompt";
+import { stripPrompt } from "../src/features/terminal/stripPrompt";
 
 describe("stripPrompt", () => {
   it("剥离 PowerShell 提示符", () => {

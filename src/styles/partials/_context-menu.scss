@@ -1,0 +1,91 @@
+// 文件列表右键菜单：fixed 定位跟随鼠标，不被列表的滚动容器裁剪
+.file-context-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+}
+
+// 菜单项样式统一加 context- 前缀：终端里的右键菜单也用 `.menu-item`，
+// 不加前缀会互相污染（曾把终端菜单的快捷键位置顶偏）。
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 5px;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: var(--default);
+}
+
+.context-menu-item:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+// 主操作（传输）加粗强调
+.context-menu-item--strong {
+  font-weight: 700;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+// 固定入口（桌面/音乐等）没有展开箭头，用等宽占位保持与可展开行对齐
+.picker-spacer {
+  flex: none;
+  width: 18px;
+}
+
+.picker-caret {
+  transition: transform 150ms ease;
+}
+
+.picker-caret.expanded {
+  transform: rotate(90deg);
+}
+
+.picker-label {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 6px;
+}
+
+.picker-label:hover {
+  background: var(--default);
+}
+
+.picker-label svg {
+  color: var(--muted);
+}
+
+.picker-hint {
+  padding: 4px 0;
+  font-size: 10px;
+  color: var(--muted);
+}

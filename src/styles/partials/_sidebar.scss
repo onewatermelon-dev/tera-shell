@@ -1,0 +1,109 @@
+// HeroUI ListBoxItem 自带 hover/选中/圆角样式，这里只留布局约束
+.session-item {
+  gap: 9px;
+  width: 100%;
+}
+
+.session-icon {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  color: var(--accent);
+  background: var(--default);
+  border-radius: 5px;
+}
+
+.session-icon svg {
+  width: 15px;
+}
+
+.session-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.session-copy strong,
+.session-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-copy strong {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--foreground);
+}
+
+.session-copy small {
+  font:
+    10px Consolas,
+    monospace;
+  color: var(--muted);
+}
+
+.delete,
+.edit {
+  display: none;
+  width: 15px;
+  color: var(--muted);
+}
+
+.session-item:hover .delete,
+.session-item:hover .edit {
+  display: block;
+}
+
+.empty-list {
+  padding-top: 30px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sidebar-foot {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  height: 32px;
+  padding: 0 13px;
+  font-size: 10px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-foot small {
+  margin-left: auto;
+}
+
+.status-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--success);
+  border-radius: 50%;
+}
+
+// 会话断开连接：标签状态变红
+.status-dot.off {
+  background: var(--danger);
+}
+
+.terminal-pane {
+  position: relative;
+  display: grid;
+  grid-template-rows: 38px 1fr 25px;
+
+  // 同 .workspace：还原 grid 默认 stretch，避免 HeroUI 全局 section 规则
+  // 的 align-items:flex-start 让 .tabs-bar / 终端宿主不撑满各自行。
+  align-items: stretch;
+  min-width: 0;
+  height: 100%;
+
+  // 底色交给 Card（--surface）；overflow 裁掉标签栏直角，贴合 Card 圆角
+  overflow: hidden;
+}

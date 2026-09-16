@@ -1,0 +1,277 @@
+// 查找浮层：右上角，压在终端内容之上。
+// 类名用 find-* 而非 search-*，避免与侧栏"搜索会话"的 .search-box 冲突
+.find-box {
+  position: absolute;
+  top: 46px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+}
+
+.find-input {
+  width: 180px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--field-foreground);
+  background: var(--field-background);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+// 查找框 5 个按钮（↑ ↓ Aa .* ×）统一样式：等宽等高的方形按钮
+.find-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font:
+    12px Consolas,
+    monospace;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  // Aa / .* 开关开启时用主题色高亮：
+  // 改用 HeroUI ToggleButton 后，选中态由 RAC 标记成 data-selected 属性
+  &[data-selected="true"] {
+    color: var(--accent-foreground);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+.find-count {
+  min-width: 44px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// 标签栏外层容器：作为更多按钮的 absolute 定位锚点，
+// 使按钮脱离 .tabs 的滚动流，始终固定在可视区右侧。
+.tabs-bar {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs {
+  position: relative;
+  display: flex;
+  gap: 0; // HeroUI 组件库也有 .tabs 类（gap:8px），显式清零还原无缝标签栏
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  overflow: auto hidden;
+
+  // 标签溢出时仍可横向滚动，但隐藏浏览器原生滚动条：
+  // overflow-y 明确 hidden，避免 overflow-x:auto 把纵向隐式升级成 auto
+  scrollbar-width: none;
+  background: var(--surface-secondary);
+  border-bottom: none;
+}
+
+.tab::-webkit-scrollbar {
+  display: none;
+}
+
+// HeroUI Tabs.Tab 负责外观（颜色、圆角），这里只保留终端标签需要的
+// 宽度/字号约束与文本截断。
+.tab {
+  gap: 8px;
+  min-width: 100px;
+  max-width: 160px;
+  font-size: 11px;
+}
+
+// Tabs.Indicator 需要 RAC SharedElementTransition 祖先（HeroUI 未提供，
+// 渲染即崩），选中态改用 data-selected 静态胶囊还原
+.tab[data-selected="true"] {
+  color: var(--foreground);
+  background: var(--segment);
+}
+
+.tab span:nth-child(2) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab i {
+  padding: 3px;
+  font-size: 15px;
+  font-style: normal;
+}
+
+.tab i:hover {
+  color: var(--foreground);
+}
+
+.new-tab {
+  width: 38px;
+  height: 100%;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.new-tab:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// 标签溢出时固定在标签栏可视区右侧的"更多"按钮，下拉列出超出可视区域的会话。
+// 用 absolute 而非 sticky：sticky 在 overflow 容器里会随内容滚动。
+.tabs-more {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding-left: 18px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--surface-secondary) 30%
+  );
+}
+
+.more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 100%;
+  padding: 0; // HeroUI Dropdown.Trigger 自带按钮内边距，冲掉以保持 30px 宽
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--surface-tertiary);
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.more-btn:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// 溢出标签菜单项：外观交给 HeroUI MenuItem，这里只处理会话名截断
+.more-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-host {
+  min-height: 0;
+  padding: 0 10px 4px 14px;
+  overflow: hidden;
+  background: #0b0e14; // 终端保持黑底，padding 缝隙与 xterm 背景融为一体
+}
+
+.terminal-instance {
+  height: 100%;
+}
+
+// .xterm 收缩到网格实际大小：网格右侧/下方的空白区域归 .terminal-instance（普通
+// div）所有，鼠标事件不再被 xterm 映射成选区，"文字后面的区域"因此不可滑选。
+// fit 插件测量的是父容器 .terminal-instance 的尺寸，不受此处收缩影响。
+
+.terminal-host .xterm {
+  width: fit-content;
+  height: fit-content;
+}
+
+// xterm 6 的滚动条是自绘 DOM（VS Code ScrollableElement），
+// ::-webkit-scrollbar 对它无效；滑块颜色走 theme.scrollbarSlider*（useTerminals.ts）。
+// 宽度由 JS 以内联样式写入，CSS 覆盖必须 !important。
+// 选择器保持两段以内：prettier 会把三段以上的选择器强制展开，与缩进规则冲突
+.xterm-scrollable-element .scrollbar.vertical {
+  width: 6px !important;
+}
+
+.vertical .slider {
+  width: 6px !important;
+  border-radius: 3px;
+}
+
+.terminal-status {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  font:
+    9px Consolas,
+    monospace;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+// 空状态：HeroUI EmptyState 只提供 p-2/text-sm/text-muted 的基础排版，
+// 垂直居中与元素间距在这里补齐；图标底盘、标题、描述、操作区各自成组。
+.empty-terminal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+// 圆形图标底盘（HeroUI Surface 默认面板圆角，这里改成正圆）
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 16px;
+  color: var(--muted);
+  border-radius: 50%;
+}
+
+.empty-icon svg {
+  width: 22px;
+}
+
+// 标题用主前景色、描述保持弱化，形成 HeroUI 空状态的层次
+.empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.empty-desc {
+  max-width: 300px;
+  margin: 6px 0 18px;
+}
+
+.empty-actions {
+  display: flex;
+  gap: 8px;
+}

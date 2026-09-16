@@ -1,0 +1,613 @@
+// ---- HeroUI Modal 对话框的少量补充样式 ----
+// 面板/字段/按钮外观全部交给 Modal + TextField + Button，
+// 这里只保留宽度、字段间距与文案色。
+
+.session-dialog {
+  width: 430px;
+}
+
+// SFTP 面板顶部兼作窗口拖动区：Tauri 判定的是 mousedown 事件目标本身是否带
+// data-tauri-drag-region，所以让 Header 内的文本穿透，事件才会落到 Header 上。
+// 关闭钮是交互元素，需要恢复可点。
+.sftp-header {
+  position: relative;
+
+  // 标题文案已经下放到各栏（远程栏直接写主机 IP），
+  // 这里只剩窗口控制按钮与拖动区，高度与主窗口标题栏保持一致。
+  // padding 必须清零：HeroUI Header 自带内边距，而绝对定位是相对
+  // padding box 的，留着会把右上角的控制按钮从窗口边缘推下来。
+  min-height: 46px;
+  padding: 0;
+}
+
+.sftp-header > * {
+  pointer-events: none;
+}
+
+.sftp-header button {
+  pointer-events: auto;
+}
+
+// SFTP 窗口的控制按钮：始终贴窗口右上角。
+// 用 fixed 而不是在 Header 内 absolute —— HeroUI 的 Modal 在
+// Container / Dialog / Header 上都可能带内边距，逐层抵消很脆；
+// 这几个按钮控制的本来就是"窗口"，贴窗口边缘才是对的。
+.sftp-header .win-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  height: 46px;
+}
+
+// 左上角的"返回工作区"：与控制按钮同一行，同样贴窗口边缘
+// （定位方式与 .win-controls 一致，见下方说明）
+.sftp-back {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  height: 46px;
+  padding: 0 8px;
+}
+
+.sftp-back button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+}
+
+// 底部窗口标签栏：多个全屏窗口叠加时只能看到最上面一个，
+// 靠这条常驻横条暴露"一共开了几个"，并提供切换入口。
+// 只在开了一个以上时渲染（见 SftpDock）。
+.sftp-dock {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  overflow-x: auto;
+  background: var(--surface-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.sftp-dock-window {
+  display: flex;
+  flex: none;
+  align-items: center;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 6px;
+}
+
+.sftp-dock-window.is-active {
+  color: var(--foreground);
+  background: var(--default);
+}
+
+.sftp-dock-main {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.sftp-dock-index {
+  color: var(--muted);
+}
+
+.sftp-dock-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sftp-dock-close {
+  padding: 4px 7px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.sftp-dock-close:hover {
+  color: var(--danger);
+}
+
+// 窗口序号：多个窗口叠加时长得一样，靠它区分
+.sftp-window-index {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// 让 SFTP 窗口"浮"在终端之上而不是盖住它：
+// 遮罩完全透明，并且不接收鼠标事件，点击直接穿透到下面的终端；
+// 窗口本体（.sftp-dialog）再把事件收回来，否则自己也没法点。
+.sftp-backdrop {
+  pointer-events: none;
+  background: transparent;
+}
+
+.sftp-dialog {
+  pointer-events: auto;
+}
+
+// 非铺满时的浮动尺寸：占大半屏、四周留白，露出下面的终端
+.sftp-dialog--floating {
+  width: min(1100px, 92vw);
+
+  // HeroUI 的 size="lg" 自带 max-w-lg，不覆盖的话宽度会被卡在 512px
+  max-width: none;
+  height: min(720px, 88vh);
+}
+
+.sftp-back button:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// 注：收起的窗口是**直接不渲染**（见 SftpWindow），不能靠这里 display:none
+// —— HeroUI 的 Modal 走 Portal 挂到 body，外层容器的隐藏对它无效。
+
+// 独立 SFTP 窗口的根容器：铺满客户区，不滚动
+.sftp-standalone {
+  height: 100vh;
+  overflow: hidden;
+  background: var(--background);
+}
+
+// 窗口主体：标题栏固定在顶部，内容区吃掉剩余高度
+.sftp-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+// 自绘标题栏（窗口没有系统装饰，decorations: false）：
+// 这一条同时充当窗口拖动区，右侧是自绘的最小化 / 最大化 / 关闭。
+.sftp-titlebar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 40px;
+  padding-left: 12px;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.sftp-titlebar-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+// 内容区：两栏吃掉剩余高度，传输面板固定在底部
+.sftp-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+// SFTP 窗口用 HeroUI Modal 的 size="full" 铺满主窗口；内容纵向撑满：
+// Header 固定、Body 吃掉剩余高度、两栏各自内部滚动。
+// dialog 默认没有 gap，这里补上 Header 与 Body 之间的间距。
+.sftp-dialog {
+  gap: 16px;
+
+  // 铺满模式下不该有内边距，否则控制按钮与内容都会离窗口边缘一截
+  padding: 0;
+}
+
+// 铺满时清掉 HeroUI 容器的内边距（非铺满时保留，对话框才不会贴边）
+.sftp-container--full {
+  padding: 0;
+}
+
+.sftp-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+// 底部传输信息面板：固定高度，内部纵向滚动。
+// 铺满模式下外层容器的内边距被清掉了，面板要自己留出与窗口边缘的距离，
+// 否则左右和底部会直接贴到窗口边上（上方由 .sftp-body 的 gap 提供）。
+.sftp-transfers {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  height: 172px;
+  padding: 10px 12px;
+  margin: 0 12px 12px;
+  overflow: hidden;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.transfer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.transfer-title {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.transfer-count {
+  font-size: 10px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.transfer-clear {
+  padding: 0;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.transfer-clear:hover:not(:disabled) {
+  color: var(--foreground);
+}
+
+.transfer-clear:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+// 表头与行同处一个滚动容器，表头 sticky 吸顶
+.transfer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.transfer-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 1.4fr)
+    54px 112px 76px 88px 66px 66px 74px 66px 66px 82px;
+  gap: 8px;
+  align-items: center;
+  min-width: 900px;
+  padding: 0 4px;
+}
+
+.transfer-head-row {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 22px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface-secondary);
+}
+
+.transfer-row {
+  height: 26px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.transfer-name {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.transfer-arrow {
+  flex: none;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.transfer-status.is-running {
+  color: var(--accent);
+}
+
+.transfer-status.is-paused {
+  color: var(--warning, #d99a2b);
+}
+
+.transfer-status.is-done {
+  color: var(--success);
+}
+
+.transfer-status.is-cancelled {
+  color: var(--muted);
+}
+
+.transfer-status.is-failed {
+  color: var(--danger);
+}
+
+// 操作列：暂停 / 恢复 / 取消。
+// 不用下划线做悬浮反馈（点完还会留一横），改为变颜色；
+// 同时去掉点击后浏览器给的焦点外框。
+.transfer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.transfer-action {
+  padding: 0;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  outline: none;
+  background: none;
+  border: none;
+}
+
+.transfer-action:hover {
+  color: var(--foreground);
+}
+
+.transfer-action--danger {
+  color: var(--danger);
+}
+
+.transfer-action--danger:hover {
+  color: var(--foreground);
+}
+
+.transfer-progress {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.transfer-bar {
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  background: var(--surface-hover);
+  border-radius: 3px;
+}
+
+.transfer-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.transfer-progress em {
+  flex: none;
+  font-style: normal;
+}
+
+.transfer-empty {
+  padding: 12px 4px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+// 左右两栏：本地 / 远程，等分并随窗口高度撑满
+.sftp-panes {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.sftp-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px;
+}
+
+.sftp-pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sftp-pane-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+// 栏头右侧的图标按钮组（刷新 / 上一级）
+// 加载提示：复用标题行位置，不额外占高度
+.pane-busy {
+  margin-left: 8px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+// 当前路径：单行截断，完整路径走 title 悬浮提示
+// 路径行：可编辑输入框 +（仅本地栏）选择按钮，选择面板相对它定位
+.sftp-path-row {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+// 地址栏本体：输入框 + 嵌在框内的下拉按钮 + 选择面板都在这层里。
+// 面板与按钮都以它为定位基准，所以下拉面板宽度正好等于地址栏。
+.path-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+}
+
+// 路径输入框：紧凑等宽，与列表的等宽小字风格一致
+.sftp-path {
+  flex: 1;
+  min-width: 0;
+
+  // 与上一步 / 下一步按钮等高，整行看起来才是一条工具栏
+  height: 22px;
+
+  // 右侧内边距给嵌在框内的下拉按钮留位
+  padding: 0 26px 0 8px;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--foreground);
+  outline: none;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.sftp-path:focus {
+  border-color: var(--accent);
+}
+
+// 上一步 / 下一步 / 刷新：地址栏两侧的工具栏按钮
+.path-nav-button,
+.path-refresh-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.path-nav-button:hover:not(:disabled),
+.path-refresh-button:hover:not(:disabled) {
+  color: var(--foreground);
+  background: var(--default);
+}
+
+.path-nav-button:disabled,
+.path-refresh-button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+// 下拉按钮：嵌在输入框内部右端。
+// 垂直居中用 top/bottom + margin auto，**不要**用 translateY(-50%)：
+// 全局的 `button:active { transform: translateY(1px) }` 特异性更高，
+// 会把位移覆盖掉，按下时按钮会突然掉出输入框。
+.path-pick-button {
+  position: absolute;
+  top: 0;
+  right: 3px;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: auto 0;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.path-pick-button:hover {
+  color: var(--foreground);
+  background: var(--default);
+}
+
+// 选择面板里的系统图标
+.picker-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+// 路径选择面板：绝对定位在输入框下方，盖住列表区域
+.path-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  width: 100%;
+  max-height: 280px;
+  overflow: auto;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+}
+
+.picker-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 30px;
+}
+
+.picker-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 9px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}

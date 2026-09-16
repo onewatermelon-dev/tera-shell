@@ -1,4 +1,6 @@
-use tera_shell_lib::terminal::{normalize_command_line, resolve_command_line, strip_ansi};
+use tera_shell_lib::terminal::{
+	normalize_command_line, resolve_command_line, strip_ansi, tail_bytes,
+};
 
 #[test]
 fn strips_ansi_sequences() {
@@ -55,4 +57,24 @@ fn falls_back_to_input_stream_reconstruction(){
 fn empty_line_is_not_recorded(){
 	assert_eq!(resolve_command_line(None,"\r"), "");
 	assert_eq!(resolve_command_line(Some("   "),"  \r"), "");
+}
+
+#[test]
+fn tail_bytes_never_splits_multibyte_char(){
+	// 回归：本地会话提示符含中文用户名（C:\Users\黄志强），按字节截尾时曾 panic：
+	// "start byte index 35 is not a char boundary; it is inside '志' (bytes 34..37)"
+	let line = "PS C:\\Users\\黄志强> 一段足够长的中文输出用于撑过缓冲区上限";
+	let text = line.repeat(4);
+	assert!(text.len() > 256);
+	let tail = tail_bytes(&text, 256);
+	assert!(tail.len() <= 256);
+	assert!(text.ends_with(&tail));
+
+	// 起点恰好落在多字节字符内部时向后对齐到字符边界（宁可少留几个字节）
+	let tricky = "a".repeat(34) + "志";
+	assert_eq!(tail_bytes(&tricky, 3), "志");
+	assert!(tail_bytes(&tricky, 1).is_empty());
+	// 未超上限时原样返回
+	assert_eq!(tail_bytes("短", 256), "短");
+	assert_eq!(tail_bytes("abc", 3), "abc");
 }

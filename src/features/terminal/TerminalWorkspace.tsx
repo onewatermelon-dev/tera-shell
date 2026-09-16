@@ -4,17 +4,23 @@ import {
   useRef,
   useState
 } from "react";
-import type { OpenSession } from "@/hooks/useTerminals";
+import type { OpenSession } from "@/features/terminal/useTerminals";
 import {
   Button,
+  Card,
+  Dropdown,
   EmptyState,
   Input,
+  Surface,
+  Tabs,
+  ToggleButton,
   Typography
 } from "@heroui/react";
-import Hint from "@/components/Hint";
+import Hint from "@/shared/components/Hint";
 import {
   PlusOutlined,
   DownOutlined,
+  DesktopOutlined,
   LinkOutlined
 } from "@ant-design/icons";
 
@@ -30,6 +36,10 @@ type Props = {
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
   onCreate: () => void;
+  /** 打开本地终端：空状态里的次要操作。 */
+  onOpenLocal: () => void;
+  /** 点击标签后把键盘焦点交回对应终端。 */
+  onFocusTerminal: (id: string) => void;
   onSearch: (
     query: string,
     direction: "next" | "prev" | "input"
@@ -52,8 +62,10 @@ export default function TerminalWorkspace({
   searchCaseSensitive,
   searchRegex,
   onActivate,
+  onFocusTerminal,
   onClose,
   onCreate,
+  onOpenLocal,
   onSearch,
   onCloseSearch,
   onToggleCaseSensitive,
@@ -64,17 +76,9 @@ export default function TerminalWorkspace({
   const searchInputRef =
     useRef<HTMLInputElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
-  const moreButtonRef =
-    useRef<HTMLButtonElement>(null);
-  const [dropdownOpen, setDropdownOpen] =
-    useState(false);
   const [overflowed, setOverflowed] = useState<
     OpenSession[]
   >([]);
-  const [moreListPos, setMoreListPos] = useState({
-    top: 0,
-    right: 0
-  });
 
   const computeOverflow = useCallback(() => {
     const container = tabsRef.current;
@@ -95,26 +99,7 @@ export default function TerminalWorkspace({
           hidden.push(session);
       });
     setOverflowed(hidden);
-    if (!hidden.length) setDropdownOpen(false);
   }, [opened]);
-
-  function positionMoreList() {
-    if (!moreButtonRef.current) return;
-    const rect =
-      moreButtonRef.current.getBoundingClientRect();
-    setMoreListPos({
-      top: rect.bottom + 4,
-      right: window.innerWidth - rect.right
-    });
-  }
-
-  function toggleDropdown() {
-    setDropdownOpen(prev => {
-      const next = !prev;
-      if (next) positionMoreList();
-      return next;
-    });
-  }
 
   function activateOverflow(id: string) {
     const index = opened.findIndex(
@@ -124,12 +109,15 @@ export default function TerminalWorkspace({
       tabsRef.current?.querySelectorAll<HTMLElement>(
         ".tab"
       )[index];
-    setDropdownOpen(false);
     onActivate(id);
     tab?.scrollIntoView({
       block: "nearest",
       inline: "nearest"
     });
+    // 菜单关闭后 RAC 会把焦点还给触发器，等这一轮结束后再交给终端
+    requestAnimationFrame(() =>
+      onFocusTerminal(id)
+    );
   }
 
   function onTabsWheel(event: React.WheelEvent) {
@@ -158,46 +146,23 @@ export default function TerminalWorkspace({
     requestAnimationFrame(computeOverflow);
   }, [opened.length, computeOverflow]);
 
-  // 监听标签栏尺寸变化
+  // 监听标签栏尺寸变化：溢出集合随可视宽度变化重算
   useEffect(() => {
     const container = tabsRef.current;
     if (!container) return;
     const ro = new ResizeObserver(() => {
       computeOverflow();
-      if (dropdownOpen) positionMoreList();
     });
     ro.observe(container);
     return () => ro.disconnect();
-  }, [dropdownOpen, opened, computeOverflow]);
-
-  // 点击标签栏外部时收起下拉
-  useEffect(() => {
-    const onMousedown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const more =
-        moreButtonRef.current?.parentElement;
-      if (
-        !tabsRef.current?.contains(target) &&
-        !more?.contains(target)
-      )
-        setDropdownOpen(false);
-    };
-    document.addEventListener(
-      "mousedown",
-      onMousedown
-    );
-    return () =>
-      document.removeEventListener(
-        "mousedown",
-        onMousedown
-      );
-  }, []);
+  }, [opened, computeOverflow]);
 
   const searchCount = searchResult.count;
   const searchIndex = searchResult.index;
 
   return (
-    <section className="terminal-pane">
+    // HeroUI Card 面板：圆角 + surface 底色，p-0/gap-0 抵消 Card 内边距
+    <Card className="terminal-pane rounded-xl p-0 gap-0">
       <div className="tabs-bar">
         <div
           ref={tabsRef}
@@ -205,32 +170,53 @@ export default function TerminalWorkspace({
           onScroll={computeOverflow}
           onWheel={onTabsWheel}
         >
-          {opened.map(tab => (
-            <Button
-              key={tab.id}
-              className={`tab${active?.id === tab.id ? " active" : ""}`}
-              variant="tertiary"
-              onPress={() => onActivate(tab.id)}
-            >
-              <span
-                className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
-              ></span>
-              <span>{tab.name}</span>
-              {/* 关闭钮在 RAC Button 内部：pointerdown 也要拦截，
-                  否则外层 Button 的 press 会先于 click 触发 */}
-              <i
-                onPointerDown={e =>
-                  e.stopPropagation()
-                }
-                onClick={e => {
-                  e.stopPropagation();
-                  onClose(tab.id);
-                }}
-              >
-                ×
-              </i>
-            </Button>
-          ))}
+          {/* HeroUI Tabs：selectedKey 驱动激活态 + segment 滑动指示条；
+              display:contents 让 Root 不参与 .tabs 的 flex 布局 */}
+          <Tabs
+            className="contents"
+            selectedKey={active?.id}
+            onSelectionChange={key => {
+              if (key != null)
+                onActivate(String(key));
+            }}
+          >
+            <Tabs.List>
+              {opened.map(tab => (
+                <Tabs.Tab
+                  key={tab.id}
+                  id={tab.id}
+                  className="tab"
+                  // 点击已激活的标签不会触发 onSelectionChange（activeId 没变、
+                  // 挂载用的 layout effect 也不会跑），这里统一在点击后交回焦点。
+                  // RAC 在 press 阶段会聚焦 Tab 自身，故放到下一帧再抢，
+                  // 保证最终的焦点落在终端上。关闭钮会 stopPropagation，点 × 不进这里。
+                  onClick={() =>
+                    requestAnimationFrame(() =>
+                      onFocusTerminal(tab.id)
+                    )
+                  }
+                >
+                  <span
+                    className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
+                  ></span>
+                  <span>{tab.name}</span>
+                  {/* 关闭钮在 RAC Tab 内部：pointerdown 也要拦截，
+                      否则外层 Tab 的 press 会先于 click 触发 */}
+                  <i
+                    onPointerDown={e =>
+                      e.stopPropagation()
+                    }
+                    onClick={e => {
+                      e.stopPropagation();
+                      onClose(tab.id);
+                    }}
+                  >
+                    ×
+                  </i>
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+          </Tabs>
           <Hint label="新建会话">
             <Button
               className="new-tab"
@@ -246,47 +232,46 @@ export default function TerminalWorkspace({
         </div>
         {overflowed.length > 0 && (
           <div className="tabs-more">
-            <Hint
-              label={`${overflowed.length} 个标签超出显示`}
-            >
-              <Button
-                ref={moreButtonRef}
-                className={`more-btn${dropdownOpen ? " open" : ""}`}
-                variant="ghost"
-                size="sm"
-                isIconOnly
-                aria-label="更多标签"
-                onPress={toggleDropdown}
+            {/* 溢出标签菜单：原先是手写 fixed 定位 + 全局 mousedown 收起，
+                现统一交给 HeroUI Dropdown（自动定位、焦点管理与关闭语义） */}
+            <Dropdown.Root>
+              {/* 触发器必须是 MenuTrigger 的直接子元素：外面包 Tooltip 的话
+                  RAC 找不到 pressable child，菜单打不开并报 PressResponder 警告。
+                  提示信息改用 aria-label 承载。 */}
+              <Dropdown.Trigger
+                className="more-btn"
+                aria-label={`${overflowed.length} 个标签超出显示`}
               >
                 <DownOutlined />
-              </Button>
-            </Hint>
-            {dropdownOpen && (
-              <div
-                className="more-list"
-                style={{
-                  top: `${moreListPos.top}px`,
-                  right: `${moreListPos.right}px`
-                }}
-              >
-                {overflowed.map(tab => (
-                  <Button
-                    key={tab.id}
-                    className={`more-item${active?.id === tab.id ? " active" : ""}`}
-                    variant="ghost"
-                    size="sm"
-                    onPress={() =>
-                      activateOverflow(tab.id)
-                    }
-                  >
-                    <span
-                      className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
-                    ></span>
-                    <span>{tab.name}</span>
-                  </Button>
-                ))}
-              </div>
-            )}
+              </Dropdown.Trigger>
+              <Dropdown.Popover placement="bottom end">
+                <Dropdown.Menu
+                  aria-label="更多标签"
+                  selectionMode="single"
+                  selectedKeys={
+                    active ? [active.id] : []
+                  }
+                  onAction={key =>
+                    activateOverflow(String(key))
+                  }
+                >
+                  {overflowed.map(tab => (
+                    <Dropdown.Item
+                      key={tab.id}
+                      id={tab.id}
+                      textValue={tab.name}
+                    >
+                      <span
+                        className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
+                      ></span>
+                      <span className="more-item-name">
+                        {tab.name}
+                      </span>
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
           </div>
         )}
       </div>
@@ -305,22 +290,42 @@ export default function TerminalWorkspace({
           key="empty"
           className="empty-terminal"
         >
-          <LinkOutlined />
-          <Typography.Heading level={2}>
+          {/* HeroUI Surface 做圆形图标底盘：空状态的视觉重心，
+              比原先裸放的 42px 灰图标更有层次 */}
+          <Surface className="empty-icon">
+            <LinkOutlined />
+          </Surface>
+          <Typography.Heading
+            level={3}
+            className="empty-title"
+          >
             选择一个会话开始连接
           </Typography.Heading>
-          <Typography.Paragraph size="sm">
+          <Typography.Paragraph
+            size="sm"
+            className="empty-desc"
+          >
             从左侧打开本地终端，或新建一个 SSH
             会话。
           </Typography.Paragraph>
-          <Button
-            variant="primary"
-            size="sm"
-            onPress={onCreate}
-          >
-            <PlusOutlined />
-            新建会话
-          </Button>
+          <div className="empty-actions">
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={onCreate}
+            >
+              <PlusOutlined />
+              新建会话
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={onOpenLocal}
+            >
+              <DesktopOutlined />
+              打开本地终端
+            </Button>
+          </div>
         </EmptyState>
       )}
 
@@ -338,7 +343,8 @@ export default function TerminalWorkspace({
       </div>
 
       {searchOpen && (
-        <div className="find-box">
+        // HeroUI Surface：查找浮层的底色/描边/阴影跟随主题 token
+        <Surface className="find-box">
           <Input
             ref={searchInputRef}
             className="find-input"
@@ -402,32 +408,34 @@ export default function TerminalWorkspace({
             </Button>
           </Hint>
           <Hint label="区分大小写">
-            <Button
-              className={`find-btn${searchCaseSensitive ? " on" : ""}`}
-              variant="tertiary"
+            <ToggleButton
+              className="find-btn"
+              variant="ghost"
               size="sm"
               aria-label="区分大小写"
-              onPress={() =>
+              isSelected={searchCaseSensitive}
+              onChange={() =>
                 toggleAndSearch(
                   onToggleCaseSensitive
                 )
               }
             >
               Aa
-            </Button>
+            </ToggleButton>
           </Hint>
           <Hint label="正则表达式">
-            <Button
-              className={`find-btn${searchRegex ? " on" : ""}`}
-              variant="tertiary"
+            <ToggleButton
+              className="find-btn"
+              variant="ghost"
               size="sm"
               aria-label="正则表达式"
-              onPress={() =>
+              isSelected={searchRegex}
+              onChange={() =>
                 toggleAndSearch(onToggleRegex)
               }
             >
               .*
-            </Button>
+            </ToggleButton>
           </Hint>
           <Hint label="关闭 (Esc)">
             <Button
@@ -440,8 +448,8 @@ export default function TerminalWorkspace({
               ×
             </Button>
           </Hint>
-        </div>
+        </Surface>
       )}
-    </section>
+    </Card>
   );
 }
