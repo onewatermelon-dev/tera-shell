@@ -11,7 +11,6 @@
     "lint:prettier": "prettier --write \"**/*.{js,ts,mjs,cjs,json,tsx,html,md}\"",
     "lint:eslint": "eslint",
     "lint:stylelint": "stylelint --cache --fix \"**/*.{css,scss}\" --cache-location node_modules/.cache/stylelint/",
-    "lint:spellcheck": "cspell lint \"**/*.{js,ts,mjs,cjs,json,css,less,scss,tsx,html,md,rs}\"",
     "commit": "node scripts/precommit-check.mjs",
     "precommit": "lint-staged",
     "prepare": "husky",
@@ -41,7 +40,6 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
-    "@cspell/dict-lorem-ipsum": "^4.0.5",
     "@eslint/js": "^10.0.1",
     "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-node-resolve": "^16.0.3",
@@ -55,7 +53,6 @@
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^6.1.1",
     "commitizen": "^4.3.2",
-    "cspell": "^10.1.1",
     "cz-git": "^1.14.0",
     "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
