@@ -93,7 +93,8 @@ export default function MacroBar({
 
   return (
     <div className="status-macros" ref={barRef}>
-      <Hint label="新增快捷宏">
+      {/* 宏区贴窗口底边，提示必须向上弹，向下会跑到窗口外 */}
+      <Hint label="新增快捷宏" placement="top">
         <Button
           className="macro-btn macro-add"
           variant="ghost"
@@ -113,6 +114,7 @@ export default function MacroBar({
           <Hint
             key={macro.id}
             label={macro.command}
+            placement="top"
           >
             <Button
               className="macro-btn"
