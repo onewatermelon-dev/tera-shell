@@ -159,11 +159,47 @@
   width: 90px;
 }
 
+// 全局消息条（错误提示）：固定右下角，点击任意处关闭。
+// ⚠️ 用 `inset` 而不是分开写 right/bottom：HeroUI 的 Alert 自带定位属性，
+// 分开写容易被它盖掉，`inset` 一次写全四个方向更稳。
+// z-index 要高于右键菜单（40）与查找框（20），否则会被压住。
 .toast {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 20;
-  max-width: 420px;
+  inset: auto 20px 20px auto;
+  z-index: 60;
+  max-width: 380px;
+  padding: 12px 36px 12px 14px;
   cursor: pointer;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  animation: toast-in 0.2s ease-out;
+}
+
+// 右侧的关闭提示：不额外占用 DOM，用户一看就知道能点掉
+.toast::after {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  content: "×";
+}
+
+.toast:hover::after {
+  color: var(--foreground);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
