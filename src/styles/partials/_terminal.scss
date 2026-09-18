@@ -219,17 +219,29 @@
   border-radius: 3px;
 }
 
+// 用 grid 而不是 flex：flex 下"宏区收缩"这件事根本压不住 ——
+// 宏按钮外面还套着 Tooltip 的包装层（见 Hint），`.macro-btn` 的 flex 属性
+// 作用在孙元素上，收缩计算失效，宏一多就把右侧状态文字顶出可视区。
+// grid 的 `minmax(0, 1fr)` 可以真正压到 0，`auto` 列按状态文字实际宽度走。
 .terminal-status {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 18px;
   align-items: center;
-  justify-content: flex-end;
   padding: 0 12px;
   font:
     9px Consolas,
     monospace;
   color: var(--muted);
   border-top: 1px solid var(--border);
+}
+
+// 状态文字按内容定宽、不换行，宏再多也不会被压缩或挤出
+.status-meta {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  white-space: nowrap;
 }
 
 // 空状态：HeroUI EmptyState 只提供 p-2/text-sm/text-muted 的基础排版，

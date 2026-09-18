@@ -16,6 +16,9 @@ import AppHeader, {
 } from "@/app/components/AppHeader";
 import SessionSidebar from "@/features/sessions/SessionSidebar";
 import TerminalWorkspace from "@/features/terminal/TerminalWorkspace";
+import { useMacros } from "@/features/terminal/useMacros";
+import MacroDialog from "@/features/terminal/MacroDialog";
+import type { TerminalMacro } from "@/features/terminal/terminalMacros";
 import SessionDialog from "@/features/sessions/SessionDialog";
 import PasswordDialog from "@/features/sessions/PasswordDialog";
 import AppLoading, {
@@ -32,8 +35,15 @@ export default function App() {
   const [editingSession, setEditingSession] =
     useState<SavedSession | null>(null);
   const [appReady, setAppReady] = useState(false);
+  const [macroOpen, setMacroOpen] =
+    useState(false);
+  // 编辑中的宏；为 null 表示本次弹窗是「新增」
+  const [editingMacro, setEditingMacro] =
+    useState<TerminalMacro | null>(null);
   const appLoadingRef =
     useRef<AppLoadingHandle>(null);
+
+  const macroStore = useMacros();
 
   const {
     sessions,
@@ -62,6 +72,35 @@ export default function App() {
   function openCreate() {
     setEditingSession(null);
     setDialogOpen(true);
+  }
+
+  /**
+   * 执行一条快捷宏：把命令写进当前会话，每行补一个回车。
+   *
+   * 多行宏按**逐行下发**处理 —— 等价于在终端里依次敲下每一行，
+   * 这也是把几步操作串成一条宏的本意。空行跳过，免得刷出一堆空回车。
+   *
+   * `command` 一并传过去，后端用它记录命令历史（与手动敲入的处理一致）。
+   * 执行完把焦点交回终端，方便接着敲。
+   */
+  function runMacro(macro: TerminalMacro) {
+    const id = terminals.activeId;
+    if (!id) return;
+    const lines = macro.command
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line !== "");
+    if (lines.length === 0) return;
+    invoke("terminal_write", {
+      id,
+      data: lines
+        .map(line => `${line}\r`)
+        .join(""),
+      command: macro.command
+    }).catch(fail);
+    requestAnimationFrame(() =>
+      terminals.focusTerminal(id)
+    );
   }
 
   function openEdit(session: SavedSession) {
@@ -195,10 +234,13 @@ export default function App() {
         setError("请先打开一个会话");
         return;
       }
+      // 传 sourceSessionId 而不是 id：复制出来的会话 id 是临时的
+      // `dup-<原 id>-<时间戳>`，不落库，独立窗口按它取不到会话。
+      // sourceSessionId 始终指向真正保存过的那个会话。
       // 每个 SFTP 会话开一个真正的系统窗口：会出现在任务栏里，
       // 可以并排摆放，也不会挡住主窗口里的终端
       invoke("open_sftp_window", {
-        sessionId: active.id,
+        sessionId: active.sourceSessionId,
         title: active.name
       }).catch(fail);
     }
@@ -252,6 +294,19 @@ export default function App() {
           onTerminalHost={
             terminals.setTerminalHost
           }
+          macros={macroStore.macros}
+          onRunMacro={runMacro}
+          onAddMacro={() => {
+            setEditingMacro(null);
+            setMacroOpen(true);
+          }}
+          onEditMacro={macro => {
+            setEditingMacro(macro);
+            setMacroOpen(true);
+          }}
+          onDeleteMacro={macro =>
+            macroStore.remove(macro.id)
+          }
         />
       </section>
       <SessionDialog
@@ -271,6 +326,22 @@ export default function App() {
           }
           onSubmit={terminals.submitPassword}
           onCancel={terminals.cancelPassword}
+        />
+      )}
+      {macroOpen && (
+        <MacroDialog
+          key={editingMacro?.id ?? "new"}
+          macro={editingMacro}
+          onSave={(name, command) => {
+            if (editingMacro)
+              macroStore.update(
+                editingMacro.id,
+                name,
+                command
+              );
+            else macroStore.add(name, command);
+          }}
+          onClose={() => setMacroOpen(false)}
         />
       )}
       {error && (

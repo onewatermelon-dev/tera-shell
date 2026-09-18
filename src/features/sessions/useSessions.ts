@@ -29,10 +29,15 @@ function loadSessions(): SavedSession[] {
  *
  * 独立的 SFTP 窗口没有父级状态可继承，只能自己从本地存储里找 ——
  * 同一 origin 的多个窗口共用 localStorage，所以读得到主窗口存下的那份。
+ *
+ * ⚠️ 本地终端是**例外**：`localSession` 是代码里的常量，从不写进 localStorage
+ * （`loadSessions` 只在存储为空时才把它兜底返回）。少了这个特判，从本地终端
+ * 打开 SFTP 窗口就会报"找不到这个会话"——而它本来只加载本地目录，是支持的。
  */
 export function loadSession(
   id: string
 ): SavedSession | null {
+  if (id === localSession.id) return localSession;
   try {
     const raw = localStorage.getItem(storageKey);
     if (!raw) return null;

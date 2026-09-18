@@ -17,6 +17,8 @@ import {
   Typography
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
+import MacroBar from "@/features/terminal/MacroBar";
+import type { TerminalMacro } from "@/features/terminal/terminalMacros";
 import {
   PlusOutlined,
   DownOutlined,
@@ -50,6 +52,16 @@ type Props = {
   onTerminalHost: (
     el: HTMLElement | null
   ) => void;
+  /** 快捷宏列表。 */
+  macros: TerminalMacro[];
+  /** 点击某个宏：在活动会话里执行它的命令。 */
+  onRunMacro: (macro: TerminalMacro) => void;
+  /** 点击 + ：弹出新增快捷宏的窗口。 */
+  onAddMacro: () => void;
+  /** 右键某个宏 → 编辑。 */
+  onEditMacro: (macro: TerminalMacro) => void;
+  /** 右键某个宏 → 删除。 */
+  onDeleteMacro: (macro: TerminalMacro) => void;
 };
 
 export default function TerminalWorkspace({
@@ -70,7 +82,12 @@ export default function TerminalWorkspace({
   onCloseSearch,
   onToggleCaseSensitive,
   onToggleRegex,
-  onTerminalHost
+  onTerminalHost,
+  macros,
+  onRunMacro,
+  onAddMacro,
+  onEditMacro,
+  onDeleteMacro
 }: Props) {
   const [query, setQuery] = useState("");
   const searchInputRef =
@@ -330,16 +347,31 @@ export default function TerminalWorkspace({
       )}
 
       <div className="terminal-status">
-        <span>
-          {active?.kind === "ssh"
-            ? "SSH"
-            : "LOCAL"}
-        </span>
-        <span>UTF-8</span>
-        <span>
-          {active?.terminal.cols || 0} ×{" "}
-          {active?.terminal.rows || 0}
-        </span>
+        {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
+        <MacroBar
+          macros={macros}
+          disabled={
+            !active ||
+            disconnected[active.id] === true
+          }
+          onRun={onRunMacro}
+          onAdd={onAddMacro}
+          onEdit={onEditMacro}
+          onDelete={onDeleteMacro}
+        />
+        {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
+        <div className="status-meta">
+          <span>
+            {active?.kind === "ssh"
+              ? "SSH"
+              : "LOCAL"}
+          </span>
+          <span>UTF-8</span>
+          <span>
+            {active?.terminal.cols || 0} ×{" "}
+            {active?.terminal.rows || 0}
+          </span>
+        </div>
       </div>
 
       {searchOpen && (

@@ -1,0 +1,86 @@
+// 快捷宏：挤在状态栏（LOCAL / UTF-8 / 尺寸）的**左侧**，不单独占一行 ——
+// 宏是随手的快捷方式，为它让出一行会持续压缩终端的可视高度。
+// 只让**宏本身**横向滚动（超出隐藏），右侧状态文字照常显示。
+// 外层不滚：+ 号留在外面，宏多了也不会把新增入口一起滚走。
+// 状态栏已改用 grid（见 _terminal.scss 的 .terminal-status），
+// 这一格是 minmax(0, 1fr)、能真正收缩，故不必再靠 max-width / margin 兜底。
+.status-macros {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+// 状态栏很矮，露出滚动条会顶高整行，藏掉即可（滚轮仍可用）
+.macro-list {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+// Hint（HeroUI Tooltip）会在按钮外包一层，那一层才是 .macro-list 的 flex 子项 ——
+// 不锁住它就会被压缩，滚动也就无从触发。
+.macro-list > * {
+  flex: none;
+}
+
+.macro-list::-webkit-scrollbar {
+  display: none;
+}
+
+// 尺寸贴着状态栏的 9px 基调，别把这一行撑高。
+// 不收缩：挤不下时靠 .macro-list 滚动，而不是压扁按钮或顶走状态文字。
+.macro-btn {
+  flex: none;
+  max-width: 140px;
+  height: 20px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+// + 号按钮不参与收缩：它是新增入口，被挤没了就再也加不了宏
+.macro-add {
+  flex: none;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+// 宏的右键菜单：比文件菜单更窄（只有编辑 / 删除两项）。
+// 菜单项本身复用 .context-menu-item（见 _context-menu.scss）。
+.macro-context-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 96px;
+  padding: 4px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+}
+
+.macro-btn:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// 新增弹窗里的多行命令框：等宽字体便于对齐检查，允许竖向拉伸。
+// 基础样式 .new-entry-name 是给单行 input 用的（height:30px、padding:0 8px），
+// 这里靠 min-height 顶开高度、并改回上下内边距。
+// ⚠️ 选择器带 .new-entry-body：_dialogs.scss 在本文件之后加载，
+// 同为单类选择器时它的 padding 会赢，必须靠权重压过去。
+.new-entry-body .macro-command {
+  min-height: 76px;
+  padding: 6px 8px;
+  font-family:
+    "Cascadia Code", Consolas, monospace;
+  line-height: 1.5;
+  resize: vertical;
+}
