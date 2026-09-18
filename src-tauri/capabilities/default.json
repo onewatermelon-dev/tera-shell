@@ -12,7 +12,13 @@
     "core:window:allow-show",
     "core:window:allow-start-dragging",
     "shell:allow-open",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://**" },
+        { "url": "http://**" }
+      ]
+    },
     "opener:allow-open-path",
     "dialog:default",
     "store:default"

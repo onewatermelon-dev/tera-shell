@@ -64,8 +64,14 @@ export function registerTerminalLinks(
           activate(event) {
             // 普通单击仍交给终端处理；只有 Ctrl+单击才允许启动外部浏览器。
             // URL 来源受上方正则限制，只可能是 http:// 或 https://。
-            if (event.ctrlKey)
-              openUrl(text).catch(onError);
+            if (!event.ctrlKey) return;
+            // 失败原因（权限缺失、没有默认浏览器等）对用户没有意义，
+            // 直接给一句能行动的提示，别把技术报错原样丢到 toast 里。
+            openUrl(text).catch(() =>
+              onError(
+                "打不开这个链接，请检查系统默认浏览器是否正常。"
+              )
+            );
           }
         });
       }
