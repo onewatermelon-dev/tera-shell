@@ -19,6 +19,10 @@ import { renderTextOnlySelection } from "@/features/terminal/terminalSelection";
 import { stripPrompt } from "@/features/terminal/stripPrompt";
 import { createTerminalMenu } from "@/features/terminal/terminalContextMenu";
 import { useTerminalSearch } from "@/features/terminal/useTerminalSearch";
+import {
+  resolveFontFamily,
+  type AppSettings
+} from "@/features/settings/settings";
 import type { OpenSession } from "@/features/terminal/terminalTypes";
 
 // 会话类型定义在 terminalTypes，这里重新导出，外部仍从 useTerminals 引入
@@ -26,10 +30,17 @@ export type { OpenSession } from "@/features/terminal/terminalTypes";
 
 export function useTerminals(
   onError: (reason: unknown) => void,
-  onSavePassword?: (
-    sourceSessionId: string,
-    encrypted: string
-  ) => void
+  onSavePassword:
+    | ((
+        sourceSessionId: string,
+        encrypted: string
+      ) => void)
+    | undefined,
+  /** 终端外观设置：字体与字号随之变化，整批终端一起更新 */
+  appearance: Pick<
+    AppSettings,
+    "fontFamily" | "fontSize"
+  >
 ) {
   const [opened, setOpened] = useState<
     OpenSession[]
@@ -113,6 +124,34 @@ export function useTerminals(
     []
   );
 
+  /**
+   * 设置里的字体/字号变化后，同步到所有已打开的终端。
+   *
+   * 字体或字号一变，字符的宽高就跟着变，行列数必须重算 —— 否则内容会
+   * 与容器错位、右侧留出一条空白。`resize` 负责 fit 并把新尺寸告知后端 PTY。
+   */
+  useEffect(() => {
+    const family = resolveFontFamily(
+      appearance.fontFamily
+    );
+    for (const session of openedRef.current) {
+      // xterm 只暴露 options 这个可变对象，没有 setter —— 想改字体就只能
+      // 就地赋值。react-hooks/immutability 约束的是 React 自身的数据，
+      // 对第三方实例的可变配置不适用，故此处显式放行。
+      /* eslint-disable react-hooks/immutability */
+      session.terminal.options.fontFamily =
+        family;
+      session.terminal.options.fontSize =
+        appearance.fontSize;
+      /* eslint-enable react-hooks/immutability */
+    }
+    resize();
+  }, [
+    appearance.fontFamily,
+    appearance.fontSize,
+    resize
+  ]);
+
   // opened/activeId 变化后统一挂载/切换终端。layout effect 在 commit 之后、
   // 浏览器绘制之前同步执行，此时 terminalHostRef 已由 ref 回调赋值，
   // 不会像手写 rAF 那样在 DOM 未更新时提前早退。
@@ -150,9 +189,12 @@ export function useTerminals(
       const terminal = new Terminal({
         cursorBlink: true,
         allowProposedApi: true,
-        fontFamily:
-          '"Cascadia Code", "JetBrains Mono", Consolas, monospace',
-        fontSize: 14,
+        // 字体与字号取自设置；自定义字体会拼在内置字体栈前面，
+        // 没装时顺着回退，不会掉成难看的默认衬线体
+        fontFamily: resolveFontFamily(
+          appearance.fontFamily
+        ),
+        fontSize: appearance.fontSize,
         lineHeight: 1.3,
         scrollback: 5000,
         theme: {
@@ -264,7 +306,7 @@ export function useTerminals(
         sourceSessionId
       };
     },
-    [onError, search]
+    [onError, search, appearance]
   );
 
   // ---- 6. Core session management ----

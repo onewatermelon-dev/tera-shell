@@ -1,9 +1,15 @@
 /**
  * 终端快捷宏：把常用命令存下来，做成按钮一点即执行。
  *
- * 只存在 localStorage 里 —— 宏是纯本地偏好，跟着人走而不是跟着项目走，
- * 没必要落库或上云。
+ * 存文件（键 `macros`）—— 宏是纯本地偏好，跟着人走而不是跟着项目走。
  */
+
+import {
+  clearData,
+  DataName,
+  readData,
+  writeData
+} from "@/features/settings/storage";
 
 /** 一条快捷宏。 */
 export type TerminalMacro = {
@@ -14,9 +20,6 @@ export type TerminalMacro = {
   /** 实际写入终端的内容（不含结尾回车，执行时补） */
   command: string;
 };
-
-/** localStorage 的键。带项目前缀，避免与同源的其他数据冲突。 */
-const STORAGE_KEY = "tera-shell:terminal-macros";
 
 /**
  * 首次使用时给几条通用示例，让用户一眼看懂这个东西怎么用。
@@ -62,7 +65,7 @@ export function createMacroId(): string {
  */
 export function loadMacros(): TerminalMacro[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readData(DataName.macros);
     if (!raw) return DEFAULT_MACROS;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed))
@@ -84,25 +87,17 @@ export function loadMacros(): TerminalMacro[] {
   }
 }
 
-/** 保存快捷宏列表；写不进去（隐私模式/配额满）就算了，不影响使用。 */
+/** 保存快捷宏列表；写盘失败只记日志，不影响使用。 */
 export function saveMacros(
   macros: TerminalMacro[]
 ): void {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(macros)
-    );
-  } catch {
-    /* 忽略：宏存不下不该打断操作 */
-  }
+  writeData(
+    DataName.macros,
+    JSON.stringify(macros)
+  );
 }
 
 /** 抹掉已保存的宏，下次读取即回到内置示例。 */
 export function clearMacros(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* 忽略 */
-  }
+  clearData(DataName.macros);
 }

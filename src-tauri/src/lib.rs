@@ -1,5 +1,7 @@
 // 后端按功能域分目录：每个域一个模块目录，域内再按职责拆文件。
 // 模块路径与原先的 `xxx.rs` 完全一致，所以域内代码无需改动。
+pub mod data;
+pub mod fonts;
 pub mod fs;
 pub mod icons;
 /// 基础设施（日志、凭据加解密）
@@ -25,6 +27,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         // 为终端中的 Ctrl+单击链接提供“使用系统默认浏览器打开 URL”的能力。
         .plugin(tauri_plugin_opener::init())
+        // 设置页选择“数据存储路径”时弹出系统文件夹选择框。
+        .plugin(tauri_plugin_dialog::init())
         // 所有终端共享同一份后端 PTY 会话表，命令通过 session id 定位具体会话。
         .manage(terminal::Terminals::default())
         // SFTP 连接按目标缓存，避免每次进目录都重新握手认证。
@@ -66,6 +70,12 @@ pub fn run() {
             sftp::cancel_transfer,
             infra::secret::encrypt,
             infra::secret::decrypt,
+            data::load_all,
+            data::save_one,
+            data::current_root,
+            data::set_data_dir,
+            data::pick_data_dir,
+            fonts::list_fonts,
             open_devtools
         ])
         .setup(|app| {

@@ -18,6 +18,7 @@ import {
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
 import MacroBar from "@/features/terminal/MacroBar";
+import { useT } from "@/features/settings/i18n";
 import type { TerminalMacro } from "@/features/terminal/terminalMacros";
 import {
   PlusOutlined,
@@ -89,6 +90,7 @@ export default function TerminalWorkspace({
   onEditMacro,
   onDeleteMacro
 }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const searchInputRef =
     useRef<HTMLInputElement>(null);
@@ -234,13 +236,13 @@ export default function TerminalWorkspace({
               ))}
             </Tabs.List>
           </Tabs>
-          <Hint label="新建会话">
+          <Hint label={t("terminal.newTab")}>
             <Button
               className="new-tab"
               variant="ghost"
               size="sm"
               isIconOnly
-              aria-label="新建会话"
+              aria-label={t("terminal.newTab")}
               onPress={onCreate}
             >
               <PlusOutlined />
@@ -257,13 +259,20 @@ export default function TerminalWorkspace({
                   提示信息改用 aria-label 承载。 */}
               <Dropdown.Trigger
                 className="more-btn"
-                aria-label={`${overflowed.length} 个标签超出显示`}
+                aria-label={t(
+                  "terminal.overflowTabs",
+                  {
+                    count: overflowed.length
+                  }
+                )}
               >
                 <DownOutlined />
               </Dropdown.Trigger>
               <Dropdown.Popover placement="bottom end">
                 <Dropdown.Menu
-                  aria-label="更多标签"
+                  aria-label={t(
+                    "terminal.moreTabs"
+                  )}
                   selectionMode="single"
                   selectedKeys={
                     active ? [active.id] : []
@@ -316,14 +325,13 @@ export default function TerminalWorkspace({
             level={3}
             className="empty-title"
           >
-            选择一个会话开始连接
+            {t("terminal.emptyTitle")}
           </Typography.Heading>
           <Typography.Paragraph
             size="sm"
             className="empty-desc"
           >
-            从左侧打开本地终端，或新建一个 SSH
-            会话。
+            {t("terminal.emptyDesc")}
           </Typography.Paragraph>
           <div className="empty-actions">
             <Button
@@ -332,7 +340,7 @@ export default function TerminalWorkspace({
               onPress={onCreate}
             >
               <PlusOutlined />
-              新建会话
+              {t("terminal.newTab")}
             </Button>
             <Button
               variant="ghost"
@@ -340,7 +348,7 @@ export default function TerminalWorkspace({
               onPress={onOpenLocal}
             >
               <DesktopOutlined />
-              打开本地终端
+              {t("app.menu.openLocal")}
             </Button>
           </div>
         </EmptyState>
@@ -380,7 +388,9 @@ export default function TerminalWorkspace({
           <Input
             ref={searchInputRef}
             className="find-input"
-            placeholder="查找"
+            placeholder={t(
+              "terminal.find.placeholder"
+            )}
             value={query}
             onChange={e => {
               setQuery(e.target.value);
@@ -410,15 +420,15 @@ export default function TerminalWorkspace({
               (searchCount
                 ? `${searchIndex + 1}/${searchCount}`
                 : query
-                  ? "无匹配"
+                  ? t("terminal.find.noMatch")
                   : "")}
           </span>
-          <Hint label="上一个 (Shift+Enter)">
+          <Hint label={t("terminal.find.prev")}>
             <Button
               className="find-btn"
               variant="tertiary"
               size="sm"
-              aria-label="上一个"
+              aria-label={t("terminal.find.prev")}
               onPress={() =>
                 onSearch(query, "prev")
               }
@@ -426,12 +436,12 @@ export default function TerminalWorkspace({
               ↑
             </Button>
           </Hint>
-          <Hint label="下一个 (Enter)">
+          <Hint label={t("terminal.find.next")}>
             <Button
               className="find-btn"
               variant="tertiary"
               size="sm"
-              aria-label="下一个"
+              aria-label={t("terminal.find.next")}
               onPress={() =>
                 onSearch(query, "next")
               }
@@ -439,12 +449,18 @@ export default function TerminalWorkspace({
               ↓
             </Button>
           </Hint>
-          <Hint label="区分大小写">
+          <Hint
+            label={t(
+              "terminal.find.caseSensitive"
+            )}
+          >
             <ToggleButton
               className="find-btn"
               variant="ghost"
               size="sm"
-              aria-label="区分大小写"
+              aria-label={t(
+                "terminal.find.caseSensitive"
+              )}
               isSelected={searchCaseSensitive}
               onChange={() =>
                 toggleAndSearch(
@@ -455,12 +471,14 @@ export default function TerminalWorkspace({
               Aa
             </ToggleButton>
           </Hint>
-          <Hint label="正则表达式">
+          <Hint label={t("terminal.find.regex")}>
             <ToggleButton
               className="find-btn"
               variant="ghost"
               size="sm"
-              aria-label="正则表达式"
+              aria-label={t(
+                "terminal.find.regex"
+              )}
               isSelected={searchRegex}
               onChange={() =>
                 toggleAndSearch(onToggleRegex)
@@ -469,12 +487,14 @@ export default function TerminalWorkspace({
               .*
             </ToggleButton>
           </Hint>
-          <Hint label="关闭 (Esc)">
+          <Hint label={t("terminal.find.close")}>
             <Button
               className="find-btn"
               variant="tertiary"
               size="sm"
-              aria-label="关闭查找"
+              aria-label={t(
+                "terminal.find.close"
+              )}
               onPress={onCloseSearch}
             >
               ×

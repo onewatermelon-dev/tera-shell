@@ -170,6 +170,8 @@ button {
 }
 
 .workspace {
+  // 设置页用绝对定位覆盖在工作区之上，这里是它的定位上下文
+  position: relative;
   display: grid;
 
   // 强制唯一行高等于容器高度：隐式行高（auto）会按内容走，

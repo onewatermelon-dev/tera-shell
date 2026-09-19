@@ -6,6 +6,7 @@ import {
 import { Button } from "@heroui/react";
 import { PlusOutlined } from "@ant-design/icons";
 import Hint from "@/shared/components/Hint";
+import { useT } from "@/features/settings/i18n";
 import MacroContextMenu, {
   type MacroAction
 } from "@/features/terminal/MacroContextMenu";
@@ -46,6 +47,7 @@ export default function MacroBar({
   onEdit,
   onDelete
 }: MacroBarProps) {
+  const t = useT();
   const [menu, setMenu] =
     useState<MenuState | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -94,13 +96,16 @@ export default function MacroBar({
   return (
     <div className="status-macros" ref={barRef}>
       {/* 宏区贴窗口底边，提示必须向上弹，向下会跑到窗口外 */}
-      <Hint label="新增快捷宏" placement="top">
+      <Hint
+        label={t("macro.add")}
+        placement="top"
+      >
         <Button
           className="macro-btn macro-add"
           variant="ghost"
           size="sm"
           isIconOnly
-          aria-label="新增快捷宏"
+          aria-label={t("macro.add")}
           onPress={onAdd}
         >
           <PlusOutlined />
@@ -121,7 +126,9 @@ export default function MacroBar({
               variant="ghost"
               size="sm"
               isDisabled={disabled}
-              aria-label={`执行：${macro.command}`}
+              aria-label={t("macro.run", {
+                command: macro.command
+              })}
               onPress={() => onRun(macro)}
               // 右键：弹出编辑 / 删除。必须阻止默认菜单，否则会和系统的叠在一起
               onContextMenu={event => {

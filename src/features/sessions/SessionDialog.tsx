@@ -14,6 +14,7 @@ import {
   emptySshSession,
   type SavedSession
 } from "@/features/sessions/session";
+import { useT } from "@/features/settings/i18n";
 
 type Props = {
   open: boolean;
@@ -28,6 +29,7 @@ export default function SessionDialog({
   onClose,
   onSave
 }: Props) {
+  const t = useT();
   // 通过 key 强制重装，无需 effect 重置状态
   const [form, setForm] = useState(() => {
     if (session) return { ...session };
@@ -44,7 +46,7 @@ export default function SessionDialog({
     e.preventDefault();
     setError("");
     if (!form.host.trim()) {
-      setError("请填写主机地址");
+      setError(t("session.hostRequired"));
       return;
     }
     const next: SavedSession = {
@@ -86,13 +88,17 @@ export default function SessionDialog({
                   className="dialog-eyebrow"
                 >
                   {session
-                    ? "编辑连接"
-                    : "新建连接"}
+                    ? t("session.editTitle")
+                    : t("session.newTitle")}
                 </Typography.Paragraph>
                 <Modal.Heading>
-                  SSH 会话
+                  {t("session.eyebrow")}
                 </Modal.Heading>
-                <Modal.CloseTrigger aria-label="关闭" />
+                <Modal.CloseTrigger
+                  aria-label={t(
+                    "app.action.close"
+                  )}
+                />
               </Modal.Header>
               <Modal.Body className="dialog-fields">
                 <TextField
@@ -102,10 +108,14 @@ export default function SessionDialog({
                     setForm({ ...form, name: v })
                   }
                 >
-                  <Label>会话名称</Label>
+                  <Label>
+                    {t("session.name")}
+                  </Label>
                   <Input
                     autoFocus
-                    placeholder="选填，留空使用主机地址"
+                    placeholder={t(
+                      "session.namePlaceholder"
+                    )}
                   />
                 </TextField>
                 <div className="form-row">
@@ -120,7 +130,9 @@ export default function SessionDialog({
                       })
                     }
                   >
-                    <Label>主机地址</Label>
+                    <Label>
+                      {t("session.host")}
+                    </Label>
                     <Input placeholder="192.168.1.10" />
                   </TextField>
                   <TextField
@@ -134,7 +146,9 @@ export default function SessionDialog({
                       })
                     }
                   >
-                    <Label>端口</Label>
+                    <Label>
+                      {t("session.port")}
+                    </Label>
                     <Input
                       type="number"
                       min={1}
@@ -152,7 +166,9 @@ export default function SessionDialog({
                     })
                   }
                 >
-                  <Label>用户名</Label>
+                  <Label>
+                    {t("session.username")}
+                  </Label>
                   <Input placeholder="root" />
                 </TextField>
                 {session && form.password && (
@@ -161,11 +177,15 @@ export default function SessionDialog({
                     value={newPassword}
                     onChange={setNewPassword}
                   >
-                    <Label>修改密码</Label>
+                    <Label>
+                      {t("session.password")}
+                    </Label>
                     <Input
                       type="password"
                       autoComplete="new-password"
-                      placeholder="留空保持原密码"
+                      placeholder={t(
+                        "session.passwordPlaceholder"
+                      )}
                     />
                   </TextField>
                 )}
@@ -173,8 +193,7 @@ export default function SessionDialog({
                   size="sm"
                   className="dialog-hint"
                 >
-                  身份验证由系统 SSH
-                  处理，支持已有密钥和 ssh-agent。
+                  {t("session.authHint")}
                 </Typography.Paragraph>
                 {error && (
                   <Typography.Paragraph
@@ -191,7 +210,7 @@ export default function SessionDialog({
                   size="sm"
                   onPress={onClose}
                 >
-                  取消
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   variant="primary"
@@ -199,7 +218,7 @@ export default function SessionDialog({
                   type="submit"
                 >
                   <ExportOutlined />
-                  保存会话
+                  {t("session.save")}
                 </Button>
               </Modal.Footer>
             </Form>

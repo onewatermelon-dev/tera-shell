@@ -4,6 +4,7 @@ import {
   Modal,
   Typography
 } from "@heroui/react";
+import { useT } from "@/features/settings/i18n";
 import type { TerminalMacro } from "@/features/terminal/terminalMacros";
 
 type MacroDialogProps = {
@@ -26,6 +27,7 @@ export default function MacroDialog({
   onSave,
   onClose
 }: MacroDialogProps) {
+  const t = useT();
   const editing = macro != null;
   const [name, setName] = useState(
     macro?.name ?? ""
@@ -64,10 +66,12 @@ export default function MacroDialog({
               </Typography.Paragraph>
               <Modal.Heading>
                 {editing
-                  ? "编辑快捷宏"
-                  : "新增快捷宏"}
+                  ? t("macro.edit")
+                  : t("macro.add")}
               </Modal.Heading>
-              <Modal.CloseTrigger aria-label="关闭" />
+              <Modal.CloseTrigger
+                aria-label={t("app.action.close")}
+              />
             </Modal.Header>
             <Modal.Body className="new-entry-body">
               <input
@@ -75,8 +79,10 @@ export default function MacroDialog({
                 value={name}
                 autoFocus
                 spellCheck={false}
-                aria-label="名称"
-                placeholder="名称（可留空）"
+                aria-label={t("macro.name")}
+                placeholder={t(
+                  "macro.namePlaceholder"
+                )}
                 onChange={event =>
                   setName(event.target.value)
                 }
@@ -91,11 +97,10 @@ export default function MacroDialog({
                 value={command}
                 rows={4}
                 spellCheck={false}
-                aria-label="命令"
-                placeholder={
-                  "命令，例如 git pull\n" +
-                  "多行会依次执行（相当于每行敲一次回车）"
-                }
+                aria-label={t("macro.command")}
+                placeholder={t(
+                  "macro.commandPlaceholder"
+                )}
                 onChange={event =>
                   setCommand(event.target.value)
                 }
@@ -120,7 +125,7 @@ export default function MacroDialog({
                 size="sm"
                 onPress={onClose}
               >
-                取消
+                {t("common.cancel")}
               </Button>
               <Button
                 variant="primary"
@@ -128,7 +133,7 @@ export default function MacroDialog({
                 isDisabled={!canSave}
                 onPress={submit}
               >
-                保存
+                {t("common.save")}
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

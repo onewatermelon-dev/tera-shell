@@ -1,0 +1,262 @@
+// 设置页：盖在工作区之上（绝对定位，见 App.tsx 的说明），
+// 而不是替换工作区内容 —— 那样会让终端卸载、xterm 实例丢失。
+// 全部用主题变量取色，切换明暗主题时自动适配。
+.settings-page {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  overflow: hidden;
+  background: var(--background);
+}
+
+// ---- 左侧导航 ----
+
+.settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 208px;
+  padding: 14px 10px;
+  overflow-y: auto;
+  background: var(--surface-secondary);
+  border-right: 1px solid var(--border);
+}
+
+.settings-back {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+.settings-back:hover {
+  background: var(--surface-hover);
+}
+
+// 分组标题：小字、弱色，只做视觉分隔，不参与交互
+.settings-nav-group {
+  padding: 0 10px;
+  margin: 12px 0 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings-nav-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+.settings-nav-item:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+.settings-nav-item.is-active {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// ---- 右侧内容 ----
+
+// 内容区：宽度封顶后靠 margin 居中 —— flex 里 `margin-inline: auto` 会
+// 吸收剩余空间，窗口最大化时卡片不会拉到满屏宽，保持参考图的观感。
+.settings-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 720px;
+  padding: 28px 32px 32px;
+  margin-inline: auto;
+  overflow-y: auto;
+}
+
+.settings-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+// 紧贴标题下方：用负外边距抵消 content 的 gap
+.settings-subtitle {
+  margin: -6px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// ---- 配置卡片 ----
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.settings-row-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.settings-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.settings-row-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.settings-row-control {
+  flex: none;
+}
+
+// ---- 控件 ----
+
+// 设置页通用下拉的触发器：自绘替代原生 select（原生 option 由系统绘制，
+// 既放不进图标也改不了样式）。主题与界面语言共用。
+.settings-select {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  // 给个下限让两个下拉等宽，展开的菜单也能对齐这个宽度
+  min-width: 132px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.settings-select:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.settings-select-icon {
+  display: flex;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+// 标签占满剩余宽度，把箭头顶到最右侧，视觉上更像个下拉
+.settings-select-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.settings-select-caret {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+// 展开的菜单：HeroUI 的 Dropdown 默认给菜单一个较宽的 min-width，
+// 比触发器宽出一大截、显得突兀。这里按内容定宽，并对齐触发器的下限宽度。
+.settings-select-menu {
+  width: max-content;
+  min-width: 132px;
+}
+
+// 下拉里的每项：图标 + 文字，左对齐排一行
+.settings-select-menu .settings-select-item-icon {
+  display: inline-flex;
+  margin-right: 8px;
+  color: var(--muted);
+}
+
+// ---- 输入框 ----
+
+.settings-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  outline: none;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.settings-input--size {
+  width: 120px;
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
+// ---- 数据存储路径 ----
+
+// 文件夹图标 + 路径输入框排一行；图标不参与收缩
+.data-dir-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.data-dir-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.data-dir-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.data-dir-actions {
+  display: flex;
+  gap: 8px;
+}
+
+// 结果提示里的路径可能很长，允许在任意字符处断行，避免撑破卡片
+.data-dir-message {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  word-break: break-all;
+}

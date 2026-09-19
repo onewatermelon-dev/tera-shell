@@ -7,13 +7,16 @@ import {
   localSession,
   type SavedSession
 } from "@/features/sessions/session";
-
-const storageKey = "tera-sessions";
+import {
+  DataName,
+  readData,
+  writeData
+} from "@/features/settings/storage";
 
 function loadSessions(): SavedSession[] {
   try {
     const sessions = JSON.parse(
-      localStorage.getItem(storageKey) || "null"
+      readData(DataName.sessions) || "null"
     );
     return Array.isArray(sessions) &&
       sessions.length
@@ -39,7 +42,7 @@ export function loadSession(
 ): SavedSession | null {
   if (id === localSession.id) return localSession;
   try {
-    const raw = localStorage.getItem(storageKey);
+    const raw = readData(DataName.sessions);
     if (!raw) return null;
     const list = JSON.parse(
       raw
@@ -59,8 +62,8 @@ export function useSessions() {
 
   const persist = useCallback(
     (next: SavedSession[]) => {
-      localStorage.setItem(
-        storageKey,
+      writeData(
+        DataName.sessions,
         JSON.stringify(next)
       );
     },

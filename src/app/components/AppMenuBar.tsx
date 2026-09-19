@@ -1,4 +1,8 @@
 import { Dropdown, Kbd } from "@heroui/react";
+import {
+  useT,
+  type Translator
+} from "@/features/settings/i18n";
 
 /**
  * 菜单项定义。
@@ -40,103 +44,106 @@ export type MenuState = {
  * 避免点了没反应。快捷键同理，只有全局已绑定的才显示。
  */
 export function buildMenus(
-  state: MenuState
+  state: MenuState,
+  t: Translator
 ): MenuDef[] {
   const terminalReady = state.hasActive;
   return [
     {
       id: "file",
-      label: "文件",
+      label: t("app.menu.file"),
       items: [
         {
           id: "newSession",
-          label: "新建 SSH 会话…"
+          label: t("app.menu.newSsh")
         },
         {
           id: "openLocal",
-          label: "打开本地终端"
+          label: t("app.menu.openLocal")
         },
         {
           id: "closeActive",
-          label: "关闭当前标签",
+          label: t("app.menu.closeActive"),
           disabled: !terminalReady
         },
-        { id: "quit", label: "退出" }
+        { id: "quit", label: t("app.menu.quit") }
       ]
     },
     {
       id: "edit",
-      label: "编辑",
+      label: t("app.menu.edit"),
       items: [
         {
           id: "copy",
-          label: "复制",
+          label: t("app.action.copy"),
           shortcut: "Ctrl+C",
           disabled: !state.hasSelection
         },
         {
           id: "paste",
-          label: "粘贴",
+          label: t("app.action.paste"),
           shortcut: "Ctrl+V",
           disabled: !terminalReady
         },
         {
           id: "selectAll",
-          label: "全选",
+          label: t("app.action.selectAll"),
           disabled: !terminalReady
         },
         {
           id: "clear",
-          label: "清屏",
+          label: t("app.action.clear"),
           disabled: !terminalReady
         }
       ]
     },
     {
       id: "view",
-      label: "查看",
+      label: t("app.menu.view"),
       items: [
         {
           id: "find",
-          label: "查找…",
+          label: t("app.menu.find"),
           shortcut: "Ctrl+F"
         },
         {
           id: "toggleCaseSensitive",
-          label: "区分大小写",
+          label: t(
+            "app.action.toggleCaseSensitive"
+          ),
           checked: state.caseSensitive
         },
         {
           id: "toggleRegex",
-          label: "正则表达式",
+          label: t("app.action.toggleRegex"),
           checked: state.regex
         },
         {
           id: "toggleMaximize",
           label: state.maximized
-            ? "还原窗口"
-            : "最大化窗口"
+            ? t("app.menu.restore")
+            : t("app.menu.maximize")
         }
       ]
     },
     {
       id: "tools",
-      label: "工具",
+      label: t("app.menu.tools"),
       items: [
         // SFTP 以当前活动会话为连接目标；没有会话时不置灰，
         // 点击后给出"请先打开一个会话"的提示（置灰会让人以为菜单坏了）
         {
           id: "openSftp",
-          label: "SFTP 文件传输…"
+          label: t("app.action.openSftp")
         },
         {
           id: "devtools",
-          label: "开发者工具",
+          label: t("app.action.devtools"),
           shortcut: "F12"
         },
         {
           id: "settings",
-          label: "设置…",
+          label: t("app.action.settings"),
           disabled: true
         }
       ]
@@ -157,10 +164,11 @@ export default function AppMenuBar({
   menus: MenuDef[];
   onAction: (id: string) => void;
 }) {
+  const t = useT();
   return (
     <nav
       className="main-menu"
-      aria-label="应用菜单"
+      aria-label={t("app.menu.aria")}
     >
       {menus.map(menu => (
         <Dropdown.Root key={menu.id}>

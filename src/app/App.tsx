@@ -16,6 +16,8 @@ import AppHeader, {
 } from "@/app/components/AppHeader";
 import SessionSidebar from "@/features/sessions/SessionSidebar";
 import TerminalWorkspace from "@/features/terminal/TerminalWorkspace";
+import { useSettings } from "@/features/settings/useSettings";
+import SettingsPage from "@/features/settings/SettingsPage";
 import { useMacros } from "@/features/terminal/useMacros";
 import MacroDialog from "@/features/terminal/MacroDialog";
 import type { TerminalMacro } from "@/features/terminal/terminalMacros";
@@ -37,6 +39,8 @@ export default function App() {
   const [appReady, setAppReady] = useState(false);
   const [macroOpen, setMacroOpen] =
     useState(false);
+  const [settingsOpen, setSettingsOpen] =
+    useState(false);
   // 编辑中的宏；为 null 表示本次弹窗是「新增」
   const [editingMacro, setEditingMacro] =
     useState<TerminalMacro | null>(null);
@@ -55,6 +59,9 @@ export default function App() {
     remove
   } = useSessions();
 
+  // 显示偏好：字体、字号、主题。必须早于 useTerminals —— 终端要用它建实例
+  const appSettings = useSettings();
+
   const terminals = useTerminals(
     reason => setError(String(reason)),
     (sourceSessionId, encrypted) => {
@@ -66,7 +73,8 @@ export default function App() {
           ...session,
           password: encrypted
         });
-    }
+    },
+    appSettings.settings
   );
 
   function openCreate() {
@@ -243,7 +251,8 @@ export default function App() {
         sessionId: active.sourceSessionId,
         title: active.name
       }).catch(fail);
-    }
+    },
+    openSettings: () => setSettingsOpen(true)
   };
 
   return (
@@ -251,6 +260,7 @@ export default function App() {
       <AppHeader
         actions={headerActions}
         menuState={menuState}
+        hideMenus={settingsOpen}
       />
       <section className="workspace">
         <SessionSidebar
@@ -308,6 +318,16 @@ export default function App() {
             macroStore.remove(macro.id)
           }
         />
+        {/* 设置页盖在工作区之上（绝对定位），而不是替换它的内容 ——
+            替换会让 TerminalWorkspace 卸载，xterm 的 DOM 随之被移除，
+            回来时终端就空了。 */}
+        {settingsOpen && (
+          <SettingsPage
+            settings={appSettings.settings}
+            onChange={appSettings.update}
+            onBack={() => setSettingsOpen(false)}
+          />
+        )}
       </section>
       <SessionDialog
         key={editingSession?.id ?? "new"}

@@ -7,6 +7,7 @@ import {
   TextField
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
+import { useT } from "@/features/settings/i18n";
 import {
   PlusOutlined,
   SearchOutlined,
@@ -39,19 +40,20 @@ export default function SessionSidebar({
   onRemove,
   onCreate
 }: Props) {
+  const t = useT();
   return (
     // aside 保留 complementary 语义；面板底色/描边/圆角走 .sidebar（HeroUI token）
     <aside className="sidebar">
       <Header className="sidebar-head">
         <div>
-          <span>会话</span>
+          <span>{t("sidebar.title")}</span>
           <small>{sessions.length}</small>
         </div>
-        <Hint label="新建 SSH 会话">
+        <Hint label={t("sidebar.newSsh")}>
           <Button
             size="sm"
             isIconOnly
-            aria-label="新建 SSH 会话"
+            aria-label={t("sidebar.newSsh")}
             onPress={onCreate}
           >
             <PlusOutlined />
@@ -60,20 +62,26 @@ export default function SessionSidebar({
       </Header>
       <TextField
         className="search-box"
-        aria-label="搜索会话"
+        aria-label={t(
+          "sidebar.searchPlaceholder"
+        )}
         value={query}
         onChange={onQueryChange}
       >
         <SearchOutlined />
-        <Input placeholder="搜索会话" />
+        <Input
+          placeholder={t(
+            "sidebar.searchPlaceholder"
+          )}
+        />
       </TextField>
       <div className="group-title">
-        <span>我的会话</span>
+        <span>{t("sidebar.mine")}</span>
         <FolderOpenOutlined />
       </div>
       {sessions.length ? (
         <ListBox
-          aria-label="我的会话"
+          aria-label={t("sidebar.mine")}
           className="session-list"
           // 受控单选：高亮跟随 activeId（已打开标签），点击不改变选中
           selectionMode="single"
@@ -100,7 +108,7 @@ export default function SessionSidebar({
                 <strong>{session.name}</strong>
                 <small>
                   {session.kind === "local"
-                    ? "本机终端"
+                    ? t("sidebar.localTerminal")
                     : `${session.username ? session.username + "@" : ""}${session.host}:${session.port}`}
                 </small>
               </span>
@@ -110,7 +118,7 @@ export default function SessionSidebar({
                   variant="ghost"
                   size="sm"
                   isIconOnly
-                  aria-label="编辑"
+                  aria-label={t("sidebar.edit")}
                   onPress={() => onEdit(session)}
                 >
                   <EditOutlined />
@@ -122,7 +130,7 @@ export default function SessionSidebar({
                   variant="ghost"
                   size="sm"
                   isIconOnly
-                  aria-label="删除"
+                  aria-label={t("sidebar.remove")}
                   onPress={() =>
                     onRemove(session.id)
                   }
@@ -135,13 +143,17 @@ export default function SessionSidebar({
         </ListBox>
       ) : (
         <p className="empty-list">
-          没有匹配的会话
+          {t("sidebar.noMatch")}
         </p>
       )}
       <div className="sidebar-foot">
         <span className="status-dot"></span>
-        <span>就绪</span>
-        <small>{openedCount} 个连接</small>
+        <span>{t("sidebar.ready")}</span>
+        <small>
+          {t("sidebar.connections", {
+            count: openedCount
+          })}
+        </small>
       </div>
     </aside>
   );

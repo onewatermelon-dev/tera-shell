@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useT } from "@/features/settings/i18n";
 
 /** 菜单与视口边缘之间保留的间隙。 */
 const VIEWPORT_MARGIN = 8;
@@ -26,6 +27,7 @@ export default function MacroContextMenu({
   onAction,
   onClose
 }: MacroContextMenuProps) {
+  const t = useT();
   const [shift, setShift] = useState({
     x: 0,
     y: 0
@@ -127,8 +129,15 @@ export default function MacroContextMenu({
         transform: `translate(${shift.x}px, ${shift.y}px)`
       }}
     >
-      {renderItem("edit", "编辑", true)}
-      {renderItem("delete", "删除")}
+      {renderItem(
+        "edit",
+        t("macro.editAction"),
+        true
+      )}
+      {renderItem(
+        "delete",
+        t("macro.deleteAction")
+      )}
     </div>
   );
 }

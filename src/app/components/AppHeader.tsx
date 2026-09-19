@@ -15,6 +15,7 @@ import AppMenuBar, {
   buildMenus,
   type MenuState
 } from "@/app/components/AppMenuBar";
+import { useT } from "@/features/settings/i18n";
 import {
   SettingOutlined,
   MoreOutlined,
@@ -43,19 +44,25 @@ export type HeaderActions = {
   devtools: () => void;
   /** 打开 SFTP 窗口，连接目标取当前活动会话。 */
   openSftp: () => void;
+  /** 打开设置页。 */
+  openSettings: () => void;
 };
 
 type Props = {
   actions: HeaderActions;
   /** 菜单项可用性：无活动终端、无选区时对应项置灰。 */
   menuState: Omit<MenuState, "maximized">;
+  /** 打开设置页时隐藏菜单栏 —— 那里的动作对设置页没有意义。 */
+  hideMenus?: boolean;
 };
 
 // 无框窗口：原生标题栏被移除，最小化/最大化/关闭由这里接管。
 export default function AppHeader({
   actions,
-  menuState
+  menuState,
+  hideMenus = false
 }: Props) {
+  const t = useT();
   const appWindow = useRef(getCurrentWindow());
   const [isMaximized, setIsMaximized] =
     useState(false);
@@ -87,11 +94,14 @@ export default function AppHeader({
 
   const menus = useMemo(
     () =>
-      buildMenus({
-        ...menuState,
-        maximized: isMaximized
-      }),
-    [menuState, isMaximized]
+      buildMenus(
+        {
+          ...menuState,
+          maximized: isMaximized
+        },
+        t
+      ),
+    [menuState, isMaximized, t]
   );
 
   // 窗口级动作（退出走二次确认、最大化走窗口 API）不经过 App 传入的 actions。
@@ -127,38 +137,43 @@ export default function AppHeader({
         <span className="brand-mark">T</span>
         <strong>Tera Shell</strong>
       </div>
-      <AppMenuBar
-        menus={menus}
-        onAction={runAction}
-      />
+      {!hideMenus && (
+        <AppMenuBar
+          menus={menus}
+          onAction={runAction}
+        />
+      )}
       <div className="title-actions">
-        <Hint label="设置">
+        <Hint label={t("app.action.settings")}>
           <Button
             variant="ghost"
             size="sm"
             isIconOnly
-            aria-label="设置"
+            aria-label={t("app.action.settings")}
+            onPress={actions.openSettings}
           >
             <SettingOutlined />
           </Button>
         </Hint>
-        <Hint label="更多">
+        <Hint label={t("app.action.more")}>
           <Button
             variant="ghost"
             size="sm"
             isIconOnly
-            aria-label="更多"
+            aria-label={t("app.action.more")}
           >
             <MoreOutlined />
           </Button>
         </Hint>
         <div className="win-controls">
-          <Hint label="最小化">
+          <Hint label={t("app.action.minimize")}>
             <Button
               variant="ghost"
               size="sm"
               isIconOnly
-              aria-label="最小化"
+              aria-label={t(
+                "app.action.minimize"
+              )}
               onPress={() =>
                 appWindow.current.minimize()
               }
@@ -168,7 +183,9 @@ export default function AppHeader({
           </Hint>
           <Hint
             label={
-              isMaximized ? "还原" : "最大化"
+              isMaximized
+                ? t("app.menu.restore")
+                : t("app.menu.maximize")
             }
           >
             <Button
@@ -176,7 +193,9 @@ export default function AppHeader({
               size="sm"
               isIconOnly
               aria-label={
-                isMaximized ? "还原" : "最大化"
+                isMaximized
+                  ? t("app.menu.restore")
+                  : t("app.menu.maximize")
               }
               onPress={() =>
                 appWindow.current.toggleMaximize()
