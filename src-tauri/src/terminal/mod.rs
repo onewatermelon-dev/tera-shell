@@ -18,6 +18,10 @@ struct Session {
 	master: Box<dyn MasterPty + Send>,
 	/// 受 Mutex 保护：读取线程用 try_wait 轮询，close 用 kill/wait，二者不会同时持锁
 	child: Arc<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
+	/// 会话被新会话取代（同 id 重复 start）时置位：读取/watch 线程收尾时
+	/// 据此静默退出，不再发 terminal-exit —— 否则旧会话的死亡事件会被
+	/// 前端算到刚建立的新会话头上，表现为"会话总是断连"。
+	exited: Arc<AtomicBool>,
 	/// 当前累积但未回车结束的输入字节，用于按行记录命令。
 	input_buf: Arc<Mutex<Vec<u8>>>,
 	/// reader 线程检测到密码提示时置位；该提示后的输入行只跳过、不记录内容。
@@ -96,16 +100,34 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 	let input_buf = Arc::new(Mutex::new(Vec::new()));
 	let expecting_password = Arc::new(AtomicBool::new(false));
 	let exited = Arc::new(AtomicBool::new(false));
-	terminals.0.lock().map_err(|_| "终端状态不可用")?.insert(
-		id.clone(),
-		Session {
-			writer: writer.clone(),
-			master: pty.master,
-			child: child.clone(),
-			input_buf,
-			expecting_password: expecting_password.clone(),
-		},
-	);
+	// 同 id 重复 start 时 HashMap.insert 会静默覆盖旧 Session：旧 master 一被
+	// drop，旧 ConPTY 关闭、旧子进程退出，旧读取线程随即 EOF 并发出
+	// terminal-exit —— 前端把这次退出算到刚建立的新会话头上，表现为
+	// "会话总是断连"。因此取代旧会话前先置位其 exited 标记，让旧会话的
+	// 两条收尾路径（watch 轮询、读线程 EOF）都静默退出，不再向外发事件。
+	if let Some(old) = terminals
+		.0
+		.lock()
+		.map_err(|_| "终端状态不可用")?
+		.insert(
+			id.clone(),
+			Session {
+				writer: writer.clone(),
+				master: pty.master,
+				child: child.clone(),
+				exited: exited.clone(),
+				input_buf,
+				expecting_password: expecting_password.clone(),
+			},
+		)
+	{
+		old.exited.store(true, Ordering::Relaxed);
+		let _ = old
+			.child
+			.lock()
+			.unwrap_or_else(|e| e.into_inner())
+			.kill();
+	}
 	// 子进程退出检测：Windows ConPTY 在进程退出后 master read 可能一直挂起而
 	// 不返回 EOF (tests/pty_eof.rs 已复现），因此不能只依赖读取 EOF 判定断开，
 	// 这里轮询 try_wait: 谁先确认退出谁负责收尾（读取线程到 EOF 时间样收尾）

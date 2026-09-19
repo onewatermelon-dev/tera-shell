@@ -12,6 +12,7 @@
 //! 原样去重后返回 —— 用户想选某个变体（比如 Light）也是合理需求。
 
 use std::collections::BTreeSet;
+use tracing::debug;
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Graphics::Gdi::{
 	EnumFontFamiliesExW, GetDC, ReleaseDC, DEFAULT_CHARSET,
@@ -60,6 +61,7 @@ pub fn list_fonts() -> Vec<String> {
 			0,
 		);
 		let _ = ReleaseDC(None, hdc);
+		debug!(count = families.len(), "枚举本机字体完成");
 		families.into_iter().collect()
 	}
 }

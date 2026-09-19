@@ -4,6 +4,10 @@
 # 自动生成的类型声明与构建产物：不参与换行符转换，避免 lint-staged stash 恢复冲突
 src/types/*.d.ts text eol=lf
 src-tauri/Cargo.lock -text
+
+# Cargo.toml 在工作区一直是 LF：声明 eol=lf 后 git 不再期待它被转成 CRLF，
+# 否则 status 会永远显示已修改（与文件内容无关，纯属换行符策略冲突）
+*.toml text eol=lf
 *.png binary
 *.ico binary
 *.icns binary

@@ -28,6 +28,7 @@ const sftpSessionId = new URLSearchParams(
  */
 async function bootstrap() {
   await initStorage();
+  console.info("[boot] 应用数据已从磁盘加载");
   setLocale(loadSettings().locale);
 
   // 不用 StrictMode：开发模式下它会让 useEffect 双跑，导致挂载时的

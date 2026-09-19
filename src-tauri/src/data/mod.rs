@@ -18,6 +18,7 @@
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
+use tracing::{debug, error, info};
 
 /// 应用自有的子目录名，数据与配置都放在它下面。
 const SUBDIR: &str = ".tera-shell";
@@ -86,8 +87,16 @@ pub async fn load_all(
 			let path = data_file(&app, name);
 			if let Ok(text) = std::fs::read_to_string(&path) {
 				out.insert(name.to_string(), text);
+			} else {
+				// 首次启动时文件不存在属正常路径，debug 级即可
+				debug!(name, path = %path.display(), "数据文件不存在，跳过");
 			}
 		}
+		debug!(
+			count = out.len(),
+			dir = %data_dir(&app).display(),
+			"启动读取应用数据完成"
+		);
 		out
 	})
 	.await
@@ -106,11 +115,31 @@ pub async fn save_one(
 		let path = data_file(&app, &name);
 		if let Some(parent) = path.parent() {
 			std::fs::create_dir_all(parent).map_err(
-				|error| format!("创建目录失败：{error}"),
+				|error| {
+					error!(
+						name = %name,
+						dir = %parent.display(),
+						"创建数据目录失败：{error}"
+					);
+					format!("创建目录失败：{error}")
+				},
 			)?;
 		}
-		std::fs::write(&path, payload)
-			.map_err(|error| format!("写入失败：{error}"))
+		std::fs::write(&path, &payload).map_err(|error| {
+			error!(
+				name = %name,
+				path = %path.display(),
+				"写入应用数据失败：{error}"
+			);
+			format!("写入失败：{error}")
+		})?;
+		info!(
+			name = %name,
+			bytes = payload.len(),
+			path = %path.display(),
+			"写入应用数据完成"
+		);
+		Ok(())
 	})
 	.await
 	.map_err(|error| format!("保存任务失败：{error}"))?
@@ -146,7 +175,10 @@ pub async fn pick_data_dir(
 	.map_err(|error| {
 		format!("打开文件夹选择框失败：{error}")
 	})?;
-	Ok(picked.map(|path| path.to_string()))
+	Ok(picked.map(|path| {
+		info!(picked = %path.to_string(), "用户选择了新的数据目录");
+		path.to_string()
+	}))
 }
 
 /// 切换数据根目录：先把现有数据复制过去，成功后再写配置。
@@ -169,21 +201,35 @@ pub async fn set_data_dir(
 	};
 	tauri::async_runtime::spawn_blocking(move || {
 		let destination = base.join(SUBDIR);
+		info!(
+			target = %destination.display(),
+			"开始迁移应用数据目录"
+		);
 		std::fs::create_dir_all(&destination).map_err(
 			|error| format!("创建目标目录失败：{error}"),
 		)?;
 
 		// 把现有数据逐个复制过去（源目录可能是旧位置）
 		let source = data_dir(&app);
+		let mut copied = 0_u32;
 		for name in ALLOWED {
 			let from = source.join(format!("{name}.json"));
 			if from.is_file() {
 				let to = destination.join(format!("{name}.json"));
 				std::fs::copy(&from, &to).map_err(
-					|error| format!("复制 {name} 失败：{error}"),
+					|error| {
+						error!(
+							name,
+							from = %from.display(),
+							"迁移复制数据文件失败：{error}"
+						);
+						format!("复制 {name} 失败：{error}")
+					},
 				)?;
+				copied += 1;
 			}
 		}
+		info!(copied, "数据文件复制完成");
 
 		// 数据就位后才记配置
 		let location = location_path(&app);
@@ -207,10 +253,14 @@ pub async fn set_data_dir(
 		)
 		.map_err(|error| format!("写入配置失败：{error}"))?;
 
+		info!(root = %root, "数据目录迁移完成，配置已更新");
 		Ok(destination.to_string_lossy().into_owned())
 	})
 	.await
-	.map_err(|error| format!("迁移任务失败：{error}"))?
+	.map_err(|error| {
+		error!("数据目录迁移任务失败：{error}");
+		format!("迁移任务失败：{error}")
+	})?
 }
 
 /// 便于日志/诊断：数据文件所在目录是否存在。
