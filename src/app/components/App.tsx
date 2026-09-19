@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Alert } from "@heroui/react";
 import { useSessions } from "@/sessions/lib/useSessions";
 import { useTerminals } from "@/terminal/lib/useTerminals";
+import { useT } from "@/settings/lib/i18n";
 import type { SavedSession } from "@/sessions/lib/session";
 import AppHeader, {
   type HeaderActions
@@ -33,7 +34,18 @@ import "@/styles/main.css";
 export default function App() {
   const [dialogOpen, setDialogOpen] =
     useState(false);
+  const t = useT();
   const [error, setError] = useState("");
+  // 错误气泡数秒后自动消失：原本只有"点击消失"这一种隐晦交互，
+  // 用户不知道能点，错误会一直挂在角落（如关闭会话后残留的写失败提示）
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(
+      () => setError(""),
+      5000
+    );
+    return () => clearTimeout(timer);
+  }, [error]);
   const [editingSession, setEditingSession] =
     useState<SavedSession | null>(null);
   const [appReady, setAppReady] = useState(false);
@@ -63,7 +75,13 @@ export default function App() {
   const appSettings = useSettings();
 
   const terminals = useTerminals(
-    reason => setError(String(reason)),
+    // 已关闭/已断开的会话上迟到的 write/resize 只会得到这个错误，
+    // 对用户毫无价值 —— 静默丢弃，其它错误照常展示
+    reason => {
+      const text = String(reason);
+      if (text.includes("终端会话不存在")) return;
+      setError(text);
+    },
     (sourceSessionId, encrypted) => {
       const session = sessions.find(
         item => item.id === sourceSessionId
@@ -293,6 +311,7 @@ export default function App() {
             terminals.focusTerminal
           }
           onClose={terminals.close}
+          onCloseTabs={terminals.closeMany}
           onCreate={openCreate}
           onOpenLocal={openLocal}
           onSearch={terminals.search}
@@ -375,6 +394,19 @@ export default function App() {
               {error}
             </Alert.Description>
           </Alert.Content>
+          {/* 真正可点的关闭钮：原来只是 ::after 画了个装饰性 ×，
+              伪元素不接收事件，点了当然没反应 */}
+          <button
+            type="button"
+            className="toast-close"
+            aria-label={t("app.action.close")}
+            onClick={event => {
+              event.stopPropagation();
+              setError("");
+            }}
+          >
+            ×
+          </button>
         </Alert>
       )}
       {!appReady && (

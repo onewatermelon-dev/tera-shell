@@ -178,17 +178,22 @@
 }
 
 // 右侧的关闭提示：不额外占用 DOM，用户一看就知道能点掉
-.toast::after {
+// 右上角关闭钮：原先用 ::after 画了个装饰性 ×，伪元素不接收事件、
+// 点了没反应，误导用户以为能关 —— 换成真按钮
+.toast-close {
   position: absolute;
   top: 6px;
   right: 10px;
+  z-index: 1;
   font-size: 14px;
   line-height: 1;
   color: var(--muted);
-  content: "×";
+  cursor: pointer;
+  background: none;
+  border: none;
 }
 
-.toast:hover::after {
+.toast-close:hover {
   color: var(--foreground);
 }
 

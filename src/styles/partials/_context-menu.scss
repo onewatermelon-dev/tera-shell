@@ -1,5 +1,7 @@
-// 文件列表右键菜单：fixed 定位跟随鼠标，不被列表的滚动容器裁剪
-.file-context-menu {
+// 右键菜单（文件列表 / 会话标签）：fixed 定位跟随鼠标，
+// 不被列表的滚动容器裁剪；两个入口共用同一块样式
+.file-context-menu,
+.tab-context-menu {
   position: fixed;
   z-index: 40;
   min-width: 140px;

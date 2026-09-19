@@ -18,6 +18,9 @@ import {
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
 import MacroBar from "@/terminal/components/MacroBar";
+import TabContextMenu, {
+  type TabAction
+} from "@/terminal/components/TabContextMenu";
 import { useT } from "@/settings/lib/i18n";
 import type { TerminalMacro } from "@/terminal/lib/terminalMacros";
 import {
@@ -38,6 +41,8 @@ type Props = {
   searchRegex: boolean;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
+  /** 批量关闭多个会话（标签右键菜单：关闭右侧/其他/所有）。 */
+  onCloseTabs: (ids: string[]) => void;
   onCreate: () => void;
   /** 打开本地终端：空状态里的次要操作。 */
   onOpenLocal: () => void;
@@ -77,6 +82,7 @@ export default function TerminalWorkspace({
   onActivate,
   onFocusTerminal,
   onClose,
+  onCloseTabs,
   onCreate,
   onOpenLocal,
   onSearch,
@@ -92,6 +98,13 @@ export default function TerminalWorkspace({
 }: Props) {
   const t = useT();
   const [query, setQuery] = useState("");
+  // 标签右键菜单：记录触发位置与目标标签，null 表示不显示
+  const [tabMenu, setTabMenu] = useState<{
+    x: number;
+    y: number;
+    tabId: string;
+    canCloseRight: boolean;
+  } | null>(null);
   const searchInputRef =
     useRef<HTMLInputElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -205,6 +218,20 @@ export default function TerminalWorkspace({
                   key={tab.id}
                   id={tab.id}
                   className="tab"
+                  onContextMenu={event => {
+                    event.preventDefault();
+                    const index =
+                      opened.findIndex(
+                        item => item.id === tab.id
+                      );
+                    setTabMenu({
+                      x: event.clientX,
+                      y: event.clientY,
+                      tabId: tab.id,
+                      canCloseRight:
+                        index < opened.length - 1
+                    });
+                  }}
                   // 点击已激活的标签不会触发 onSelectionChange（activeId 没变、
                   // 挂载用的 layout effect 也不会跑），这里统一在点击后交回焦点。
                   // RAC 在 press 阶段会聚焦 Tab 自身，故放到下一帧再抢，
@@ -249,6 +276,38 @@ export default function TerminalWorkspace({
             </Button>
           </Hint>
         </div>
+        {tabMenu && (
+          <TabContextMenu
+            x={tabMenu.x}
+            y={tabMenu.y}
+            canCloseRight={tabMenu.canCloseRight}
+            onClose={() => setTabMenu(null)}
+            onAction={(action: TabAction) => {
+              const ids = opened.map(
+                item => item.id
+              );
+              const index = ids.indexOf(
+                tabMenu.tabId
+              );
+              if (action === "close") {
+                onClose(tabMenu.tabId);
+              } else if (
+                action === "closeRight"
+              ) {
+                onCloseTabs(ids.slice(index + 1));
+              } else if (
+                action === "closeOthers"
+              ) {
+                onCloseTabs([
+                  ...ids.slice(index + 1),
+                  ...ids.slice(0, index)
+                ]);
+              } else {
+                onCloseTabs(ids);
+              }
+            }}
+          />
+        )}
         {overflowed.length > 0 && (
           <div className="tabs-more">
             {/* 溢出标签菜单：原先是手写 fixed 定位 + 全局 mousedown 收起，

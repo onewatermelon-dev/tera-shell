@@ -113,6 +113,11 @@ export function useTerminals(
           s => s.id === activeIdRef.current
         );
       if (!session) return;
+      // 已断开的会话不再向后端 resize：PTY 可能已被移除，
+      // 调用只会产生"终端会话不存在"的错误气泡
+      if (disconnectedRef.current[session.id]) {
+        return;
+      }
       session.fit.fit();
       session.terminal.scrollToBottom();
       invoke("terminal_resize", {
@@ -228,6 +233,11 @@ export function useTerminals(
       registerTerminalLinks(terminal, onError);
       renderTextOnlySelection(terminal, element);
       terminal.onData(data => {
+        // 会话断开后 PTY 可能已被移除，继续向后端写只会收到
+        // "终端会话不存在"的错误气泡 —— 断连的终端敲键本就无意义。
+        if (disconnectedRef.current[session.id]) {
+          return;
+        }
         let command: string | null = null;
         if (
           data === "\r" ||
@@ -502,6 +512,18 @@ export function useTerminals(
     [onError]
   );
 
+  /**
+   * 批量关闭多个会话。逐个走单个关闭流程（杀 PTY、dispose、移出列表）。
+   * close 内部会把 activeId 切到相邻标签，React 会对循环中的中间状态
+   * 做批处理，最终落在保留的标签上。
+   */
+  const closeMany = useCallback(
+    async (ids: string[]) => {
+      for (const id of ids) await close(id);
+    },
+    [close]
+  );
+
   // ---- 7. Global listeners ----
   useEffect(() => {
     const setup = async () => {
@@ -589,6 +611,7 @@ export function useTerminals(
     activate,
     focusTerminal,
     close,
+    closeMany,
     passwordRequest,
     submitPassword,
     cancelPassword,

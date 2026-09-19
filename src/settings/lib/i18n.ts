@@ -93,6 +93,9 @@ const zhCN = {
     "从左侧打开本地终端，或新建一个 SSH 会话。",
   "terminal.newTab": "新建会话",
   "terminal.closeTab": "关闭标签",
+  "terminal.closeRight": "关闭右侧会话",
+  "terminal.closeOthers": "关闭其他会话",
+  "terminal.closeAll": "关闭所有会话",
   "terminal.moreTabs": "更多标签",
   "terminal.overflowTabs":
     "{count} 个标签超出显示",
@@ -233,6 +236,10 @@ const enUS: Record<MessageKey, string> = {
     "Open a local terminal on the left, or create an SSH session.",
   "terminal.newTab": "New session",
   "terminal.closeTab": "Close tab",
+  "terminal.closeRight":
+    "Close tabs to the right",
+  "terminal.closeOthers": "Close other tabs",
+  "terminal.closeAll": "Close all tabs",
   "terminal.moreTabs": "More tabs",
   "terminal.overflowTabs":
     "{count} tabs are out of view",
