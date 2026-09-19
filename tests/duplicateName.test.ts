@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SavedSession } from "@/features/sessions/session";
+import type { SavedSession } from "@/sessions/lib/session";
 
 /**
  * duplicate() 标签命名规则的最小复刻（与 useTerminals.ts 保持一致）：

@@ -1,10 +1,10 @@
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import App from "./app/App";
-import SftpApp from "./features/sftp/SftpApp";
-import { loadSettings } from "./features/settings/settings";
-import { setLocale } from "./features/settings/i18n";
-import { initStorage } from "./features/settings/storage";
+import App from "./app/components/App";
+import SftpApp from "./sftp/components/SftpApp";
+import { loadSettings } from "./settings/lib/settings";
+import { setLocale } from "./settings/lib/i18n";
+import { initStorage } from "./settings/lib/storage";
 
 // 禁用 WebView2 默认右键菜单（含"检查"入口）；DevTools 仍可用 Ctrl+Shift+I 打开
 document.addEventListener("contextmenu", e =>

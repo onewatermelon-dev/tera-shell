@@ -5,7 +5,7 @@ import {
   useRef,
   useState
 } from "react";
-import MagicRings from "@/features/terminal/MagicRings";
+import MagicRings from "@/terminal/components/MagicRings";
 
 export type AppLoadingHandle = {
   finish: () => void;

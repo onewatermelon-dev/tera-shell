@@ -3,7 +3,7 @@ import {
   buildSearchRowMap,
   escapeSearchText,
   type SearchCell
-} from "../src/features/terminal/searchTextOverlay";
+} from "../src/terminal/lib/searchTextOverlay";
 
 describe("搜索文字覆盖层", () => {
   it("字面搜索会转义正则特殊字符", () => {

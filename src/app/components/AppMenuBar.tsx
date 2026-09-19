@@ -2,7 +2,7 @@ import { Dropdown, Kbd } from "@heroui/react";
 import {
   useT,
   type Translator
-} from "@/features/settings/i18n";
+} from "@/settings/lib/i18n";
 
 /**
  * 菜单项定义。

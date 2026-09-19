@@ -15,7 +15,7 @@ import AppMenuBar, {
   buildMenus,
   type MenuState
 } from "@/app/components/AppMenuBar";
-import { useT } from "@/features/settings/i18n";
+import { useT } from "@/settings/lib/i18n";
 import {
   SettingOutlined,
   MoreOutlined,
