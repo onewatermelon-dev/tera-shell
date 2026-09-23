@@ -178,7 +178,10 @@ button {
   // 终端网格的 fit-content 高度会把整列反推成内容高度，
   // 窗口缩小时内容溢出、fit() 因宿主高度不变而不再触发，输入行被裁掉
   grid-template-rows: 100%;
-  grid-template-columns: 224px 1fr;
+
+  // 1fr 即 minmax(auto, 1fr)：auto 下限被内容反推，拆分后更宽的内容会把
+  // 整列撑出窗口。显式 minmax(0, …) 把列宽钉死在可用空间内
+  grid-template-columns: 224px minmax(0, 1fr);
   gap: 8px;
 
   // HeroUI 的全局 section 规则带 align-items:flex-start，会覆盖本容器的

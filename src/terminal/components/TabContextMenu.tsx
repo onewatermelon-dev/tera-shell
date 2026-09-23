@@ -9,7 +9,8 @@ export type TabAction =
   | "close"
   | "closeRight"
   | "closeOthers"
-  | "closeAll";
+  | "closeAll"
+  | "split";
 
 type TabContextMenuProps = {
   /** 菜单左上角坐标（视口坐标，用 fixed 定位） */
@@ -17,20 +18,23 @@ type TabContextMenuProps = {
   y: number;
   /** 该标签右侧是否还有其它标签：没有时「关闭右侧」置灰。 */
   canCloseRight: boolean;
+  /** 被右键的会话是否还能向右拆分：已有拆分栏时隐藏该项。 */
+  canSplit: boolean;
   onAction: (action: TabAction) => void;
   onClose: () => void;
 };
 
 /**
- * 会话标签的右键菜单：关闭 / 关闭右侧 / 关闭其他 / 关闭所有。
+ * 会话标签的右键菜单：关闭类动作 + 分隔线 + 拆分（VSCode 式）。
  *
  * 与 MacroContextMenu 同一套做法 —— 位置修正在 ref 回调里量一次，
- * 点击菜单外或按 Esc 关闭。容器样式通过 @extend 复用文件菜单。
+ * 点击菜单外或按 Esc 关闭。容器样式与文件菜单共享选择器。
  */
 export default function TabContextMenu({
   x,
   y,
   canCloseRight,
+  canSplit,
   onAction,
   onClose
 }: TabContextMenuProps) {
@@ -161,6 +165,17 @@ export default function TabContextMenu({
         {
           strong: true
         }
+      )}
+      {/* 分隔线之后是布局类动作：VSCode 式向右拆分，可连续拆；
+          关拆分栏不走菜单 —— 拆分标签上的 × 是唯一入口 */}
+      {canSplit && (
+        <>
+          <div className="context-menu-separator" />
+          {renderItem(
+            "split",
+            t("terminal.splitRight")
+          )}
+        </>
       )}
     </div>
   );

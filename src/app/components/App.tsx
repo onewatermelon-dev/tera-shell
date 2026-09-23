@@ -101,16 +101,19 @@ export default function App() {
   }
 
   /**
-   * 执行一条快捷宏：把命令写进当前会话，每行补一个回车。
+   * 执行一条快捷宏：把命令写进当前聚焦的窗格（左栏或某个拆分栏），每行补一个回车。
    *
    * 多行宏按**逐行下发**处理 —— 等价于在终端里依次敲下每一行，
    * 这也是把几步操作串成一条宏的本意。空行跳过，免得刷出一堆空回车。
    *
    * `command` 一并传过去，后端用它记录命令历史（与手动敲入的处理一致）。
-   * 执行完把焦点交回终端，方便接着敲。
+   * 执行完把焦点交回该窗格终端，方便接着敲。
    */
-  function runMacro(macro: TerminalMacro) {
-    const id = terminals.activeId;
+  function runMacro(
+    macro: TerminalMacro,
+    targetId: string
+  ) {
+    const id = targetId;
     if (!id) return;
     const lines = macro.command
       .split(/\r?\n/)
@@ -312,6 +315,17 @@ export default function App() {
           }
           onClose={terminals.close}
           onCloseTabs={terminals.closeMany}
+          splitIds={terminals.splitIds}
+          splitVisibleId={
+            terminals.splitVisibleId
+          }
+          onActivateSplit={
+            terminals.activateSplit
+          }
+          onSplitHost={terminals.setSplitHost}
+          onSplit={terminals.split}
+          onMoveTab={terminals.moveTab}
+          onReorderTab={terminals.reorderTab}
           onCreate={openCreate}
           onOpenLocal={openLocal}
           onSearch={terminals.search}

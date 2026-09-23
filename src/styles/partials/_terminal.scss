@@ -62,22 +62,39 @@
   color: var(--muted);
 }
 
-// 标签栏外层容器：作为更多按钮的 absolute 定位锚点，
-// 使按钮脱离 .tabs 的滚动流，始终固定在可视区右侧。
+// 标签栏外层容器：flex 布局 —— 左栏区域与拆分标签条按与 .terminal-panes
+// 完全一致的权重排列（主栏 ratio、拆分栏 1-ratio、4px 占位对齐分隔条），
+// 拆分标签因此天然钉在分割线右侧。
 .tabs-bar {
   position: relative;
+  display: flex;
+
+  // 只禁收缩、不钉高度：HeroUI 标签容器自带内边距，钉死会让黑窗口上移、
+  // 栏内元素错位。内容高度是稳定的（32px 胶囊 + 容器内边距），拖分隔线时
+  // 终端 fit 的抖动也传不上来 —— 抖动靠 flex:none 挡，不靠钉高度
+  flex: none;
   width: 100%;
-  height: 100%;
   overflow: hidden;
   border-bottom: 1px solid var(--border);
+}
+
+// 左栏区域：标签条 + 新建/溢出按钮的定位锚点。flex 权重在这一层（拆分时
+// 由 inline style 给成主栏比例），两个按钮因此钉在左栏末尾、分割线左侧。
+.tabs-main {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
 }
 
 .tabs {
   position: relative;
   display: flex;
+
+  // 铺满左栏区域；横向溢出靠自身的 overflow 滚动（onTabsWheel）
+  flex: 1 1 0%;
   gap: 0; // HeroUI 组件库也有 .tabs 类（gap:8px），显式清零还原无缝标签栏
   align-items: stretch;
-  width: 100%;
   height: 100%;
   overflow: auto hidden;
 
@@ -94,25 +111,195 @@
 
 // HeroUI Tabs.Tab 负责外观（颜色、圆角），这里只保留终端标签需要的
 // 宽度/字号约束与文本截断。
-.tab {
+// 标签列表从左端起排、按内容宽度生长：宽度必须给 max-content（而不是
+// 100%），否则标签会被压缩到容器宽、永远撑不出横向溢出，.tabs 的
+// overflow: auto hidden 也就无从滚动。min-width: 100% 保证标签少时
+// 仍铺满整条。flex: none 是关键 —— 它是 .tabs 这个 flex 容器里的项目，
+// 默认可被压缩（flex-shrink: 1），不给 none 就永远压回容器宽度、
+// 溢不出来也就滚不动。
+.tabs [data-slot="tabs-list"] {
+  position: relative;
+  display: flex;
+  flex: none;
+  justify-content: flex-start;
+  width: max-content;
+  min-width: 100%;
+  padding-left: 0;
+}
+
+// 两段选择器是必须的：main.css（tailwind + HeroUI）在 app.scss 之后加载，
+// 同权重单类会输给 .tabs__tab —— 它的 w-full 让标签少时每只都被拉宽到
+// max-width 上限、text-sm 把字号顶成 14px，与不受这两条影响的拆分标签
+// 永远不等宽。weight 上来后 width:auto 还原按内容收宽、字号回到 11px。
+.tabs .tab {
   gap: 8px;
+  width: auto;
   min-width: 100px;
   max-width: 160px;
   font-size: 11px;
 }
 
 // Tabs.Indicator 需要 RAC SharedElementTransition 祖先（HeroUI 未提供，
-// 渲染即崩），选中态改用 data-selected 静态胶囊还原
-.tab[data-selected="true"] {
+// 渲染即崩），选中态改用静态胶囊还原。
+// 胶囊只属于"当前活动栏"，两侧互斥。真值来源是 JSX 里根据 activePane
+// 写到标签自身上的 .tab--on（左栏当前会话）与 .split-tab--on（右栏）；
+// 不直接用 RAC 的 data-selected —— 点右栏标签后左栏那只仍挂着
+// data-selected（RAC 自己写的），会出现两个标签同时带框。
+// 选择器保持一段，避免 prettier 展开、与 stylelint 缩进规则冲突。
+// 注意：--on 这类单类选择器与基类同权重，靠源码顺序取胜，必须写在基类之后
+// （.tab--on 在 .tab 后；.split-tab--on 在 .split-tab 后，见下）。
+.tab--on {
   color: var(--foreground);
   background: var(--segment);
 }
 
-.tab span:nth-child(2) {
+// 标签栏里的分隔条占位：与下方 .pane-divider 同宽同色、上下对齐，
+// 连成一条贯穿标签栏的竖线
+.tabs-divider-gap {
+  flex: none;
+  width: 4px;
+  background: var(--border);
+}
+
+// 拆分标签条：右侧窗格是第二个标签组，标签横向排列、溢出滚动
+// （onWheel 平移 scrollLeft，与左栏同一套做法）。flex 权重由 inline style
+// 给出、与下方拆分窗格一致，整条因此天然钉在分割线右侧并跟随拖动。
+// 胶囊垂直居中 —— 与 HeroUI 容器对左栏标签的居中方式一致，两侧必然同水平。
+.tabs-split {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: auto hidden;
+
+  // 标签溢出时同样可横向滚动，但隐藏浏览器原生滚动条（同 .tabs）
+  scrollbar-width: none;
+  background: var(--surface-secondary);
+}
+
+.tabs-split ::-webkit-scrollbar {
+  display: none;
+}
+
+// 拆分标签：在条内按内容收宽（与 .tab 同一套 min/max），不撑满整条。
+// 不在 .tabs / Tabs.List 里 —— .tabs 是 position:relative 且拆分时被收窄、
+// 带 overflow 滚动，放进去定位基准会变成收窄后的宽度并被裁掉。
+// 代价是拿不到 HeroUI 的 .tabs__tab 样式，所以这里要自己复刻胶囊外观：
+// 高度 32px（h-8）、胶囊圆角、水平内边距 16px（px-4）、字号 11px。
+.split-tab {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-width: 100px;
+  max-width: 160px;
+  height: 32px;
+  padding: 0 16px;
+  font-size: 11px;
+
+  // 与 HeroUI .tabs__tab 的 font-medium 对齐：字重不同文字宽度就不同，
+  // 同名会话两种标签会差出几像素
+  font-weight: 500;
+  color: var(--muted);
+  cursor: var(--cursor-interactive);
+  background: transparent;
+  border: 0;
+  border-radius: 9999px;
+}
+
+// 右栏拆分标签的选中胶囊：与左栏 .tab--on 共用 activePane 这一个真值来源，
+// 两者互斥。必须排在 .split-tab 基类之后 —— 同为单类选择器，权重相同，
+// 之前写在基类前面，被基类的 background: transparent 盖掉，点了也没框。
+.split-tab--on {
+  color: var(--foreground);
+  background: var(--segment);
+}
+
+.split-tab:hover {
+  color: var(--foreground);
+}
+
+// 拆分标签里的会话名：占满剩余宽度并截断，与 .tab 的规则保持一致
+.split-tab-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.split-tab i {
+  padding: 3px;
+  font-size: 15px;
+  font-style: normal;
+}
+
+.split-tab i:hover {
+  color: var(--foreground);
+}
+
+// 标签名：占满剩余宽度并截断，外层 overflow: hidden 负责裁剪
+.tab .tab-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 悬停才滚：CSS 变量做开关，省掉三段选择器（prettier/stylelint 约定）。
+// 变量切的是动画名而不是 play-state —— 移开鼠标动画被摘掉，
+// 位移立刻回到起点（play-state: paused 会停在半路）
+.tab-name:hover {
+  --name-anim: name-loop;
+}
+
+.split-tab-name:hover {
+  --name-anim: name-loop;
+}
+
+// 滚动轨道：两份文字首尾相接，位移 -50% 正好一份（含尾部间距）→ 无缝循环
+.tab-name-track {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+// 每份文字自带尾部间距（循环时的间隔）；margin 不计入 offsetWidth，
+// 于是 JS 量"一份文字是否比名字盒宽"时不会把间距算进去
+.tab-name-text {
+  display: inline-block;
+  margin-right: 32px;
+}
+
+// 名字被截断时（JS 挂类）悬停播放：头部从右侧进、尾巴从左侧出，循环
+.name-scroll {
+  animation-name: var(--name-anim, none);
+  animation-duration: 9s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+// 滚动时去掉省略号，否则右缘常驻一个 "..."
+.tab-name:has(.name-scroll) {
+  text-overflow: clip;
+}
+
+.split-tab-name:has(.name-scroll) {
+  text-overflow: clip;
+}
+
+@keyframes name-loop {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name-scroll {
+    animation-name: none;
+  }
 }
 
 .tab i {
@@ -126,11 +313,15 @@
 }
 
 .new-tab {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
   width: 38px;
   height: 100%;
   color: var(--muted);
   cursor: pointer;
-  background: transparent;
+  background: var(--surface-secondary);
   border: 0;
   border-radius: 0;
 }
@@ -191,6 +382,64 @@
   padding: 0 10px 4px 14px;
   overflow: hidden;
   background: #0b0e14; // 终端保持黑底，padding 缝隙与 xterm 背景融为一体
+}
+
+// 拆分状态：主栏与拆分栏并排，flex-basis 由拖动的比例内联控制。
+// flex:1 让 panes 占满工作区 Card 的剩余高度。
+.terminal-panes {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-panes .terminal-host {
+  min-width: 0;
+}
+
+// 拆分分隔条：拖动调整两栏宽度（VSCode 式），悬停高亮
+.pane-divider {
+  flex: none;
+  width: 4px;
+  cursor: col-resize;
+  background: var(--border);
+}
+
+.pane-divider:hover {
+  background: var(--accent);
+}
+
+// 手写标签拖拽进行中：全局换成抓取光标（标签本身拖不动，光标提示而已）
+body.tab-dragging {
+  cursor: grabbing;
+
+  * {
+    cursor: grabbing !important;
+  }
+}
+
+// 拖标签的跟手浮标：复刻胶囊外观，跟着指针走。
+// pointer-events 必须关掉 —— 否则 elementFromPoint 命中的是它，落点判定失效
+.tab-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  max-width: 160px;
+  height: 32px;
+  padding: 0 16px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--segment);
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+  opacity: 0.9;
 }
 
 .terminal-instance {

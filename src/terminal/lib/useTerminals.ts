@@ -28,6 +28,25 @@ import type { OpenSession } from "@/terminal/lib/terminalTypes";
 // 会话类型定义在 terminalTypes，这里重新导出，外部仍从 useTerminals 引入
 export type { OpenSession } from "@/terminal/lib/terminalTypes";
 
+/**
+ * 终端配色：主栏与拆分镜像必须共用同一份。
+ *
+ * 镜像若不传 theme，xterm 会退回内置的纯黑底（#000000），在 #0b0e14 的宿主
+ * 背景上会露出一块明显不同的黑块，看起来像"拆分出去的会话没落在分隔线右边"。
+ */
+const TERMINAL_THEME = {
+  background: "#0b0e14",
+  foreground: "#c9d1d9",
+  cursor: "rgb(41 103 206)",
+  selectionBackground: "#00000000",
+  selectionInactiveBackground: "#00000000",
+  scrollbarSliderBackground: "rgb(41 103 206)",
+  scrollbarSliderHoverBackground:
+    "rgb(41 103 206)",
+  scrollbarSliderActiveBackground:
+    "rgb(41 103 206)"
+};
+
 export function useTerminals(
   onError: (reason: unknown) => void,
   onSavePassword:
@@ -94,6 +113,47 @@ export function useTerminals(
     []
   );
 
+  // ---- 拆分标签组 ----
+  // splitIds = 右侧第二个标签组的标签列表（按加入顺序）：拆分 = 用同一份
+  // 配置新起一个独立会话（独立 PTY，VSCode 式），不是同一 PTY 的镜像 ——
+  // 单 PTY 喂两个不同宽度的视图必然互相重排（拖分隔线时提示行被重复推
+  // 下去），独立 PTY 各管各的尺寸就没有这类问题。拖左栏标签进组也能加
+  // 标签；关掉组内标签就是关掉该会话（标签上的 ×）。
+  const [splitIds, setSplitIdsState] = useState<
+    string[]
+  >([]);
+  // ref 供闭包读最新值（split/close/输出监听里判断）
+  const splitIdsRef = useRef<string[]>([]);
+  const setSplitIds = useCallback(
+    (ids: string[]) => {
+      splitIdsRef.current = ids;
+      setSplitIdsState(ids);
+    },
+    []
+  );
+  // 组内当前显示在拆分窗格里的那一只。与会话栏的左栏（activeId）互不干扰：
+  // 两栏各有各的可见会话，点谁的标签/窗格就只动谁。
+  const [splitVisibleId, setSplitVisibleState] =
+    useState("");
+  const splitVisibleIdRef = useRef("");
+  const setSplitVisible = useCallback(
+    (id: string) => {
+      splitVisibleIdRef.current = id;
+      setSplitVisibleState(id);
+    },
+    []
+  );
+  // 拆分窗格的宿主：整组只有一个窗格，切换标签只是换挂的元素
+  const splitHostRef = useRef<HTMLElement | null>(
+    null
+  );
+  const setSplitHost = useCallback(
+    (el: HTMLElement | null) => {
+      splitHostRef.current = el;
+    },
+    []
+  );
+
   const active = opened.find(
     s => s.id === activeId
   );
@@ -107,24 +167,35 @@ export function useTerminals(
   // ---- 1. Tab management ----
   const resize = useCallback(
     (current?: OpenSession) => {
-      const session =
-        current ??
-        openedRef.current.find(
-          s => s.id === activeIdRef.current
-        );
-      if (!session) return;
+      // 显式指定就只动它；否则两栏各自跟一次 —— ResizeObserver 拖分隔线 /
+      // 窗口缩放都会触发，只 fit 主栏会把拆分窗格留在旧尺寸。
       // 已断开的会话不再向后端 resize：PTY 可能已被移除，
       // 调用只会产生"终端会话不存在"的错误气泡
-      if (disconnectedRef.current[session.id]) {
-        return;
+      const targets = current
+        ? [current]
+        : [
+            openedRef.current.find(
+              s => s.id === activeIdRef.current
+            ),
+            openedRef.current.find(
+              s =>
+                s.id === splitVisibleIdRef.current
+            )
+          ];
+      for (const session of targets) {
+        if (
+          session &&
+          !disconnectedRef.current[session.id]
+        ) {
+          session.fit.fit();
+          session.terminal.scrollToBottom();
+          invoke("terminal_resize", {
+            id: session.id,
+            rows: session.terminal.rows,
+            cols: session.terminal.cols
+          }).catch(() => {});
+        }
       }
-      session.fit.fit();
-      session.terminal.scrollToBottom();
-      invoke("terminal_resize", {
-        id: session.id,
-        rows: session.terminal.rows,
-        cols: session.terminal.cols
-      }).catch(() => {});
     },
     []
   );
@@ -168,6 +239,7 @@ export function useTerminals(
     );
     const host = terminalHostRef.current;
     if (!current || !host) return;
+    // 拆分组挂的是自己宿主里的会话（与主栏不同一只），不存在元素争夺
     current.element.className =
       "terminal-instance";
     host.replaceChildren(current.element);
@@ -183,7 +255,28 @@ export function useTerminals(
     resizeObserver.current?.observe(host);
     resize(current);
     current.terminal.focus();
-  }, [opened, activeId, resize]);
+  }, [opened, activeId, resize, splitIds]);
+
+  // 拆分窗格的挂载：只挂组内可见的那一只，其余标签的元素离树待命
+  // （与左栏未激活标签同一套模式），切标签＝换挂 + 按窗格尺寸 fit。
+  // 左栏宿主只挂激活会话、拆分组不带激活会话，两边不会争夺元素；
+  // 组清空时宿主 div 由 React 整体卸载，无需手动清空。
+  useLayoutEffect(() => {
+    const session = opened.find(
+      s => s.id === splitVisibleId
+    );
+    const host = splitHostRef.current;
+    if (!session || !host) return;
+    session.element.className =
+      "terminal-instance";
+    host.replaceChildren(session.element);
+    if (!session.mounted) {
+      session.terminal.open(session.element);
+      session.mounted = true;
+    }
+    resizeObserver.current?.observe(host);
+    resize(session);
+  }, [opened, splitVisibleId, resize]);
 
   // ---- 5. Terminal creation (uses openSearch) ----
   const createTerminal = useCallback(
@@ -202,20 +295,7 @@ export function useTerminals(
         fontSize: appearance.fontSize,
         lineHeight: 1.3,
         scrollback: 5000,
-        theme: {
-          background: "#0b0e14",
-          foreground: "#c9d1d9",
-          cursor: "rgb(41 103 206)",
-          selectionBackground: "#00000000",
-          selectionInactiveBackground:
-            "#00000000",
-          scrollbarSliderBackground:
-            "rgb(41 103 206)",
-          scrollbarSliderHoverBackground:
-            "rgb(41 103 206)",
-          scrollbarSliderActiveBackground:
-            "rgb(41 103 206)"
-        }
+        theme: TERMINAL_THEME
       });
       const element =
         document.createElement("div");
@@ -329,7 +409,9 @@ export function useTerminals(
       session: SavedSession & {
         password?: string;
       },
-      sourceSessionId: string
+      sourceSessionId: string,
+      /** false 时不把新会话设为激活（拆分场景） */
+      activate = true
     ) => {
       const current = createTerminal(
         session,
@@ -359,9 +441,10 @@ export function useTerminals(
           return next;
         });
         onError(reason);
-        return;
+        return false;
       }
-      setActiveId(session.id);
+      if (activate) setActiveId(session.id);
+      return true;
     },
     [createTerminal, onError]
   );
@@ -369,7 +452,9 @@ export function useTerminals(
   const open = useCallback(
     async (
       session: SavedSession,
-      sourceSessionId = session.id
+      sourceSessionId = session.id,
+      /** false 时不把新会话设为激活（拆分场景：新会话只进右侧栏） */
+      activate = true
     ) => {
       const current = openedRef.current.find(
         item => item.id === session.id
@@ -387,7 +472,8 @@ export function useTerminals(
             );
             await startSession(
               { ...session, password: plain },
-              sourceSessionId
+              sourceSessionId,
+              activate
             );
             return;
           } catch {
@@ -402,7 +488,8 @@ export function useTerminals(
       }
       await startSession(
         session,
-        sourceSessionId
+        sourceSessionId,
+        activate
       );
     },
     [startSession]
@@ -438,34 +525,174 @@ export function useTerminals(
     ]
   );
 
-  const duplicate = useCallback(
-    async (session: SavedSession) => {
+  /** 复制/拆分共用的命名：首个实例用原名，之后 (2)(3)…，避开已打开标签。 */
+  const nextDupName = useCallback(
+    (base: string) => {
       let n = 1;
       const nameAt = (i: number) =>
-        i === 1
-          ? session.name
-          : `${session.name} (${i})`;
+        i === 1 ? base : `${base} (${i})`;
       while (
         openedRef.current.some(
           item => item.name === nameAt(n)
         )
       )
         n++;
+      return nameAt(n);
+    },
+    []
+  );
+
+  const duplicate = useCallback(
+    async (
+      session: SavedSession,
+      activate = true
+    ) => {
+      const newId = `dup-${session.id}-${Date.now()}`;
       await open(
         {
           ...session,
-          id: `dup-${session.id}-${Date.now()}`,
-          name: nameAt(n)
+          id: newId,
+          name: nextDupName(session.name)
         },
-        session.id
+        session.id,
+        activate
       );
+      return newId;
     },
-    [open]
+    [open, nextDupName]
+  );
+
+  /** 向右拆分（id 缺省为当前激活会话，右键标签时传被右键的那只）：
+   *  用被拆会话的配置新起一个独立会话（独立 PTY）放进拆分标签组，
+   *  并立刻显示它；已在组内的会话忽略。不切换左栏的激活会话。
+   *  组内会话不进左栏标签列表，关掉它就是移出一个标签（close）。 */
+  const split = useCallback(
+    async (id?: string) => {
+      try {
+        const target = id ?? activeIdRef.current;
+        if (
+          !target ||
+          splitIdsRef.current.includes(target)
+        )
+          return;
+        const current = openedRef.current.find(
+          s => s.id === target
+        );
+        // 已断开的会话拆出去也只是一块死屏，不开新栏
+        if (
+          !current ||
+          disconnectedRef.current[current.id]
+        )
+          return;
+        // 只取会话定义字段（密码若是明文直接复用，不再弹密码框）；
+        // 运行时字段（terminal/element 等）不能进后端 config
+        const config: SavedSession = {
+          id: `split-${current.id}-${Date.now()}`,
+          name: nextDupName(current.name),
+          kind: current.kind,
+          host: current.host,
+          port: current.port,
+          username: current.username,
+          password: current.password
+        };
+        const ok = await startSession(
+          config,
+          current.sourceSessionId,
+          false
+        );
+        if (!ok) return undefined;
+        setSplitIds([
+          ...splitIdsRef.current,
+          config.id
+        ]);
+        setSplitVisible(config.id);
+        // 返回新会话 id：调用方要用它聚焦 —— 新 id 是 split-…，
+        // 拿被拆会话的 id 选中会让胶囊落回左栏
+        return config.id;
+      } catch (error) {
+        // 拆分失败要露出完整错误（含 TypeError 堆栈摘要），否则用户只看到
+        // 毫无线索的气泡甚至毫无反应
+        onError(error);
+      }
+      return undefined;
+    },
+    [
+      nextDupName,
+      onError,
+      setSplitIds,
+      setSplitVisible,
+      startSession
+    ]
   );
 
   const activate = useCallback((id: string) => {
     setActiveId(id);
   }, []);
+
+  /** 点拆分组内的标签：切换拆分窗格里显示的会话。 */
+  const activateSplit = useCallback(
+    (id: string) => setSplitVisible(id),
+    [setSplitVisible]
+  );
+
+  /** 拖标签在左栏与拆分标签组之间移动：本质是 splitIds 成员关系的搬移。
+   *  进组＝成为组内新标签并立刻可见；出组回左栏时，若它正可见，
+   *  可见位交给组内剩下的第一只。激活会话被拖进组时，把激活权交给
+   *  左栏剩下的第一只会话 —— 组内会话不可激活，左栏不能没有激活会话。 */
+  const moveTab = useCallback(
+    (id: string, to: "main" | "split") => {
+      const inSplit =
+        splitIdsRef.current.includes(id);
+      if (to === "split" && !inSplit) {
+        setSplitIds([...splitIdsRef.current, id]);
+        setSplitVisible(id);
+        if (activeIdRef.current === id) {
+          // setSplitIds 同步写了 ref：这里 rest 已排除组内会话
+          const rest = openedRef.current.filter(
+            s =>
+              s.id !== id &&
+              !splitIdsRef.current.includes(s.id)
+          );
+          setActiveId(rest[0]?.id ?? "");
+        }
+      } else if (to === "main" && inSplit) {
+        const next = splitIdsRef.current.filter(
+          split => split !== id
+        );
+        setSplitIds(next);
+        if (splitVisibleIdRef.current === id)
+          setSplitVisible(next[0] ?? "");
+      }
+    },
+    [setSplitIds, setSplitVisible]
+  );
+
+  /** 左栏内拖拽换位：把 id 插到 beforeId 之前，beforeId 为 null 表示
+   *  追加到末尾（拖到最后一个标签右侧的空白处）。左栏标签顺序就是
+   *  opened 的数组顺序，换位＝重排这个数组。 */
+  const reorderTab = useCallback(
+    (id: string, beforeId: string | null) => {
+      const list = openedRef.current;
+      const from = list.findIndex(
+        s => s.id === id
+      );
+      if (from < 0) return;
+      const next = [...list];
+      const [moved] = next.splice(from, 1);
+      if (!moved) return;
+      const to =
+        beforeId === null
+          ? next.length
+          : next.findIndex(
+              s => s.id === beforeId
+            );
+      if (to < 0) return;
+      next.splice(to, 0, moved);
+      openedRef.current = next;
+      setOpened(next);
+    },
+    []
+  );
 
   /**
    * 把键盘焦点交回指定会话的终端。
@@ -489,6 +716,16 @@ export function useTerminals(
         session => session.id === id
       );
       if (index < 0) return;
+      // 关闭的是组内会话：移出一个标签；若它正可见，可见位交给
+      // 剩下的第一只（组空了就是 ""，右侧窗格整体消失）
+      if (splitIdsRef.current.includes(id)) {
+        const next = splitIdsRef.current.filter(
+          split => split !== id
+        );
+        setSplitIds(next);
+        if (splitVisibleIdRef.current === id)
+          setSplitVisible(next[0] ?? "");
+      }
       await invoke("terminal_close", {
         id
       }).catch(onError);
@@ -502,14 +739,20 @@ export function useTerminals(
         openedRef.current = next;
         return next;
       });
-      if (activeIdRef.current === id)
-        setActiveId(
-          openedRef.current[
-            Math.max(0, index - 1)
-          ]?.id || ""
+      if (activeIdRef.current === id) {
+        // 兜底不能落在拆分标签组的会话上：它的元素挂在拆分窗格宿主，
+        // 一旦激活会和左栏宿主争夺元素
+        const rest = openedRef.current.filter(
+          s => !splitIdsRef.current.includes(s.id)
         );
+        setActiveId(
+          rest[Math.max(0, index - 1)]?.id ||
+            rest[0]?.id ||
+            ""
+        );
+      }
     },
-    [onError]
+    [onError, setSplitIds, setSplitVisible]
   );
 
   /**
@@ -530,10 +773,12 @@ export function useTerminals(
       unlisteners.current = await Promise.all([
         listen<{ id: string; data: string }>(
           "terminal-output",
-          ({ payload }) =>
+          ({ payload }) => {
+            // 拆分会话是独立会话，输出天然只写它自己这一只终端
             openedRef.current
               .find(({ id }) => id === payload.id)
-              ?.terminal.write(payload.data)
+              ?.terminal.write(payload.data);
+          }
         ),
         listen<string>(
           "terminal-exit",
@@ -612,6 +857,13 @@ export function useTerminals(
     focusTerminal,
     close,
     closeMany,
+    splitIds,
+    splitVisibleId,
+    activateSplit,
+    setSplitHost,
+    split,
+    moveTab,
+    reorderTab,
     passwordRequest,
     submitPassword,
     cancelPassword,

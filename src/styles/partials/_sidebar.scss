@@ -98,6 +98,11 @@
   display: grid;
   grid-template-rows: 38px 1fr 25px;
 
+  // 显式 minmax(0, 1fr)：隐式 auto 列的尺寸会被内容反推，拆分后终端内容
+  // 变宽时能把卡片撑得比窗口宽 —— 底部状态栏跟着右移，SSH / UTF-8 这些
+  // 贴右的内容就被裁掉
+  grid-template-columns: minmax(0, 1fr);
+
   // 同 .workspace：还原 grid 默认 stretch，避免 HeroUI 全局 section 规则
   // 的 align-items:flex-start 让 .tabs-bar / 终端宿主不撑满各自行。
   align-items: stretch;
