@@ -95,6 +95,11 @@ type Props = {
   onEditMacro: (macro: TerminalMacro) => void;
   /** 右键某个宏 → 删除。 */
   onDeleteMacro: (macro: TerminalMacro) => void;
+  /** 拖拽宏按钮换位：把 id 插到 beforeId 之前（null = 末尾）。 */
+  onReorderMacro: (
+    id: string,
+    beforeId: string | null
+  ) => void;
 };
 
 /**
@@ -150,7 +155,8 @@ export default function TerminalWorkspace({
   onRunMacro,
   onAddMacro,
   onEditMacro,
-  onDeleteMacro
+  onDeleteMacro,
+  onReorderMacro
 }: Props) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -791,11 +797,17 @@ export default function TerminalWorkspace({
                   onMouseDown={event => {
                     if (event.button !== 0)
                       return;
-                    setFocusedPane("split");
+                    // 点标签只切换拆分窗格里显示的会话，不抢活动栏/键盘焦点 ——
+                    // 聚焦当前在主窗格时点了标签不该把输入口也挪过去；
+                    // 要激活拆分窗格：点窗格内部（宿主 div 的 mousedown）。
+                    // 拆分窗格已是活动栏时，焦点跟着新会话走（接着敲的场景）
                     onActivateSplit(session.id);
-                    requestAnimationFrame(() =>
-                      onFocusTerminal(session.id)
-                    );
+                    if (activePane === "split")
+                      requestAnimationFrame(() =>
+                        onFocusTerminal(
+                          session.id
+                        )
+                      );
                     startTabDrag(
                       event,
                       session.id
@@ -967,6 +979,7 @@ export default function TerminalWorkspace({
           onAdd={onAddMacro}
           onEdit={onEditMacro}
           onDelete={onDeleteMacro}
+          onReorder={onReorderMacro}
         />
         {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
         <div className="status-meta">

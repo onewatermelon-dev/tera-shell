@@ -76,23 +76,27 @@ export function useMacros() {
     });
   }, []);
 
-  /** 调整顺序：把第 index 条往前/往后挪一位，越界则不动。 */
-  const move = useCallback(
-    (index: number, offset: number) => {
+  /** 拖拽换位：把 id 插到 beforeId 之前，beforeId 为 null 表示挪到末尾
+   *  （与标签换位 reorderTab 同一套语义）。 */
+  const reorder = useCallback(
+    (id: string, beforeId: string | null) => {
       setMacros(prev => {
-        const target = index + offset;
-        if (
-          index < 0 ||
-          index >= prev.length ||
-          target < 0 ||
-          target >= prev.length
-        )
-          return prev;
+        const from = prev.findIndex(
+          macro => macro.id === id
+        );
+        if (from < 0) return prev;
         const next = [...prev];
-        const [moved] = next.splice(index, 1);
-        // splice 的返回值在 noUncheckedIndexedAccess 下可能是 undefined
+        const [moved] = next.splice(from, 1);
+        // splice 返回值在 noUncheckedIndexedAccess 下是 T | undefined
         if (!moved) return prev;
-        next.splice(target, 0, moved);
+        const to =
+          beforeId === null
+            ? next.length
+            : next.findIndex(
+                macro => macro.id === beforeId
+              );
+        if (to < 0) return prev;
+        next.splice(to, 0, moved);
         saveMacros(next);
         return next;
       });
@@ -111,7 +115,7 @@ export function useMacros() {
     add,
     update,
     remove,
-    move,
+    reorder,
     reset
   };
 }
