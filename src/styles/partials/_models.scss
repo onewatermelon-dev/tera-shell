@@ -1,0 +1,581 @@
+// 模型设置页：顶部说明 + 「添加供应商」，下方左列供应商清单、右列详情编辑。
+// 配色全部走主题变量，与设置页其余部分同一套观感。
+
+.models-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+// 模型页是两栏布局，设置页 720px 的内容列装不下 —— 单独放宽一档
+.settings-content:has(.models-page) {
+  max-width: 880px;
+}
+
+.models-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.models-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+// 卡片高度封顶，不再一直拉到内容区底部（内部本就有滚动）
+.models-body {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  max-height: 62vh;
+}
+
+// 左列：供应商清单。固定窄栏，条目多了纵向滚动
+.models-list {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 220px;
+  padding: 6px;
+  overflow-y: auto;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.models-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.model-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--foreground);
+  text-align: left;
+  cursor: var(--cursor-interactive);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.model-item:hover {
+  background: var(--surface-hover);
+}
+
+.model-item.is-active {
+  background: var(--segment);
+}
+
+.model-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 供应商状态点：绿＝启用、灰＝停用
+.model-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: #3fb950;
+  border-radius: 50%;
+}
+
+.model-dot.off {
+  background: var(--muted);
+}
+
+// 右列：选中供应商的详情编辑，字段纵向排
+.model-detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+
+  // 常备滚动条槽位：测试状态条出现 / 消失时不再顶出滚动条引起跳动
+  scrollbar-gutter: stable;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.model-detail--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.model-detail-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.model-detail-icon {
+  flex: none;
+  font-size: 18px;
+  color: var(--foreground);
+}
+
+// 头部「…」按钮：无边框纯图标，悬停才亮
+.model-more-btn {
+  flex: none;
+  font-size: 16px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+}
+
+.model-menu-icon {
+  margin-right: 8px;
+  color: var(--muted);
+}
+
+// 「…」菜单：HeroUI 弹层默认 min-width 偏宽，按内容收（同 settings-select 的坑）
+.model-menu-pop {
+  width: max-content;
+  min-width: 0;
+}
+
+// 删除项：红色（图纸样式）
+.model-menu-danger {
+  color: #f85149;
+}
+
+.model-menu-danger .model-menu-icon {
+  color: #f85149;
+}
+
+// 供应商名：看着是加粗文字，其实是输入框；聚焦才现出描边
+.model-name {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+  outline: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.model-name:hover {
+  border-color: var(--border);
+}
+
+.model-name:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.model-field {
+  margin-bottom: 12px;
+}
+
+.model-field-label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// 标签旁的 ?：14px 圆钮 / 10px 字形（比组件库默认小一号，但看得清）。
+// ⚠️ 必须两段选择器：main.css（HeroUI .button）在 app.scss 之后加载，
+// 单类同权重会被组件库的 min-width/height/font-size 盖掉（.tabs 那里踩过）。
+// svg 也得单独压 —— .button--sm svg 被 @apply 钉死 size-4（16px），
+// 只缩按钮盒子的话图标照样 16px 溢出，看着就是"改了没生效"
+.model-field-hint.button {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.model-field-hint.button svg {
+  width: 10px;
+  height: 10px;
+  margin: 0;
+}
+
+// 字段说明气泡：保留文案里的 \n 换行（智能配置那种两段话）
+.model-hint-pop {
+  white-space: pre-line;
+}
+
+// 模型能力提示的列表排版：圆点缩进、条目间距
+.model-hint-list {
+  padding-left: 16px;
+  margin: 0;
+
+  li {
+    margin-bottom: 6px;
+  }
+}
+
+// 详情表单的三个控件（Base URL / API 格式 / Key）：整宽、同高、
+// 边框比通用 settings-input 更醒目。用 foreground 混色而不是写死的白 ——
+// 切浅色主题时边框自动变成深色，不会留一圈发白的框
+.model-field .settings-input,
+.settings-select.model-format {
+  height: 34px;
+  border-color: color-mix(
+    in srgb,
+    var(--foreground) 22%,
+    transparent
+  );
+}
+
+// API 格式下拉：触发器整宽、与上下输入框同形。
+// 只命中 .settings-select，菜单那份同名类不吃这条
+.settings-select.model-format {
+  width: 100%;
+  min-width: 0;
+}
+
+// 聚焦时和供应商名字输入框同款反馈：底色提亮 + 主题色描边
+.model-field .settings-input:focus,
+.settings-select.model-format[data-focus-visible="true"] {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+// Key 行：眼睛绝对定位在输入框内右端，文字避开它
+.model-key-wrap {
+  position: relative;
+}
+
+.model-key-input {
+  padding-right: 36px;
+
+  // Edge/WebView2 给 password 输入框自带的显隐按钮：和我们画的重复，关掉
+  &::-ms-reveal,
+  &::-ms-clear {
+    display: none;
+  }
+}
+
+.model-key-eye {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  translate: 0 -50%;
+}
+
+.model-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0 8px;
+}
+
+// 模型列表空状态：虚线框提示（截图样式）
+.model-list-empty {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px dashed
+    color-mix(
+      in srgb,
+      var(--foreground) 22%,
+      transparent
+    );
+  border-radius: 8px;
+}
+
+.model-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+// 模型行：整行一张描边卡片（截图样式），名字 + 标签靠左、操作靠右
+.model-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+// 名字按内容收宽（可收缩），标签紧跟其后；行尾操作靠 .model-row-gap 撑开
+.model-row-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family:
+    "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.model-row-gap {
+  flex: 1;
+}
+
+// 测试连通性状态条：列表下方；testing 灰边、ok 绿、fail 红，右侧 × 可手动关
+.model-test-banner {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 12px;
+
+  // 钉在详情卡片底部：flex 列里吃掉剩余空间（列表很长时贴列表下方）
+  margin-top: auto;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.model-test-banner span {
+  flex: 1;
+}
+
+// 左侧图标槽定宽：环形进度条与勾/叉切换时文字起点不动
+.model-test-banner > :first-child {
+  flex: none;
+  width: 14px;
+  text-align: center;
+}
+
+.model-test-banner button {
+  color: var(--muted);
+  cursor: var(--cursor-interactive);
+  background: none;
+  border: 0;
+}
+
+// 测试中隐藏 ×，但保留占位（visibility 不脱离布局流）
+.model-test-close.is-hidden {
+  visibility: hidden;
+}
+
+// 测试中的环形进度条：sm 尺寸再收一号贴进状态条行高
+.model-progress {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.model-test-banner.ok {
+  color: #3fb950;
+  border-color: rgb(63 185 80 / 40%);
+}
+
+.model-test-banner.fail {
+  color: #f85149;
+  border-color: rgb(248 81 73 / 40%);
+}
+
+// 行内小标签（1M / 视觉）：从已填字段推导，无值不显示
+.model-row-tag {
+  flex: none;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--surface-hover);
+  border-radius: 6px;
+}
+
+// ---- 添加 / 编辑模型弹窗 ----
+
+.model-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.model-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-form-switch {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+
+  // 块状标签自带的下边距会把文字中心顶离开关中心，这里清零
+  .model-field-label {
+    margin-bottom: 0;
+  }
+}
+
+// 高级配置：details 原生折叠，summary 做成一行可点的标题。
+// ⚠️ details 的正文在内容插槽里，父级的 flex gap 管不到 ——
+// 各字段的间距得自己给 margin，否则标签会贴死上一组的按钮
+.model-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.model-advanced .model-form-field {
+  margin-bottom: 14px;
+}
+
+.model-advanced summary {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: var(--cursor-interactive);
+  list-style: none;
+}
+
+.model-advanced summary::before {
+  width: 0;
+  height: 0;
+  content: "";
+  border: 4px solid transparent;
+  border-top-color: var(--muted);
+  transform: translateY(2px);
+}
+
+.model-advanced[open] summary::before {
+  transform: rotate(180deg);
+}
+
+// 选项 chip：方框勾选 + 文字，整块可点
+.model-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-chip {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: var(--cursor-interactive);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.model-chip.is-on {
+  background: var(--segment);
+}
+
+.model-chip.is-locked {
+  cursor: default;
+}
+
+.model-chip-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 9px;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.model-chip-lock {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+// 推理等级：小标签里嵌输入框，右侧 × 移除
+.model-tag {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 6px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.model-tag-input {
+  width: 72px;
+  font-size: 12px;
+  color: var(--foreground);
+  outline: none;
+  background: transparent;
+  border: 0;
+}
+
+.model-tag button {
+  color: var(--muted);
+  cursor: var(--cursor-interactive);
+  background: none;
+  border: 0;
+}
+
+.model-tag-add {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  color: var(--foreground);
+  cursor: var(--cursor-interactive);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+// 固定高度、禁拖拽角：内容多了走内部滚动，不撑破弹窗布局
+.model-mapping {
+  height: 120px;
+  padding: 8px 10px;
+  overflow-y: auto;
+  font-family:
+    "Cascadia Code", Consolas, monospace;
+  line-height: 1.5;
+  resize: none;
+}
+
+// 底部：重置靠左，取消 / 保存靠右
+.model-dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.model-dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.model-reset {
+  text-decoration: underline;
+}

@@ -2,15 +2,15 @@ import { defineConfig } from "vitest/config";
 import { resolve } from "node:path";
 
 export default defineConfig({
-  // 与 vite.config.ts 保持一致的路径别名，tests/ 里 import "@/..." 才可用
-  resolve: {
-    alias: {
-      "@": resolve(__dirname, "src")
-    }
-  },
   test: {
     projects: [
       {
+        // 别名必须写在 project 里：projects 模式下不继承顶层 resolve.alias
+        resolve: {
+          alias: {
+            "@": resolve(__dirname, "src")
+          }
+        },
         test: {
           globals: true,
           name: "utils",

@@ -36,6 +36,9 @@ ssh2 = "0.9"
 # ── 本地 PTY ──
 portable-pty = "0.8"
 
+# ── HTTP 出口（模型连通性测试；已在依赖树里，直用不新增下载）──
+reqwest = { version = "0.13", features = ["json"] }
+
 # ── 异步运行时 ──
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"

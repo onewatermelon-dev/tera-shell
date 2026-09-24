@@ -6,6 +6,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@heroui/react";
 import {
+  ApiOutlined,
   ArrowLeftOutlined,
   BgColorsOutlined,
   CodeOutlined,
@@ -17,6 +18,7 @@ import {
 } from "@ant-design/icons";
 import SettingsRow from "@/settings/components/SettingsRow";
 import DataDirRow from "@/settings/components/DataDirRow";
+import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
 import SettingsSelect, {
   type SelectOption
 } from "@/settings/components/SettingsSelect";
@@ -35,8 +37,8 @@ import {
   type ThemeMode
 } from "@/settings/lib/settings";
 
-/** 左侧导航的两页。 */
-type Section = "general" | "terminal";
+/** 左侧导航的三页。 */
+type Section = "general" | "terminal" | "models";
 
 /** 主题下拉的三项。 */
 const themeOptions = (
@@ -183,17 +185,33 @@ export default function SettingsPage({
           <CodeOutlined />
           {t("settings.nav.terminal")}
         </button>
+        <button
+          type="button"
+          className={
+            section === "models"
+              ? "settings-nav-item is-active"
+              : "settings-nav-item"
+          }
+          onClick={() => setSection("models")}
+        >
+          <ApiOutlined />
+          {t("settings.nav.models")}
+        </button>
       </aside>
 
       <section className="settings-content">
         <h1 className="settings-title">
           {section === "general"
             ? t("settings.nav.general")
-            : t("settings.nav.terminal")}
+            : section === "terminal"
+              ? t("settings.nav.terminal")
+              : t("settings.nav.models")}
         </h1>
-        <p className="settings-subtitle">
-          {t("settings.subtitle")}
-        </p>
+        {section !== "models" && (
+          <p className="settings-subtitle">
+            {t("settings.subtitle")}
+          </p>
+        )}
 
         {section === "general" ? (
           <>
@@ -235,7 +253,7 @@ export default function SettingsPage({
             />
             <DataDirRow />
           </>
-        ) : (
+        ) : section === "terminal" ? (
           <>
             <SettingsRow
               title={t("settings.font.title")}
@@ -331,6 +349,8 @@ export default function SettingsPage({
               />
             </SettingsRow>
           </>
+        ) : (
+          <ModelProvidersPage />
         )}
       </section>
     </div>

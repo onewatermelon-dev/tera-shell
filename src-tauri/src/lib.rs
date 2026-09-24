@@ -70,6 +70,7 @@ pub fn run() {
             sftp::cancel_transfer,
             infra::secret::encrypt,
             infra::secret::decrypt,
+            infra::http::http_post_json,
             data::load_all,
             data::save_one,
             data::current_root,

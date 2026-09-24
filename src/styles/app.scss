@@ -3,14 +3,16 @@
 // 各功能域跟随其后。改动某一域时只碰对应的 partial，避免单文件无限膨胀。
 // 各 partial 职责：shell = 重置与标题栏、sidebar = 会话侧栏、
 // terminal = 标签栏与 xterm、macros = 快捷宏栏与管理面板、
-// settings = 设置页、sftp = 窗口骨架与传输面板、files = 文件列表、
-// dialogs = 各对话框、context-menu = 右键菜单与路径选择、loading = 开屏遮罩。
+// settings = 设置页、models = 模型设置、sftp = 窗口骨架与传输面板、
+// files = 文件列表、dialogs = 各对话框、context-menu = 右键菜单与路径选择、
+// loading = 开屏遮罩。
 
 @use "partials/shell";
 @use "partials/sidebar";
 @use "partials/terminal";
 @use "partials/macros";
 @use "partials/settings";
+@use "partials/models";
 @use "partials/sftp";
 @use "partials/files";
 @use "partials/dialogs";

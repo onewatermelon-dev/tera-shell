@@ -174,6 +174,13 @@
   border-color: var(--accent);
 }
 
+// 展开时 Trigger 处于 data-pressed 态，HeroUI .button 会加 scale(0.97)，
+// 整框看着缩了一圈 —— 下拉框不是按压按钮，取消这个缩放
+.settings-select[data-pressed="true"],
+.settings-select:active {
+  transform: none;
+}
+
 .settings-select-icon {
   display: flex;
   font-size: 13px;
@@ -204,6 +211,19 @@
   display: inline-flex;
   margin-right: 8px;
   color: var(--muted);
+}
+
+// 菜单项文字占满剩余宽度，把选中勾顶到最右侧
+.settings-select-item-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.settings-select-check {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--foreground);
 }
 
 // ---- 输入框 ----

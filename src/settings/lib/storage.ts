@@ -16,7 +16,8 @@ const cache = new Map<string, string>();
 export const DataName = {
   sessions: "sessions",
   settings: "settings",
-  macros: "macros"
+  macros: "macros",
+  models: "models"
 } as const;
 
 /**

@@ -130,6 +130,81 @@ const zhCN = {
   "settings.nav.group": "基础设置",
   "settings.nav.general": "常规",
   "settings.nav.terminal": "终端",
+  "settings.nav.models": "模型设置",
+  "models.desc":
+    "管理自定义模型供应商，配置后可在聊天时选择使用。",
+  "models.addProvider": "添加供应商",
+  "models.newProvider": "新供应商",
+  "models.empty":
+    "还没有供应商，点击右上角「添加供应商」开始配置。",
+  "models.name": "名称",
+  "models.enabled": "启用",
+  "models.disableProvider": "禁用供应商",
+  "models.enableProvider": "启用供应商",
+  "models.deleteProvider": "删除供应商",
+  "models.rename": "重命名",
+  "models.delete": "删除",
+  "models.baseUrl": "Base URL",
+  "models.apiFormat": "API 格式",
+  "models.format.openai":
+    "Chat Completions (/chat/completions)",
+  "models.format.anthropic":
+    "Anthropic Messages (/v1/messages)",
+  "models.format.responses":
+    "Responses (/responses)",
+  "models.key": "API Key",
+  "models.showKey": "显示 / 隐藏密钥",
+  "models.list": "模型列表",
+  "models.addModel": "添加模型",
+  "models.deleteModel": "删除模型",
+  "models.modelPlaceholder": "模型名称",
+  "models.noModels":
+    "当前没有配置模型，添加模型后可在聊天中使用。",
+  "models.editModel": "编辑模型配置",
+  "models.smartConfig": "智能配置",
+  "models.contextWindow": "上下文窗口",
+  "models.maxTokens": "最大输出 Token",
+  "models.advanced": "高级配置",
+  "models.inputTypes": "输入类型",
+  "models.inputText": "文本",
+  "models.inputImage": "图片",
+  "models.inputVideo": "视频",
+  "models.inputPdf": "PDF",
+  "models.capabilities": "模型能力",
+  "models.capStructured": "结构化输出",
+  "models.capWebSearch": "原生联网搜索",
+  "models.capSysMsg": "对话中系统消息",
+  "models.capStructuredDesc":
+    "支持通过 JSON Schema 约束模型输出的字段、类型和结构。",
+  "models.capWebSearchDesc":
+    "支持使用模型接口内置的联网搜索能力。",
+  "models.capSysMsgDesc":
+    "支持在对话中途插入系统指令。",
+  "models.capWarn": "请勿勾选模型不支持的能力。",
+  "models.reasoningLevels":
+    "推理等级（从低到高）",
+  "models.reasoningMapping": "推理参数映射",
+  "models.resetForm": "重置表单",
+  "models.removeLevel": "移除等级",
+  "models.hint.smart":
+    "根据模型 ID、Base URL 和 API 格式，为您智能匹配推荐配置。应用会持续更新推荐配置，并自动同步给您。\n\n如果手动修改某项配置，该项将转为手动管理，不再跟随推荐更新；其他配置仍由智能配置管理。",
+  "models.hint.context":
+    "模型一次可处理的上下文容量，单位为 Token。请勿超过模型的实际上限。",
+  "models.hint.maxTokens":
+    "模型单次输出可生成的最大 Token 数。",
+  "models.hint.input":
+    "模型能接收的输入类型；文本为必选且锁定。",
+  "models.hint.cap":
+    "模型支持的高级能力，用于决定相关功能是否可用。",
+  "models.hint.levels":
+    "从低到高列出推理等级，用于映射推理强度参数。",
+  "models.hint.mapping":
+    "使用 CEL 表达式，将当前推理等级 reasoningLevel 映射为模型接口的请求字段。表达式返回的 JSON 对象会合并到实际发送的请求体中。",
+  "models.vision": "视觉",
+  "models.testModel": "测试模型",
+  "models.testing": "正在测试 {name}",
+  "models.testOk": "{name} 连接成功",
+  "models.testFail": "{name} 连接失败",
   "settings.back": "返回工作区",
   "settings.subtitle":
     "修改后立即写入本地，仅对本机生效",
@@ -275,6 +350,83 @@ const enUS: Record<MessageKey, string> = {
   "settings.nav.group": "Basics",
   "settings.nav.general": "General",
   "settings.nav.terminal": "Terminal",
+  "settings.nav.models": "Model providers",
+  "models.desc":
+    "Manage custom model providers; enabled models can be picked when chatting.",
+  "models.addProvider": "Add provider",
+  "models.newProvider": "New provider",
+  "models.empty":
+    "No providers yet — use “Add provider” at the top right.",
+  "models.name": "Name",
+  "models.enabled": "Enabled",
+  "models.disableProvider": "Disable provider",
+  "models.enableProvider": "Enable provider",
+  "models.deleteProvider": "Delete provider",
+  "models.rename": "Rename",
+  "models.delete": "Delete",
+  "models.baseUrl": "Base URL",
+  "models.apiFormat": "API format",
+  "models.format.openai":
+    "Chat Completions (/chat/completions)",
+  "models.format.anthropic":
+    "Anthropic Messages (/v1/messages)",
+  "models.format.responses":
+    "Responses (/responses)",
+  "models.key": "API Key",
+  "models.showKey": "Show / hide key",
+  "models.list": "Models",
+  "models.addModel": "Add model",
+  "models.deleteModel": "Delete model",
+  "models.modelPlaceholder": "Model name",
+  "models.noModels":
+    "No models configured yet — add one to use it in chat.",
+  "models.editModel": "Edit model configuration",
+  "models.smartConfig": "Smart config",
+  "models.contextWindow": "Context window",
+  "models.maxTokens": "Max output tokens",
+  "models.advanced": "Advanced",
+  "models.inputTypes": "Input types",
+  "models.inputText": "Text",
+  "models.inputImage": "Image",
+  "models.inputVideo": "Video",
+  "models.inputPdf": "PDF",
+  "models.capabilities": "Capabilities",
+  "models.capStructured": "Structured output",
+  "models.capWebSearch": "Native web search",
+  "models.capSysMsg": "System messages in chat",
+  "models.capStructuredDesc":
+    "Constrain the model's output fields, types and structure via JSON Schema.",
+  "models.capWebSearchDesc":
+    "Use the web search built into the model's API.",
+  "models.capSysMsgDesc":
+    "Insert system instructions mid-conversation.",
+  "models.capWarn":
+    "Don't enable capabilities the model doesn't support.",
+  "models.reasoningLevels":
+    "Reasoning levels (low → high)",
+  "models.reasoningMapping":
+    "Reasoning param mapping",
+  "models.resetForm": "Reset form",
+  "models.removeLevel": "Remove level",
+  "models.hint.smart":
+    "Recommended settings are matched automatically from the model ID, Base URL and API format. Recommendations keep updating and sync to you.\n\nIf you edit a setting manually, that item switches to manual management and stops following recommendations; the rest stay under smart config.",
+  "models.hint.context":
+    "How much context the model handles at once, in tokens. Don't exceed the model's real limit.",
+  "models.hint.maxTokens":
+    "Maximum tokens the model can generate in one output.",
+  "models.hint.input":
+    "Input types the model accepts; text is always required.",
+  "models.hint.cap":
+    "Advanced capabilities the model supports, used to gate related features.",
+  "models.hint.levels":
+    "Reasoning levels from low to high, used to map reasoning effort parameters.",
+  "models.hint.mapping":
+    "Use a CEL expression to map the current reasoning level (reasoningLevel) to model request fields. The JSON object returned by the expression is merged into the actual request body.",
+  "models.vision": "Vision",
+  "models.testModel": "Test model",
+  "models.testing": "Testing {name}",
+  "models.testOk": "{name} connected",
+  "models.testFail": "{name} connection failed",
   "settings.back": "Back to workspace",
   "settings.subtitle":
     "Saved locally and applied to this machine only",
