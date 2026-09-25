@@ -1,4 +1,32 @@
 // HeroUI ListBoxItem 自带 hover/选中/圆角样式，这里只留布局约束
+// 收起态：整栏只剩细条顶部一颗展开钮（列宽由 .workspace.sidebar-closed 控制）
+.sidebar.collapsed {
+  align-items: center;
+}
+
+.sidebar-expand {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  svg {
+    width: 15px;
+  }
+}
+
 .session-item {
   gap: 9px;
   width: 100%;

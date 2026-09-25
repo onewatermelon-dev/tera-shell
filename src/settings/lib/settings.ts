@@ -26,6 +26,8 @@ export type AppSettings = {
   fontSize: number;
   theme: ThemeMode;
   locale: LanguageMode;
+  /** 会话栏是否展开；收起后靠左缘细条上的按钮恢复。 */
+  sidebarOpen: boolean;
   /**
    * 数据存储目录。空字符串表示用默认位置（用户主目录）。
    *
@@ -49,6 +51,7 @@ export const defaultSettings: AppSettings = {
   fontSize: DEFAULT_FONT_SIZE,
   theme: "system",
   locale: "system",
+  sidebarOpen: true,
   dataDir: ""
 };
 
@@ -91,6 +94,8 @@ export function loadSettings(): AppSettings {
       fontSize: clampFontSize(parsed.fontSize),
       theme,
       locale,
+      // 只有显式存过 false 才算收起，其余（含旧数据缺字段）一律展开
+      sidebarOpen: parsed.sidebarOpen !== false,
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir

@@ -65,6 +65,8 @@ const zhCN = {
   "sidebar.noMatch": "没有匹配的会话",
   "sidebar.ready": "就绪",
   "sidebar.connections": "{count} 个连接",
+  "sidebar.collapse": "收起会话栏",
+  "sidebar.expand": "展开会话栏",
 
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
@@ -282,6 +284,8 @@ const enUS: Record<MessageKey, string> = {
   "sidebar.noMatch": "No matching sessions",
   "sidebar.ready": "Ready",
   "sidebar.connections": "{count} connections",
+  "sidebar.collapse": "Collapse sidebar",
+  "sidebar.expand": "Expand sidebar",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",

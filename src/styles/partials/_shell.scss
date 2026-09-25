@@ -190,6 +190,11 @@ button {
   height: calc(100% - 46px);
   padding: 8px;
   background: var(--background);
+
+  // 会话栏收起：左列从整栏缩成一条细竖条（宽度对应 .sidebar-expand）
+  &.sidebar-closed {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
 }
 
 .sidebar {
@@ -216,6 +221,13 @@ button {
   align-items: center;
   font-size: 13px;
   font-weight: 650;
+}
+
+// 头部右侧按钮组（折叠 + 新建），成组靠右，避免被 space-between 拆散
+.sidebar-head-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .sidebar-head small {

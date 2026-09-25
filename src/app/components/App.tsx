@@ -74,6 +74,16 @@ export default function App() {
   // 显示偏好：字体、字号、主题。必须早于 useTerminals —— 终端要用它建实例
   const appSettings = useSettings();
 
+  // 会话栏展开 ⇆ 收起直接读写显示偏好，重启后保持上次的形态
+  const sidebarOpen =
+    appSettings.settings.sidebarOpen;
+  /** 切换会话栏显隐并落盘。 */
+  function toggleSidebar() {
+    appSettings.update({
+      sidebarOpen: !sidebarOpen
+    });
+  }
+
   const terminals = useTerminals(
     // 已关闭/已断开的会话上迟到的 write/resize 只会得到这个错误，
     // 对用户毫无价值 —— 静默丢弃，其它错误照常展示
@@ -283,7 +293,13 @@ export default function App() {
         menuState={menuState}
         hideMenus={settingsOpen}
       />
-      <section className="workspace">
+      <section
+        className={
+          sidebarOpen
+            ? "workspace"
+            : "workspace sidebar-closed"
+        }
+      >
         <SessionSidebar
           sessions={filteredSessions}
           activeId={
@@ -292,6 +308,8 @@ export default function App() {
           }
           openedCount={terminals.opened.length}
           query={query}
+          collapsed={!sidebarOpen}
+          onToggle={toggleSidebar}
           onQueryChange={setQuery}
           onDuplicate={terminals.duplicate}
           onEdit={openEdit}
