@@ -3,6 +3,7 @@ import {
   useEffect,
   useState
 } from "react";
+import { emit } from "@tauri-apps/api/event";
 import {
   applyLocale,
   applyTheme,
@@ -34,6 +35,15 @@ export function useSettings() {
     applyLocale(settings.locale);
     setLocale(settings.locale);
   }, [settings.locale]);
+
+  // 外观广播：SFTP 独立窗口不挂 useSettings，靠这个事件跟随主题与语言
+  // （监听端在 main.tsx 的 bootstrap；只挂在主窗口的 App 上，SFTP 窗口不会回播）
+  useEffect(() => {
+    emit("app://appearance-changed", {
+      theme: settings.theme,
+      locale: settings.locale
+    }).catch(() => {});
+  }, [settings.theme, settings.locale]);
 
   /** 局部更新某一项，写回存储并刷新状态。 */
   const update = useCallback(
