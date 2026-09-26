@@ -19,10 +19,12 @@ import {
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
 import MacroBar from "@/terminal/components/MacroBar";
+import StatusInfoBar from "@/terminal/components/StatusInfoBar";
 import TabContextMenu, {
   type TabAction
 } from "@/terminal/components/TabContextMenu";
 import { useT } from "@/settings/lib/i18n";
+import type { StatusMode } from "@/settings/lib/settings";
 import type { TerminalMacro } from "@/terminal/lib/terminalMacros";
 import {
   PlusOutlined,
@@ -100,6 +102,10 @@ type Props = {
     id: string,
     beforeId: string | null
   ) => void;
+  /** 底部状态栏形态：快捷宏 ⇆ 系统信息（竖条按钮切换）。 */
+  statusMode: StatusMode;
+  /** 信息形态下点击未开放入口（系统 / 进程 / 网络信息）的提示出口。 */
+  onNotify: (message: string) => void;
 };
 
 /**
@@ -156,7 +162,9 @@ export default function TerminalWorkspace({
   onAddMacro,
   onEditMacro,
   onDeleteMacro,
-  onReorderMacro
+  onReorderMacro,
+  statusMode,
+  onNotify
 }: Props) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -966,34 +974,45 @@ export default function TerminalWorkspace({
 
       <div className="terminal-status">
         {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
-        <MacroBar
-          macros={macros}
-          disabled={
-            !macroTargetId ||
-            disconnected[macroTargetId] === true
-          }
-          onRun={macro => {
-            if (macroTargetId)
-              onRunMacro(macro, macroTargetId);
-          }}
-          onAdd={onAddMacro}
-          onEdit={onEditMacro}
-          onDelete={onDeleteMacro}
-          onReorder={onReorderMacro}
-        />
-        {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
-        <div className="status-meta">
-          <span>
-            {active?.kind === "ssh"
-              ? "SSH"
-              : "LOCAL"}
-          </span>
-          <span>UTF-8</span>
-          <span>
-            {active?.terminal.cols || 0} ×{" "}
-            {active?.terminal.rows || 0}
-          </span>
-        </div>
+        {statusMode === "info" ? (
+          // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
+          <StatusInfoBar onNotify={onNotify} />
+        ) : (
+          <>
+            <MacroBar
+              macros={macros}
+              disabled={
+                !macroTargetId ||
+                disconnected[macroTargetId] ===
+                  true
+              }
+              onRun={macro => {
+                if (macroTargetId)
+                  onRunMacro(
+                    macro,
+                    macroTargetId
+                  );
+              }}
+              onAdd={onAddMacro}
+              onEdit={onEditMacro}
+              onDelete={onDeleteMacro}
+              onReorder={onReorderMacro}
+            />
+            {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
+            <div className="status-meta">
+              <span>
+                {active?.kind === "ssh"
+                  ? "SSH"
+                  : "LOCAL"}
+              </span>
+              <span>UTF-8</span>
+              <span>
+                {active?.terminal.cols || 0} ×{" "}
+                {active?.terminal.rows || 0}
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       {searchOpen && (

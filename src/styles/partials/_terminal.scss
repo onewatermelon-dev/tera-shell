@@ -493,6 +493,51 @@ body.tab-dragging {
   white-space: nowrap;
 }
 
+// 状态栏的「信息」形态：左侧入口按钮，与宏区同一布局位（可收缩、可溢出）
+.status-info {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+// 信息入口按钮：外观对齐宏按钮（9px 基调、弱化色），纯按钮无 HeroUI 包装
+.status-info-btn {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  svg {
+    width: 12px;
+  }
+
+  // 运行时长是只读展示，不是入口，不给悬浮反馈
+  &.is-static {
+    cursor: default;
+
+    &:hover {
+      color: var(--muted);
+      background: transparent;
+    }
+  }
+}
+
 // 空状态：HeroUI EmptyState 只提供 p-2/text-sm/text-muted 的基础排版，
 // 垂直居中与元素间距在这里补齐；图标底盘、标题、描述、操作区各自成组。
 .empty-terminal {

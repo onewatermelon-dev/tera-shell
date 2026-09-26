@@ -84,6 +84,19 @@ export default function App() {
     });
   }
 
+  // 底部状态栏形态（快捷宏 ⇆ 信息栏）同样落盘
+  const statusMode =
+    appSettings.settings.statusMode;
+  /** 切换底部状态栏形态并落盘。 */
+  function toggleStatusMode() {
+    appSettings.update({
+      statusMode:
+        statusMode === "macros"
+          ? "info"
+          : "macros"
+    });
+  }
+
   const terminals = useTerminals(
     // 已关闭/已断开的会话上迟到的 write/resize 只会得到这个错误，
     // 对用户毫无价值 —— 静默丢弃，其它错误照常展示
@@ -299,6 +312,8 @@ export default function App() {
         menuState={menuState}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={toggleSidebar}
+        statusMode={statusMode}
+        onToggleStatus={toggleStatusMode}
         hideMenus={settingsOpen}
       />
       <section
@@ -375,6 +390,8 @@ export default function App() {
             macroStore.remove(macro.id)
           }
           onReorderMacro={macroStore.reorder}
+          statusMode={statusMode}
+          onNotify={setError}
         />
         {/* 设置页盖在工作区之上（绝对定位），而不是替换它的内容 ——
             替换会让 TerminalWorkspace 卸载，xterm 的 DOM 随之被移除，
@@ -425,7 +442,7 @@ export default function App() {
       {error && (
         <Alert
           status="danger"
-          className="toast"
+          className="app-toast"
           onClick={() => setError("")}
         >
           <Alert.Content>
@@ -437,7 +454,7 @@ export default function App() {
               伪元素不接收事件，点了当然没反应 */}
           <button
             type="button"
-            className="toast-close"
+            className="app-toast-close"
             aria-label={t("app.action.close")}
             onClick={event => {
               event.stopPropagation();

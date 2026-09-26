@@ -3,13 +3,16 @@ import {
   MenuOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  SettingOutlined
+  SettingOutlined,
+  DashboardOutlined,
+  ThunderboltOutlined
 } from "@ant-design/icons";
 import Hint from "@/shared/components/Hint";
 import {
   useT,
   type Translator
 } from "@/settings/lib/i18n";
+import type { StatusMode } from "@/settings/lib/settings";
 
 /**
  * 菜单项定义。
@@ -166,6 +169,9 @@ type RailProps = {
   onToggleSidebar: () => void;
   /** 打开设置页。 */
   onOpenSettings: () => void;
+  /** 底部状态栏形态（快捷宏 ⇆ 信息栏）与切换动作。 */
+  statusMode: StatusMode;
+  onToggleStatus: () => void;
 };
 
 /**
@@ -173,15 +179,16 @@ type RailProps = {
  *
  * 点击汉堡弹出竖排的一级菜单，每项向右弹子菜单 —— 一级项全部是
  * SubmenuTrigger，onAction 只会收到子菜单项的 id，与原水平菜单栏一致。
- * 汉堡下方是会话栏开关，后续的功能入口图标（系统信息 / 浏览器等）也挂这里；
- * 设置按钮固定在卡片最底部。
+ * 汉堡下方依次是会话栏开关与状态栏形态开关，设置按钮固定在卡片最底部。
  */
 export default function AppRail({
   menus,
   onAction,
   sidebarOpen,
   onToggleSidebar,
-  onOpenSettings
+  onOpenSettings,
+  statusMode,
+  onToggleStatus
 }: RailProps) {
   const t = useT();
   return (
@@ -273,6 +280,31 @@ export default function AppRail({
               <MenuFoldOutlined />
             ) : (
               <MenuUnfoldOutlined />
+            )}
+          </button>
+        </Hint>
+        {/* 状态栏形态开关：图标指向点击后的形态（宏 ⇆ 信息） */}
+        <Hint
+          label={
+            statusMode === "macros"
+              ? t("status.toInfo")
+              : t("status.toMacros")
+          }
+        >
+          <button
+            type="button"
+            className="rail-trigger"
+            aria-label={
+              statusMode === "macros"
+                ? t("status.toInfo")
+                : t("status.toMacros")
+            }
+            onClick={onToggleStatus}
+          >
+            {statusMode === "macros" ? (
+              <DashboardOutlined />
+            ) : (
+              <ThunderboltOutlined />
             )}
           </button>
         </Hint>

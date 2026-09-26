@@ -16,6 +16,7 @@ import AppRail, {
   type MenuState
 } from "@/app/components/AppRail";
 import { useT } from "@/settings/lib/i18n";
+import type { StatusMode } from "@/settings/lib/settings";
 import {
   MinusOutlined,
   BorderOutlined,
@@ -53,6 +54,9 @@ type Props = {
   /** 会话栏展开态与切换动作：透传给左侧竖条上的开关图标。 */
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  /** 底部状态栏形态（快捷宏 ⇆ 信息栏）：透传给左侧竖条上的开关。 */
+  statusMode: StatusMode;
+  onToggleStatus: () => void;
   /** 打开设置页时隐藏菜单入口 —— 那里的动作对设置页没有意义。 */
   hideMenus?: boolean;
 };
@@ -63,6 +67,8 @@ export default function AppHeader({
   menuState,
   sidebarOpen,
   onToggleSidebar,
+  statusMode,
+  onToggleStatus,
   hideMenus = false
 }: Props) {
   const t = useT();
@@ -139,6 +145,8 @@ export default function AppHeader({
           sidebarOpen={sidebarOpen}
           onToggleSidebar={onToggleSidebar}
           onOpenSettings={actions.openSettings}
+          statusMode={statusMode}
+          onToggleStatus={onToggleStatus}
         />
       )}
       <Header

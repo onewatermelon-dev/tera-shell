@@ -163,7 +163,7 @@
 // ⚠️ 用 `inset` 而不是分开写 right/bottom：HeroUI 的 Alert 自带定位属性，
 // 分开写容易被它盖掉，`inset` 一次写全四个方向更稳。
 // z-index 要高于右键菜单（40）与查找框（20），否则会被压住。
-.toast {
+.app-toast {
   position: fixed;
   inset: auto 20px 20px auto;
   z-index: 60;
@@ -180,7 +180,7 @@
 // 右侧的关闭提示：不额外占用 DOM，用户一看就知道能点掉
 // 右上角关闭钮：原先用 ::after 画了个装饰性 ×，伪元素不接收事件、
 // 点了没反应，误导用户以为能关 —— 换成真按钮
-.toast-close {
+.app-toast-close {
   position: absolute;
   top: 6px;
   right: 10px;
@@ -193,7 +193,7 @@
   border: none;
 }
 
-.toast-close:hover {
+.app-toast-close:hover {
   color: var(--foreground);
 }
 

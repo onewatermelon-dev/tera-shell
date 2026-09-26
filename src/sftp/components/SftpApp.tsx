@@ -25,7 +25,10 @@ export default function SftpApp({
   if (!session) {
     return (
       <div className="sftp-standalone">
-        <Alert status="danger" className="toast">
+        <Alert
+          status="danger"
+          className="app-toast"
+        >
           <Alert.Content>
             <Alert.Description>
               找不到这个会话（可能已被删除），请从主窗口重新打开。
@@ -45,7 +48,7 @@ export default function SftpApp({
       {error && (
         <Alert
           status="danger"
-          className="toast"
+          className="app-toast"
           onClick={() => setError("")}
         >
           <Alert.Content>

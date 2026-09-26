@@ -19,6 +19,9 @@ export type ThemeMode =
 export type LanguageMode =
   "system" | "zh-CN" | "en-US";
 
+/** 底部状态栏的形态：macros=快捷宏，info=系统信息栏。 */
+export type StatusMode = "macros" | "info";
+
 export type AppSettings = {
   /** 终端字体族。留空表示用内置默认（见 TERMINAL_FONT_FALLBACK）。 */
   fontFamily: string;
@@ -28,6 +31,8 @@ export type AppSettings = {
   locale: LanguageMode;
   /** 会话栏是否展开；收起后靠左缘细条上的按钮恢复。 */
   sidebarOpen: boolean;
+  /** 底部状态栏内容：见 StatusMode。 */
+  statusMode: StatusMode;
   /**
    * 数据存储目录。空字符串表示用默认位置（用户主目录）。
    *
@@ -52,6 +57,7 @@ export const defaultSettings: AppSettings = {
   theme: "system",
   locale: "system",
   sidebarOpen: true,
+  statusMode: "macros",
   dataDir: ""
 };
 
@@ -96,6 +102,10 @@ export function loadSettings(): AppSettings {
       locale,
       // 只有显式存过 false 才算收起，其余（含旧数据缺字段）一律展开
       sidebarOpen: parsed.sidebarOpen !== false,
+      statusMode:
+        parsed.statusMode === "info"
+          ? "info"
+          : "macros",
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir

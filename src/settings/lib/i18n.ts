@@ -68,6 +68,16 @@ const zhCN = {
   "sidebar.collapse": "收起会话栏",
   "sidebar.expand": "展开会话栏",
 
+  "status.toInfo": "切换到信息栏",
+  "status.toMacros": "切换到快捷宏",
+  "status.info.system": "系统信息",
+  "status.info.process": "进程信息",
+  "status.info.network": "网络信息",
+  "status.info.run": "运行",
+  "status.info.load": "负载",
+  "status.info.net": "网络",
+  "status.notReady": "该面板尚未开放",
+
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
   "session.eyebrow": "SSH 会话",
@@ -286,6 +296,16 @@ const enUS: Record<MessageKey, string> = {
   "sidebar.connections": "{count} connections",
   "sidebar.collapse": "Collapse sidebar",
   "sidebar.expand": "Expand sidebar",
+
+  "status.toInfo": "Switch to info bar",
+  "status.toMacros": "Switch to macros",
+  "status.info.system": "System",
+  "status.info.process": "Processes",
+  "status.info.network": "Network",
+  "status.info.run": "Uptime",
+  "status.info.load": "Load",
+  "status.info.net": "Net",
+  "status.notReady": "Panel not available yet",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",
