@@ -112,3 +112,62 @@
   // 底色交给 Card（--surface）；overflow 裁掉标签栏直角，贴合 Card 圆角
   overflow: hidden;
 }
+
+// 终端卡片与 AI 面板的横向容器：本地会话单列；SSH 会话右侧并排 AI 聊天面板
+.terminal-with-ai {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+
+  &.has-panel {
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 8px;
+  }
+}
+
+// AI 助手占位面板：与会话栏同风格的卡片，布局先落地、聊天功能后接
+.ai-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ai-panel-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 44px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 650;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-panel-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// 底部输入框占位：仅静态外观，不可输入
+.ai-panel-input {
+  flex: none;
+  height: 42px;
+  padding: 0 12px;
+  margin: 10px;
+  font-size: 12px;
+  line-height: 40px;
+  color: var(--muted);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

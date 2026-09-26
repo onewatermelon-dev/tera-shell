@@ -527,614 +527,655 @@ export default function TerminalWorkspace({
   const searchIndex = searchResult.index;
 
   return (
-    // HeroUI Card 面板：圆角 + surface 底色，p-0/gap-0 抵消 Card 内边距
-    <Card className="terminal-pane rounded-xl p-0 gap-0">
-      <div className="tabs-bar">
-        {/* 左栏区域：标签条 + 新建/溢出按钮的定位锚点。flex 权重挂在这一层
+    // SSH 会话激活时右侧并排 AI 聊天面板（占位态），本地会话只有终端卡片
+    <div
+      className={
+        active?.kind === "ssh"
+          ? "terminal-with-ai has-panel"
+          : "terminal-with-ai"
+      }
+    >
+      {/* HeroUI Card 面板：圆角 + surface 底色，p-0/gap-0 抵消 Card 内边距 */}
+      <Card className="terminal-pane rounded-xl p-0 gap-0">
+        <div className="tabs-bar">
+          {/* 左栏区域：标签条 + 新建/溢出按钮的定位锚点。flex 权重挂在这一层
             （拆分时＝主栏比例），+ 按钮因此钉在左栏末尾、分割线左侧，而不是
             卡片最右缘；权重与 .terminal-panes 主栏一致，标签槽与下方窗格
             严丝合缝 */}
-        <div
-          className="tabs-main"
-          style={
-            splitCount
-              ? {
-                  flex: `${splitRatio} 1 0%`
-                }
-              : undefined
-          }
-        >
           <div
-            ref={tabsRef}
-            className="tabs"
-            onWheel={onTabsWheel}
+            className="tabs-main"
+            style={
+              splitCount
+                ? {
+                    flex: `${splitRatio} 1 0%`
+                  }
+                : undefined
+            }
           >
-            {/* HeroUI Tabs：selectedKey 驱动选中态；display:contents 让 Root
+            <div
+              ref={tabsRef}
+              className="tabs"
+              onWheel={onTabsWheel}
+            >
+              {/* HeroUI Tabs：selectedKey 驱动选中态；display:contents 让 Root
               不参与 .tabs 的 flex 布局。拆分栏标签不在这里（它是 .tabs-bar
               下的 .split-tab，见下）。胶囊外观由 .tab--on / .split-tab--on
               按 activePane 决定，两者互斥。 */}
-            <Tabs
-              className="contents"
-              selectedKey={active?.id}
-              onSelectionChange={key => {
-                if (key == null) return;
-                // 拆分标签不在这个 Tabs 里（见下方 .split-tab），这里只可能是会话
-                setFocusedPane("main");
-                onActivate(String(key));
-              }}
-            >
-              <Tabs.List>
-                {sortedTabs.map(tab => (
-                  <Tabs.Tab
-                    key={tab.id}
-                    id={tab.id}
-                    /* data-tab-id：拖拽落点判定要找"鼠标下面是哪个标签"。
+              <Tabs
+                className="contents"
+                selectedKey={active?.id}
+                onSelectionChange={key => {
+                  if (key == null) return;
+                  // 拆分标签不在这个 Tabs 里（见下方 .split-tab），这里只可能是会话
+                  setFocusedPane("main");
+                  onActivate(String(key));
+                }}
+              >
+                <Tabs.List>
+                  {sortedTabs.map(tab => (
+                    <Tabs.Tab
+                      key={tab.id}
+                      id={tab.id}
+                      /* data-tab-id：拖拽落点判定要找"鼠标下面是哪个标签"。
                      RAC Tab 类型不收原生 data-*，运行时透传，spread 绕开类型检查 */
-                    {...{
-                      "data-tab-id": tab.id
+                      {...{
+                        "data-tab-id": tab.id
+                      }}
+                      onMouseDown={event =>
+                        startTabDrag(
+                          event,
+                          tab.id
+                        )
+                      }
+                      // .tab--on = 这只是一圈选中胶囊。只有"活动栏是左栏"且
+                      // 命中当前会话时才加；两侧互斥，见 TerminalWorkspace 顶部
+                      // activePane 与 _terminal.scss 的 .tab--on / .split-tab--on
+                      className={
+                        activePane === "main" &&
+                        tab.id === active?.id
+                          ? "tab tab--on"
+                          : "tab"
+                      }
+                      onContextMenu={event => {
+                        event.preventDefault();
+                        const index =
+                          sortedTabs.findIndex(
+                            item =>
+                              item.id === tab.id
+                          );
+                        setTabMenu({
+                          x: event.clientX,
+                          y: event.clientY,
+                          tabId: tab.id,
+                          canCloseRight:
+                            index <
+                            sortedTabs.length - 1
+                        });
+                      }}
+                      // 点击已激活的标签不会触发 onSelectionChange（activeId 没变、
+                      // 挂载用的 layout effect 也不会跑），这里统一在点击后交回焦点。
+                      // RAC 在 press 阶段会聚焦 Tab 自身，故放到下一帧再抢，
+                      // 保证最终的焦点落在终端上。关闭钮会 stopPropagation，点 × 不进这里。
+                      onClick={() =>
+                        requestAnimationFrame(
+                          () =>
+                            onFocusTerminal(
+                              tab.id
+                            )
+                        )
+                      }
+                    >
+                      <span
+                        className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
+                      ></span>
+                      {/* 名字截断后：悬停 + 滚轮横向滚动看全名（见 onTabsWheel），
+                        不弹 tooltip */}
+                      {/* 名字截断时悬停滚动：轨道里放两份文字首尾相接
+                        （第二份 aria-hidden），位移 -50% 无缝循环 */}
+                      <span className="tab-name">
+                        <span className="tab-name-track">
+                          <span className="tab-name-text">
+                            {tab.name}
+                          </span>
+                          <span
+                            className="tab-name-text"
+                            aria-hidden="true"
+                          >
+                            {tab.name}
+                          </span>
+                        </span>
+                      </span>
+                      {/* 关闭钮在 RAC Tab 内部：pointerdown 也要拦截，
+                      否则外层 Tab 的 press 会先于 click 触发 */}
+                      <i
+                        onPointerDown={e =>
+                          e.stopPropagation()
+                        }
+                        onClick={e => {
+                          e.stopPropagation();
+                          onClose(tab.id);
+                        }}
+                      >
+                        ×
+                      </i>
+                    </Tabs.Tab>
+                  ))}
+                </Tabs.List>
+              </Tabs>
+            </div>
+            {/* 新建标签按钮钉在左栏区域末尾（外面包着 .tabs-main，absolute
+            锚点是它）：拆分时不会被一起裁掉，也不会跑到分割线右边 */}
+            <Hint label={t("terminal.newTab")}>
+              <Button
+                className="new-tab"
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                aria-label={t("terminal.newTab")}
+                onPress={onCreate}
+              >
+                <PlusOutlined />
+              </Button>
+            </Hint>
+            {tabMenu && (
+              <TabContextMenu
+                x={tabMenu.x}
+                y={tabMenu.y}
+                canCloseRight={
+                  tabMenu.canCloseRight
+                }
+                // 已有拆分栏的会话不再显示拆分项（菜单也从拆分标签上触发）
+                canSplit={
+                  !splitIds.includes(
+                    tabMenu.tabId
+                  )
+                }
+                onClose={() => setTabMenu(null)}
+                onAction={(action: TabAction) => {
+                  if (action === "split") {
+                    // 拆的是被右键的那个标签（VSCode 行为），新会话加进拆分标签组。
+                    // 首次拆分时把分割线归到正中；组已在就不动用户拖过的比例
+                    if (splitCount === 0)
+                      setSplitRatio(0.5);
+                    void onSplit(
+                      tabMenu.tabId
+                    ).then(newId => {
+                      if (!newId) return;
+                      setFocusedPane("split");
+                      requestAnimationFrame(() =>
+                        onFocusTerminal(newId)
+                      );
+                    });
+                    return;
+                  }
+                  // 关闭右侧/其他只作用于左栏列表；关闭所有连拆分栏一起关
+                  const ids = sortedTabs.map(
+                    item => item.id
+                  );
+                  const index = ids.indexOf(
+                    tabMenu.tabId
+                  );
+                  if (action === "close") {
+                    onClose(tabMenu.tabId);
+                  } else if (
+                    action === "closeRight"
+                  ) {
+                    onCloseTabs(
+                      ids.slice(index + 1)
+                    );
+                  } else if (
+                    action === "closeOthers"
+                  ) {
+                    onCloseTabs(
+                      ids.filter(
+                        item =>
+                          item !== tabMenu.tabId
+                      )
+                    );
+                  } else {
+                    onCloseTabs(
+                      opened.map(item => item.id)
+                    );
+                  }
+                }}
+              />
+            )}
+            {overflowed.length > 0 && (
+              <div className="tabs-more">
+                {/* 溢出标签菜单：原先是手写 fixed 定位 + 全局 mousedown 收起，
+                现统一交给 HeroUI Dropdown（自动定位、焦点管理与关闭语义） */}
+                <Dropdown.Root>
+                  {/* 触发器必须是 MenuTrigger 的直接子元素：外面包 Tooltip 的话
+                  RAC 找不到 pressable child，菜单打不开并报 PressResponder 警告。
+                  提示信息改用 aria-label 承载。 */}
+                  <Dropdown.Trigger
+                    className="more-btn"
+                    aria-label={t(
+                      "terminal.overflowTabs",
+                      {
+                        count: overflowed.length
+                      }
+                    )}
+                  >
+                    <DownOutlined />
+                  </Dropdown.Trigger>
+                  <Dropdown.Popover placement="bottom end">
+                    <Dropdown.Menu
+                      aria-label={t(
+                        "terminal.moreTabs"
+                      )}
+                      selectionMode="single"
+                      selectedKeys={
+                        active ? [active.id] : []
+                      }
+                      onAction={key =>
+                        activateOverflow(
+                          String(key)
+                        )
+                      }
+                    >
+                      {overflowed.map(tab => (
+                        <Dropdown.Item
+                          key={tab.id}
+                          id={tab.id}
+                          textValue={tab.name}
+                        >
+                          <span
+                            className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
+                          ></span>
+                          <span className="more-item-name">
+                            {tab.name}
+                          </span>
+                        </Dropdown.Item>
+                      ))}
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown.Root>
+              </div>
+            )}
+          </div>
+          {/* 拆分标签条：右侧窗格是第二个标签组，标签按内容收宽横向排列。
+            整条与下方拆分窗格用同一套 flex 权重（主栏 ratio、1-ratio、
+            占位对齐 4px 分隔条），天然钉在分割线右侧并跟随拖动。
+            必须放在 .tabs-main 之外的 .tabs-bar 下，条才和窗格同参照系 */}
+          {splitCount > 0 && (
+            <>
+              <div className="tabs-divider-gap" />
+              <div
+                className="tabs-split"
+                style={{
+                  flex: `${1 - splitRatio} 1 0%`
+                }}
+                onWheel={event => {
+                  event.currentTarget.scrollLeft +=
+                    event.deltaY + event.deltaX;
+                }}
+              >
+                {splitSessions.map(session => (
+                  <button
+                    key={session.id}
+                    type="button"
+                    // 按下即切到这只标签（不依赖 click：拖拽会抑制 click，
+                    // 手抖超过阈值也会让"松手才算"的判定失效）；
+                    // 接着交给 startTabDrag，拖到别处就是换栏
+                    onMouseDown={event => {
+                      if (event.button !== 0)
+                        return;
+                      // 点标签只切换拆分窗格里显示的会话，不抢活动栏/键盘焦点 ——
+                      // 聚焦当前在主窗格时点了标签不该把输入口也挪过去；
+                      // 要激活拆分窗格：点窗格内部（宿主 div 的 mousedown）。
+                      // 拆分窗格已是活动栏时，焦点跟着新会话走（接着敲的场景）
+                      onActivateSplit(session.id);
+                      if (activePane === "split")
+                        requestAnimationFrame(
+                          () =>
+                            onFocusTerminal(
+                              session.id
+                            )
+                        );
+                      startTabDrag(
+                        event,
+                        session.id
+                      );
                     }}
-                    onMouseDown={event =>
-                      startTabDrag(event, tab.id)
-                    }
-                    // .tab--on = 这只是一圈选中胶囊。只有"活动栏是左栏"且
-                    // 命中当前会话时才加；两侧互斥，见 TerminalWorkspace 顶部
-                    // activePane 与 _terminal.scss 的 .tab--on / .split-tab--on
+                    // .split-tab--on = 拆分窗格当前显示的那只的选中胶囊，
+                    // 仅在活动栏是拆分窗格时加上；与左栏 .tab--on 互斥
                     className={
-                      activePane === "main" &&
-                      tab.id === active?.id
-                        ? "tab tab--on"
-                        : "tab"
+                      activePane === "split" &&
+                      session.id ===
+                        splitVisibleId
+                        ? "split-tab split-tab--on"
+                        : "split-tab"
                     }
                     onContextMenu={event => {
                       event.preventDefault();
-                      const index =
-                        sortedTabs.findIndex(
-                          item =>
-                            item.id === tab.id
-                        );
                       setTabMenu({
                         x: event.clientX,
                         y: event.clientY,
-                        tabId: tab.id,
-                        canCloseRight:
-                          index <
-                          sortedTabs.length - 1
+                        tabId: session.id,
+                        canCloseRight: false
                       });
                     }}
-                    // 点击已激活的标签不会触发 onSelectionChange（activeId 没变、
-                    // 挂载用的 layout effect 也不会跑），这里统一在点击后交回焦点。
-                    // RAC 在 press 阶段会聚焦 Tab 自身，故放到下一帧再抢，
-                    // 保证最终的焦点落在终端上。关闭钮会 stopPropagation，点 × 不进这里。
-                    onClick={() =>
-                      requestAnimationFrame(() =>
-                        onFocusTerminal(tab.id)
-                      )
-                    }
                   >
                     <span
-                      className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
+                      className={`status-dot${disconnected[session.id] ? " off" : ""}`}
                     ></span>
-                    {/* 名字截断后：悬停 + 滚轮横向滚动看全名（见 onTabsWheel），
-                        不弹 tooltip */}
-                    {/* 名字截断时悬停滚动：轨道里放两份文字首尾相接
-                        （第二份 aria-hidden），位移 -50% 无缝循环 */}
-                    <span className="tab-name">
+                    {/* 名字截断后：悬停 + 滚轮横向滚动看全名（与左栏一致） */}
+                    <span className="split-tab-name">
                       <span className="tab-name-track">
                         <span className="tab-name-text">
-                          {tab.name}
+                          {session.name}
                         </span>
                         <span
                           className="tab-name-text"
                           aria-hidden="true"
                         >
-                          {tab.name}
+                          {session.name}
                         </span>
                       </span>
                     </span>
-                    {/* 关闭钮在 RAC Tab 内部：pointerdown 也要拦截，
-                      否则外层 Tab 的 press 会先于 click 触发 */}
+                    {/* × = 关掉这个标签的会话（独立 PTY 一并结束） */}
                     <i
+                      // pointerdown 与 mousedown 都要拦：前者是 RAC 的
+                      // press，后者会触发标签的拖拽/轻点判定
                       onPointerDown={e =>
+                        e.stopPropagation()
+                      }
+                      onMouseDown={e =>
                         e.stopPropagation()
                       }
                       onClick={e => {
                         e.stopPropagation();
-                        onClose(tab.id);
+                        onClose(session.id);
                       }}
                     >
                       ×
                     </i>
-                  </Tabs.Tab>
+                  </button>
                 ))}
-              </Tabs.List>
-            </Tabs>
-          </div>
-          {/* 新建标签按钮钉在左栏区域末尾（外面包着 .tabs-main，absolute
-            锚点是它）：拆分时不会被一起裁掉，也不会跑到分割线右边 */}
-          <Hint label={t("terminal.newTab")}>
-            <Button
-              className="new-tab"
-              variant="ghost"
-              size="sm"
-              isIconOnly
-              aria-label={t("terminal.newTab")}
-              onPress={onCreate}
-            >
-              <PlusOutlined />
-            </Button>
-          </Hint>
-          {tabMenu && (
-            <TabContextMenu
-              x={tabMenu.x}
-              y={tabMenu.y}
-              canCloseRight={
-                tabMenu.canCloseRight
-              }
-              // 已有拆分栏的会话不再显示拆分项（菜单也从拆分标签上触发）
-              canSplit={
-                !splitIds.includes(tabMenu.tabId)
-              }
-              onClose={() => setTabMenu(null)}
-              onAction={(action: TabAction) => {
-                if (action === "split") {
-                  // 拆的是被右键的那个标签（VSCode 行为），新会话加进拆分标签组。
-                  // 首次拆分时把分割线归到正中；组已在就不动用户拖过的比例
-                  if (splitCount === 0)
-                    setSplitRatio(0.5);
-                  void onSplit(
-                    tabMenu.tabId
-                  ).then(newId => {
-                    if (!newId) return;
-                    setFocusedPane("split");
-                    requestAnimationFrame(() =>
-                      onFocusTerminal(newId)
-                    );
-                  });
-                  return;
-                }
-                // 关闭右侧/其他只作用于左栏列表；关闭所有连拆分栏一起关
-                const ids = sortedTabs.map(
-                  item => item.id
-                );
-                const index = ids.indexOf(
-                  tabMenu.tabId
-                );
-                if (action === "close") {
-                  onClose(tabMenu.tabId);
-                } else if (
-                  action === "closeRight"
-                ) {
-                  onCloseTabs(
-                    ids.slice(index + 1)
-                  );
-                } else if (
-                  action === "closeOthers"
-                ) {
-                  onCloseTabs(
-                    ids.filter(
-                      item =>
-                        item !== tabMenu.tabId
-                    )
-                  );
-                } else {
-                  onCloseTabs(
-                    opened.map(item => item.id)
-                  );
-                }
-              }}
-            />
-          )}
-          {overflowed.length > 0 && (
-            <div className="tabs-more">
-              {/* 溢出标签菜单：原先是手写 fixed 定位 + 全局 mousedown 收起，
-                现统一交给 HeroUI Dropdown（自动定位、焦点管理与关闭语义） */}
-              <Dropdown.Root>
-                {/* 触发器必须是 MenuTrigger 的直接子元素：外面包 Tooltip 的话
-                  RAC 找不到 pressable child，菜单打不开并报 PressResponder 警告。
-                  提示信息改用 aria-label 承载。 */}
-                <Dropdown.Trigger
-                  className="more-btn"
-                  aria-label={t(
-                    "terminal.overflowTabs",
-                    {
-                      count: overflowed.length
-                    }
-                  )}
-                >
-                  <DownOutlined />
-                </Dropdown.Trigger>
-                <Dropdown.Popover placement="bottom end">
-                  <Dropdown.Menu
-                    aria-label={t(
-                      "terminal.moreTabs"
-                    )}
-                    selectionMode="single"
-                    selectedKeys={
-                      active ? [active.id] : []
-                    }
-                    onAction={key =>
-                      activateOverflow(
-                        String(key)
-                      )
-                    }
-                  >
-                    {overflowed.map(tab => (
-                      <Dropdown.Item
-                        key={tab.id}
-                        id={tab.id}
-                        textValue={tab.name}
-                      >
-                        <span
-                          className={`status-dot${disconnected[tab.id] ? " off" : ""}`}
-                        ></span>
-                        <span className="more-item-name">
-                          {tab.name}
-                        </span>
-                      </Dropdown.Item>
-                    ))}
-                  </Dropdown.Menu>
-                </Dropdown.Popover>
-              </Dropdown.Root>
-            </div>
+              </div>
+            </>
           )}
         </div>
-        {/* 拆分标签条：右侧窗格是第二个标签组，标签按内容收宽横向排列。
-            整条与下方拆分窗格用同一套 flex 权重（主栏 ratio、1-ratio、
-            占位对齐 4px 分隔条），天然钉在分割线右侧并跟随拖动。
-            必须放在 .tabs-main 之外的 .tabs-bar 下，条才和窗格同参照系 */}
-        {splitCount > 0 && (
-          <>
-            <div className="tabs-divider-gap" />
-            <div
-              className="tabs-split"
-              style={{
-                flex: `${1 - splitRatio} 1 0%`
-              }}
-              onWheel={event => {
-                event.currentTarget.scrollLeft +=
-                  event.deltaY + event.deltaX;
-              }}
-            >
-              {splitSessions.map(session => (
-                <button
-                  key={session.id}
-                  type="button"
-                  // 按下即切到这只标签（不依赖 click：拖拽会抑制 click，
-                  // 手抖超过阈值也会让"松手才算"的判定失效）；
-                  // 接着交给 startTabDrag，拖到别处就是换栏
-                  onMouseDown={event => {
-                    if (event.button !== 0)
-                      return;
-                    // 点标签只切换拆分窗格里显示的会话，不抢活动栏/键盘焦点 ——
-                    // 聚焦当前在主窗格时点了标签不该把输入口也挪过去；
-                    // 要激活拆分窗格：点窗格内部（宿主 div 的 mousedown）。
-                    // 拆分窗格已是活动栏时，焦点跟着新会话走（接着敲的场景）
-                    onActivateSplit(session.id);
-                    if (activePane === "split")
-                      requestAnimationFrame(() =>
-                        onFocusTerminal(
-                          session.id
-                        )
-                      );
-                    startTabDrag(
-                      event,
-                      session.id
-                    );
-                  }}
-                  // .split-tab--on = 拆分窗格当前显示的那只的选中胶囊，
-                  // 仅在活动栏是拆分窗格时加上；与左栏 .tab--on 互斥
-                  className={
-                    activePane === "split" &&
-                    session.id === splitVisibleId
-                      ? "split-tab split-tab--on"
-                      : "split-tab"
-                  }
-                  onContextMenu={event => {
-                    event.preventDefault();
-                    setTabMenu({
-                      x: event.clientX,
-                      y: event.clientY,
-                      tabId: session.id,
-                      canCloseRight: false
-                    });
-                  }}
-                >
-                  <span
-                    className={`status-dot${disconnected[session.id] ? " off" : ""}`}
-                  ></span>
-                  {/* 名字截断后：悬停 + 滚轮横向滚动看全名（与左栏一致） */}
-                  <span className="split-tab-name">
-                    <span className="tab-name-track">
-                      <span className="tab-name-text">
-                        {session.name}
-                      </span>
-                      <span
-                        className="tab-name-text"
-                        aria-hidden="true"
-                      >
-                        {session.name}
-                      </span>
-                    </span>
-                  </span>
-                  {/* × = 关掉这个标签的会话（独立 PTY 一并结束） */}
-                  <i
-                    // pointerdown 与 mousedown 都要拦：前者是 RAC 的
-                    // press，后者会触发标签的拖拽/轻点判定
-                    onPointerDown={e =>
-                      e.stopPropagation()
-                    }
-                    onMouseDown={e =>
-                      e.stopPropagation()
-                    }
-                    onClick={e => {
-                      e.stopPropagation();
-                      onClose(session.id);
-                    }}
-                  >
-                    ×
-                  </i>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
 
-      {opened.length > 0 ? (
-        splitCount > 0 ? (
-          // 拆分状态：主栏 + 拆分窗格并排（组内切标签只换窗格里的内容）；
-          // key 与空状态分支不同（理由见下）。拖动分隔条调整两栏比例（20%~80%）。
-          <div
-            key="split"
-            ref={panesRef}
-            className="terminal-panes"
-          >
+        {opened.length > 0 ? (
+          splitCount > 0 ? (
+            // 拆分状态：主栏 + 拆分窗格并排（组内切标签只换窗格里的内容）；
+            // key 与空状态分支不同（理由见下）。拖动分隔条调整两栏比例（20%~80%）。
             <div
+              key="split"
+              ref={panesRef}
+              className="terminal-panes"
+            >
+              <div
+                ref={onTerminalHost}
+                className="terminal-host"
+                // 点进左栏终端就把活动栏收回左栏，胶囊跟着回到对应会话标签
+                onMouseDown={() =>
+                  setFocusedPane("main")
+                }
+                style={{
+                  // grow 权重分配「剩余空间」（已扣除 4px 分隔条）：
+                  // 50% 时分割线恰在正中；若用固定 basis，
+                  // 两栏加分隔条会超出容器，分隔线产生偏移
+                  flex: `${splitRatio} 1 0%`
+                }}
+              ></div>
+              <div
+                className="pane-divider"
+                onPointerDown={startPaneDrag}
+              ></div>
+              <div
+                ref={onSplitHost}
+                className="terminal-host terminal-host--split"
+                // 点进拆分窗格就把活动栏切过去
+                onMouseDown={() =>
+                  setFocusedPane("split")
+                }
+                style={{
+                  flex: `${1 - splitRatio} 1 0%`
+                }}
+              ></div>
+            </div>
+          ) : (
+            // key 必须与空状态分支不同：终端元素是 replaceChildren 命令式挂进宿主的，
+            // React 不感知；若两个分支复用同一 div 节点，关闭全部标签后残留的
+            // .terminal-instance 会挤进 .empty-terminal 首位，把内容顶离垂直居中。
+            <div
+              key="host"
               ref={onTerminalHost}
               className="terminal-host"
-              // 点进左栏终端就把活动栏收回左栏，胶囊跟着回到对应会话标签
-              onMouseDown={() =>
-                setFocusedPane("main")
-              }
-              style={{
-                // grow 权重分配「剩余空间」（已扣除 4px 分隔条）：
-                // 50% 时分割线恰在正中；若用固定 basis，
-                // 两栏加分隔条会超出容器，分隔线产生偏移
-                flex: `${splitRatio} 1 0%`
-              }}
             ></div>
-            <div
-              className="pane-divider"
-              onPointerDown={startPaneDrag}
-            ></div>
-            <div
-              ref={onSplitHost}
-              className="terminal-host terminal-host--split"
-              // 点进拆分窗格就把活动栏切过去
-              onMouseDown={() =>
-                setFocusedPane("split")
-              }
-              style={{
-                flex: `${1 - splitRatio} 1 0%`
-              }}
-            ></div>
-          </div>
+          )
         ) : (
-          // key 必须与空状态分支不同：终端元素是 replaceChildren 命令式挂进宿主的，
-          // React 不感知；若两个分支复用同一 div 节点，关闭全部标签后残留的
-          // .terminal-instance 会挤进 .empty-terminal 首位，把内容顶离垂直居中。
-          <div
-            key="host"
-            ref={onTerminalHost}
-            className="terminal-host"
-          ></div>
-        )
-      ) : (
-        <EmptyState
-          key="empty"
-          className="empty-terminal"
-        >
-          {/* HeroUI Surface 做圆形图标底盘：空状态的视觉重心，
+          <EmptyState
+            key="empty"
+            className="empty-terminal"
+          >
+            {/* HeroUI Surface 做圆形图标底盘：空状态的视觉重心，
               比原先裸放的 42px 灰图标更有层次 */}
-          <Surface className="empty-icon">
-            <LinkOutlined />
-          </Surface>
-          <Typography.Heading
-            level={3}
-            className="empty-title"
-          >
-            {t("terminal.emptyTitle")}
-          </Typography.Heading>
-          <Typography.Paragraph
-            size="sm"
-            className="empty-desc"
-          >
-            {t("terminal.emptyDesc")}
-          </Typography.Paragraph>
-          <div className="empty-actions">
-            <Button
-              variant="primary"
-              size="sm"
-              onPress={onCreate}
+            <Surface className="empty-icon">
+              <LinkOutlined />
+            </Surface>
+            <Typography.Heading
+              level={3}
+              className="empty-title"
             >
-              <PlusOutlined />
-              {t("terminal.newTab")}
-            </Button>
-            <Button
-              variant="ghost"
+              {t("terminal.emptyTitle")}
+            </Typography.Heading>
+            <Typography.Paragraph
               size="sm"
-              onPress={onOpenLocal}
+              className="empty-desc"
             >
-              <DesktopOutlined />
-              {t("app.menu.openLocal")}
-            </Button>
-          </div>
-        </EmptyState>
-      )}
-
-      <div className="terminal-status">
-        {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
-        {statusMode === "info" ? (
-          // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
-          <StatusInfoBar onNotify={onNotify} />
-        ) : (
-          <>
-            <MacroBar
-              macros={macros}
-              disabled={
-                !macroTargetId ||
-                disconnected[macroTargetId] ===
-                  true
-              }
-              onRun={macro => {
-                if (macroTargetId)
-                  onRunMacro(
-                    macro,
-                    macroTargetId
-                  );
-              }}
-              onAdd={onAddMacro}
-              onEdit={onEditMacro}
-              onDelete={onDeleteMacro}
-              onReorder={onReorderMacro}
-            />
-            {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
-            <div className="status-meta">
-              <span>
-                {active?.kind === "ssh"
-                  ? "SSH"
-                  : "LOCAL"}
-              </span>
-              <span>UTF-8</span>
-              <span>
-                {active?.terminal.cols || 0} ×{" "}
-                {active?.terminal.rows || 0}
-              </span>
+              {t("terminal.emptyDesc")}
+            </Typography.Paragraph>
+            <div className="empty-actions">
+              <Button
+                variant="primary"
+                size="sm"
+                onPress={onCreate}
+              >
+                <PlusOutlined />
+                {t("terminal.newTab")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={onOpenLocal}
+              >
+                <DesktopOutlined />
+                {t("app.menu.openLocal")}
+              </Button>
             </div>
-          </>
+          </EmptyState>
         )}
-      </div>
 
-      {searchOpen && (
-        // HeroUI Surface：查找浮层的底色/描边/阴影跟随主题 token
-        <Surface className="find-box">
-          <Input
-            ref={searchInputRef}
-            className="find-input"
-            placeholder={t(
-              "terminal.find.placeholder"
-            )}
-            value={query}
-            onChange={e => {
-              setQuery(e.target.value);
-              onSearch(e.target.value, "input");
-            }}
-            onKeyDown={e => {
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey
-              ) {
-                e.preventDefault();
-                onSearch(query, "next");
-              }
-              if (
-                e.key === "Enter" &&
-                e.shiftKey
-              ) {
-                e.preventDefault();
-                onSearch(query, "prev");
-              }
-              if (e.key === "Escape")
-                onCloseSearch();
-            }}
-          />
-          <span className="find-count">
-            {searchError ||
-              (searchCount
-                ? `${searchIndex + 1}/${searchCount}`
-                : query
-                  ? t("terminal.find.noMatch")
-                  : "")}
-          </span>
-          <Hint label={t("terminal.find.prev")}>
-            <Button
-              className="find-btn"
-              variant="tertiary"
-              size="sm"
-              aria-label={t("terminal.find.prev")}
-              onPress={() =>
-                onSearch(query, "prev")
-              }
-            >
-              ↑
-            </Button>
-          </Hint>
-          <Hint label={t("terminal.find.next")}>
-            <Button
-              className="find-btn"
-              variant="tertiary"
-              size="sm"
-              aria-label={t("terminal.find.next")}
-              onPress={() =>
-                onSearch(query, "next")
-              }
-            >
-              ↓
-            </Button>
-          </Hint>
-          <Hint
-            label={t(
-              "terminal.find.caseSensitive"
-            )}
-          >
-            <ToggleButton
-              className="find-btn"
-              variant="ghost"
-              size="sm"
-              aria-label={t(
+        <div className="terminal-status">
+          {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
+          {statusMode === "info" ? (
+            // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
+            <StatusInfoBar onNotify={onNotify} />
+          ) : (
+            <>
+              <MacroBar
+                macros={macros}
+                disabled={
+                  !macroTargetId ||
+                  disconnected[macroTargetId] ===
+                    true
+                }
+                onRun={macro => {
+                  if (macroTargetId)
+                    onRunMacro(
+                      macro,
+                      macroTargetId
+                    );
+                }}
+                onAdd={onAddMacro}
+                onEdit={onEditMacro}
+                onDelete={onDeleteMacro}
+                onReorder={onReorderMacro}
+              />
+              {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
+              <div className="status-meta">
+                <span>
+                  {active?.kind === "ssh"
+                    ? "SSH"
+                    : "LOCAL"}
+                </span>
+                <span>UTF-8</span>
+                <span>
+                  {active?.terminal.cols || 0} ×{" "}
+                  {active?.terminal.rows || 0}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {searchOpen && (
+          // HeroUI Surface：查找浮层的底色/描边/阴影跟随主题 token
+          <Surface className="find-box">
+            <Input
+              ref={searchInputRef}
+              className="find-input"
+              placeholder={t(
+                "terminal.find.placeholder"
+              )}
+              value={query}
+              onChange={e => {
+                setQuery(e.target.value);
+                onSearch(e.target.value, "input");
+              }}
+              onKeyDown={e => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey
+                ) {
+                  e.preventDefault();
+                  onSearch(query, "next");
+                }
+                if (
+                  e.key === "Enter" &&
+                  e.shiftKey
+                ) {
+                  e.preventDefault();
+                  onSearch(query, "prev");
+                }
+                if (e.key === "Escape")
+                  onCloseSearch();
+              }}
+            />
+            <span className="find-count">
+              {searchError ||
+                (searchCount
+                  ? `${searchIndex + 1}/${searchCount}`
+                  : query
+                    ? t("terminal.find.noMatch")
+                    : "")}
+            </span>
+            <Hint label={t("terminal.find.prev")}>
+              <Button
+                className="find-btn"
+                variant="tertiary"
+                size="sm"
+                aria-label={t(
+                  "terminal.find.prev"
+                )}
+                onPress={() =>
+                  onSearch(query, "prev")
+                }
+              >
+                ↑
+              </Button>
+            </Hint>
+            <Hint label={t("terminal.find.next")}>
+              <Button
+                className="find-btn"
+                variant="tertiary"
+                size="sm"
+                aria-label={t(
+                  "terminal.find.next"
+                )}
+                onPress={() =>
+                  onSearch(query, "next")
+                }
+              >
+                ↓
+              </Button>
+            </Hint>
+            <Hint
+              label={t(
                 "terminal.find.caseSensitive"
               )}
-              isSelected={searchCaseSensitive}
-              onChange={() =>
-                toggleAndSearch(
-                  onToggleCaseSensitive
-                )
-              }
             >
-              Aa
-            </ToggleButton>
-          </Hint>
-          <Hint label={t("terminal.find.regex")}>
-            <ToggleButton
-              className="find-btn"
-              variant="ghost"
-              size="sm"
-              aria-label={t(
-                "terminal.find.regex"
-              )}
-              isSelected={searchRegex}
-              onChange={() =>
-                toggleAndSearch(onToggleRegex)
-              }
+              <ToggleButton
+                className="find-btn"
+                variant="ghost"
+                size="sm"
+                aria-label={t(
+                  "terminal.find.caseSensitive"
+                )}
+                isSelected={searchCaseSensitive}
+                onChange={() =>
+                  toggleAndSearch(
+                    onToggleCaseSensitive
+                  )
+                }
+              >
+                Aa
+              </ToggleButton>
+            </Hint>
+            <Hint
+              label={t("terminal.find.regex")}
             >
-              .*
-            </ToggleButton>
-          </Hint>
-          <Hint label={t("terminal.find.close")}>
-            <Button
-              className="find-btn"
-              variant="tertiary"
-              size="sm"
-              aria-label={t(
-                "terminal.find.close"
-              )}
-              onPress={onCloseSearch}
+              <ToggleButton
+                className="find-btn"
+                variant="ghost"
+                size="sm"
+                aria-label={t(
+                  "terminal.find.regex"
+                )}
+                isSelected={searchRegex}
+                onChange={() =>
+                  toggleAndSearch(onToggleRegex)
+                }
+              >
+                .*
+              </ToggleButton>
+            </Hint>
+            <Hint
+              label={t("terminal.find.close")}
             >
-              ×
-            </Button>
-          </Hint>
-        </Surface>
+              <Button
+                className="find-btn"
+                variant="tertiary"
+                size="sm"
+                aria-label={t(
+                  "terminal.find.close"
+                )}
+                onPress={onCloseSearch}
+              >
+                ×
+              </Button>
+            </Hint>
+          </Surface>
+        )}
+      </Card>
+      {active?.kind === "ssh" && (
+        // AI 助手占位面板：布局先落地，聊天功能后接
+        <aside className="ai-panel">
+          <div className="ai-panel-head">
+            <span>{t("ai.title")}</span>
+          </div>
+          <div className="ai-panel-body">
+            {t("ai.placeholder")}
+          </div>
+          <div className="ai-panel-input">
+            {t("ai.input")}
+          </div>
+        </aside>
       )}
-    </Card>
+    </div>
   );
 }

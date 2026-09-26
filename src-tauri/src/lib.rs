@@ -1,5 +1,6 @@
 // 后端按功能域分目录：每个域一个模块目录，域内再按职责拆文件。
 // 模块路径与原先的 `xxx.rs` 完全一致，所以域内代码无需改动。
+pub mod ai;
 pub mod data;
 pub mod fonts;
 pub mod fs;
@@ -37,6 +38,8 @@ pub fn run() {
         .manage(sftp::Transfers::default())
         // 正在被本地编辑的远程文件，保存后自动回传。
         .manage(sftp::open::EditWatchers::default())
+        // AI 命令的 exec 会话池：独立于终端 PTY 的命令执行通道。
+        .manage(ai::ExecPool::default())
         // 暴露给前端 invoke() 的最小终端命令集合。
         .invoke_handler(tauri::generate_handler![
             terminal::start,
@@ -68,6 +71,7 @@ pub fn run() {
             sftp::window::open_sftp_window,
             sftp::resume_transfer,
             sftp::cancel_transfer,
+            ai::run_command,
             infra::secret::encrypt,
             infra::secret::decrypt,
             infra::http::http_post_json,

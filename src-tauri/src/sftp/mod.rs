@@ -21,10 +21,10 @@ use tauri::State;
 use tracing::{info, warn};
 
 /// 建立 TCP 连接的超时，避免网络不可达时长时间无响应。
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// 单次会话操作（握手 / 认证 / 读目录）的超时，防止界面一直等。
-const SESSION_TIMEOUT_MS: u32 = 20_000;
+pub(crate) const SESSION_TIMEOUT_MS: u32 = 20_000;
 
 /// 目录缓存有效期。跨公网的 readdir 一次就要一个 RTT（几百毫秒起），
 /// 短时间内重复访问（返回上级、来回切换）直接命中缓存。
@@ -122,8 +122,8 @@ pub struct SftpListing {
 ///
 /// 服务器通常只问一次 "Password:"，但某些配置（如带二步验证）会问多次；
 /// 这里对每个提问都回答同一个密码，认证失败时由上层给出错误提示。
-struct PasswordPrompter {
-	password: String,
+pub(crate) struct PasswordPrompter {
+	pub(crate) password: String,
 }
 
 impl KeyboardInteractivePrompt for PasswordPrompter {
@@ -441,6 +441,41 @@ fn connect(
 	username: &str,
 	password: Option<&str>,
 ) -> Result<Arc<Connection>, String> {
+	let session =
+		establish_session(host, port, username, password)?;
+	// 通道只开一次并随连接缓存下来，后续浏览不再重复协商
+	let sftp = session
+		.sftp()
+		.map_err(|error| format!("打开 SFTP 通道失败：{error}"))?;
+	// uid/gid 名字映射（读不到就退化成显示数字，不影响浏览）
+	let users = read_id_map(&sftp, "/etc/passwd");
+	let groups = read_id_map(&sftp, "/etc/group");
+	info!(
+		host = %host,
+		port,
+		username = %username,
+		users = users.len(),
+		groups = groups.len(),
+		"SFTP 认证通过并已打开通道"
+	);
+	Ok(Arc::new(Connection {
+		sftp: Arc::new(sftp),
+		users,
+		groups,
+	}))
+}
+
+/// 建立一条**已认证**的 SSH 会话（TCP + 握手 + 认证），不打开任何通道。
+///
+/// SFTP 与 AI 命令执行共用：认证策略一致 —— 有保存密码时先走 password
+/// 方法，被拒后用 keyboard-interactive 重试（不少服务器只开后者）；没有
+/// 密码则回退 ssh-agent。密码只在内存中使用，不进日志。
+pub(crate) fn establish_session(
+	host: &str,
+	port: u16,
+	username: &str,
+	password: Option<&str>,
+) -> Result<Session, String> {
 	let address = (host, port)
 		.to_socket_addrs()
 		.map_err(|error| {
@@ -455,7 +490,7 @@ fn connect(
 	.map_err(|error| {
 		format!("连接 {host}:{port} 失败：{error}")
 	})?;
-	// 目录浏览是小包往返，关掉 Nagle 降低延迟
+	// 小包往返为主的交互，关掉 Nagle 降低延迟
 	let _ = tcp.set_nodelay(true);
 
 	let mut session = Session::new().map_err(|error| error.to_string())?;
@@ -465,9 +500,6 @@ fn connect(
 		.handshake()
 		.map_err(|error| format!("SSH 握手失败：{error}"))?;
 
-	// 认证：有保存密码时先走 password 方法。不少服务器禁用了该方法、只开
-	// keyboard-interactive（系统 ssh 默认会走后者，所以终端能登录而这里失败），
-	// 因此密码被拒时再用 keyboard-interactive 重试一次。没有密码则回退 ssh-agent。
 	let authenticated = match password {
 		Some(password) => {
 			let mut ok = session
@@ -507,26 +539,7 @@ fn connect(
 			),
 		});
 	}
-	// 通道只开一次并随连接缓存下来，后续浏览不再重复协商
-	let sftp = session
-		.sftp()
-		.map_err(|error| format!("打开 SFTP 通道失败：{error}"))?;
-	// uid/gid 名字映射（读不到就退化成显示数字，不影响浏览）
-	let users = read_id_map(&sftp, "/etc/passwd");
-	let groups = read_id_map(&sftp, "/etc/group");
-	info!(
-		host = %host,
-		port,
-		username = %username,
-		users = users.len(),
-		groups = groups.len(),
-		"SFTP 认证通过并已打开通道"
-	);
-	Ok(Arc::new(Connection {
-		sftp: Arc::new(sftp),
-		users,
-		groups,
-	}))
+	Ok(session)
 }
 
 /// 读取 `/etc/passwd` 或 `/etc/group`，解析出「数字 id → 名称」映射。

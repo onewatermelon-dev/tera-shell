@@ -78,6 +78,10 @@ const zhCN = {
   "status.info.net": "网络",
   "status.notReady": "该面板尚未开放",
 
+  "ai.title": "AI 助手",
+  "ai.placeholder": "AI 聊天占位，功能开发中",
+  "ai.input": "输入消息…",
+
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
   "session.eyebrow": "SSH 会话",
@@ -306,6 +310,11 @@ const enUS: Record<MessageKey, string> = {
   "status.info.load": "Load",
   "status.info.net": "Net",
   "status.notReady": "Panel not available yet",
+
+  "ai.title": "AI Assistant",
+  "ai.placeholder":
+    "AI chat placeholder — coming soon",
+  "ai.input": "Type a message…",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",
