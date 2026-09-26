@@ -287,10 +287,18 @@ export default function App() {
   };
 
   return (
-    <main className="shell-app">
+    <main
+      className={
+        settingsOpen
+          ? "shell-app settings-open"
+          : "shell-app"
+      }
+    >
       <AppHeader
         actions={headerActions}
         menuState={menuState}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={toggleSidebar}
         hideMenus={settingsOpen}
       />
       <section
@@ -308,8 +316,6 @@ export default function App() {
           }
           openedCount={terminals.opened.length}
           query={query}
-          collapsed={!sidebarOpen}
-          onToggle={toggleSidebar}
           onQueryChange={setQuery}
           onDuplicate={terminals.duplicate}
           onEdit={openEdit}

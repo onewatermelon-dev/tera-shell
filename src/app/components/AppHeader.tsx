@@ -11,14 +11,12 @@ import {
   Header
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
-import AppMenuBar, {
+import AppRail, {
   buildMenus,
   type MenuState
-} from "@/app/components/AppMenuBar";
+} from "@/app/components/AppRail";
 import { useT } from "@/settings/lib/i18n";
 import {
-  SettingOutlined,
-  MoreOutlined,
   MinusOutlined,
   BorderOutlined,
   CloseOutlined
@@ -52,7 +50,10 @@ type Props = {
   actions: HeaderActions;
   /** 菜单项可用性：无活动终端、无选区时对应项置灰。 */
   menuState: Omit<MenuState, "maximized">;
-  /** 打开设置页时隐藏菜单栏 —— 那里的动作对设置页没有意义。 */
+  /** 会话栏展开态与切换动作：透传给左侧竖条上的开关图标。 */
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+  /** 打开设置页时隐藏菜单入口 —— 那里的动作对设置页没有意义。 */
   hideMenus?: boolean;
 };
 
@@ -60,6 +61,8 @@ type Props = {
 export default function AppHeader({
   actions,
   menuState,
+  sidebarOpen,
+  onToggleSidebar,
   hideMenus = false
 }: Props) {
   const t = useT();
@@ -126,142 +129,130 @@ export default function AppHeader({
   }
 
   return (
-    <Header
-      className="titlebar"
-      data-tauri-drag-region
-    >
-      <div
-        className="brand"
-        data-tauri-drag-region
-      >
-        <span className="brand-mark">T</span>
-        <strong>Tera Shell</strong>
-      </div>
+    <>
+      {/* 左侧竖条与标题栏、工作区同属 .shell-app 的 grid，各占自己的 grid-area；
+          设置页打开时整个竖条退出布局（见 .shell-app.settings-open） */}
       {!hideMenus && (
-        <AppMenuBar
+        <AppRail
           menus={menus}
           onAction={runAction}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={onToggleSidebar}
+          onOpenSettings={actions.openSettings}
         />
       )}
-      <div className="title-actions">
-        <Hint label={t("app.action.settings")}>
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            aria-label={t("app.action.settings")}
-            onPress={actions.openSettings}
-          >
-            <SettingOutlined />
-          </Button>
-        </Hint>
-        <Hint label={t("app.action.more")}>
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            aria-label={t("app.action.more")}
-          >
-            <MoreOutlined />
-          </Button>
-        </Hint>
-        <div className="win-controls">
-          <Hint label={t("app.action.minimize")}>
-            <Button
-              variant="ghost"
-              size="sm"
-              isIconOnly
-              aria-label={t(
-                "app.action.minimize"
-              )}
-              onPress={() =>
-                appWindow.current.minimize()
-              }
+      <Header
+        className="titlebar"
+        data-tauri-drag-region
+      >
+        <div
+          className="brand"
+          data-tauri-drag-region
+        >
+          <span className="brand-mark">T</span>
+          <strong>Tera Shell</strong>
+        </div>
+        <div className="title-actions">
+          <div className="win-controls">
+            <Hint
+              label={t("app.action.minimize")}
             >
-              <MinusOutlined />
-            </Button>
-          </Hint>
-          <Hint
-            label={
-              isMaximized
-                ? t("app.menu.restore")
-                : t("app.menu.maximize")
-            }
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              isIconOnly
-              aria-label={
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                aria-label={t(
+                  "app.action.minimize"
+                )}
+                onPress={() =>
+                  appWindow.current.minimize()
+                }
+              >
+                <MinusOutlined />
+              </Button>
+            </Hint>
+            <Hint
+              label={
                 isMaximized
                   ? t("app.menu.restore")
                   : t("app.menu.maximize")
               }
-              onPress={() =>
-                appWindow.current.toggleMaximize()
-              }
             >
-              <BorderOutlined />
-            </Button>
-          </Hint>
-          <Hint label="关闭">
-            <Button
-              variant="ghost"
-              size="sm"
-              isIconOnly
-              aria-label="关闭"
-              className="win-close"
-              onPress={() =>
-                setConfirmClose(true)
-              }
-            >
-              <CloseOutlined />
-            </Button>
-          </Hint>
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                aria-label={
+                  isMaximized
+                    ? t("app.menu.restore")
+                    : t("app.menu.maximize")
+                }
+                onPress={() =>
+                  appWindow.current.toggleMaximize()
+                }
+              >
+                <BorderOutlined />
+              </Button>
+            </Hint>
+            <Hint label="关闭">
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                aria-label="关闭"
+                className="win-close"
+                onPress={() =>
+                  setConfirmClose(true)
+                }
+              >
+                <CloseOutlined />
+              </Button>
+            </Hint>
+          </div>
         </div>
-      </div>
 
-      <AlertDialog
-        isOpen={confirmClose}
-        onOpenChange={next => {
-          if (!next) setConfirmClose(false);
-        }}
-      >
-        <AlertDialog.Backdrop>
-          <AlertDialog.Container placement="center">
-            <AlertDialog.Dialog>
-              <AlertDialog.Header>
-                <AlertDialog.Heading>
-                  退出 Tera Shell？
-                </AlertDialog.Heading>
-              </AlertDialog.Header>
-              <AlertDialog.Body>
-                所有终端会话将被关闭，未完成的命令会中断。
-              </AlertDialog.Body>
-              <AlertDialog.Footer>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onPress={() =>
-                    setConfirmClose(false)
-                  }
-                >
-                  取消
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onPress={() =>
-                    appWindow.current.close()
-                  }
-                >
-                  退出
-                </Button>
-              </AlertDialog.Footer>
-            </AlertDialog.Dialog>
-          </AlertDialog.Container>
-        </AlertDialog.Backdrop>
-      </AlertDialog>
-    </Header>
+        <AlertDialog
+          isOpen={confirmClose}
+          onOpenChange={next => {
+            if (!next) setConfirmClose(false);
+          }}
+        >
+          <AlertDialog.Backdrop>
+            <AlertDialog.Container placement="center">
+              <AlertDialog.Dialog>
+                <AlertDialog.Header>
+                  <AlertDialog.Heading>
+                    退出 Tera Shell？
+                  </AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  所有终端会话将被关闭，未完成的命令会中断。
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onPress={() =>
+                      setConfirmClose(false)
+                    }
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onPress={() =>
+                      appWindow.current.close()
+                    }
+                  >
+                    退出
+                  </Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
+      </Header>
+    </>
   );
 }

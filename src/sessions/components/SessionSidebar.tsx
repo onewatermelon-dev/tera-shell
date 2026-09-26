@@ -14,9 +14,7 @@ import {
   FolderOpenOutlined,
   LinkOutlined,
   EditOutlined,
-  DeleteOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined
+  DeleteOutlined
 } from "@ant-design/icons";
 
 type Props = {
@@ -24,11 +22,7 @@ type Props = {
   activeId: string;
   openedCount: number;
   query: string;
-  /** 收起态：整栏只剩一条竖排细条与展开按钮，列表内容不渲染。 */
-  collapsed: boolean;
   onQueryChange: (value: string) => void;
-  /** 展开 ⇆ 收起的切换动作，由 App 写入显示偏好。 */
-  onToggle: () => void;
   onDuplicate: (session: SavedSession) => void;
   onEdit: (session: SavedSession) => void;
   onRemove: (id: string) => void;
@@ -40,9 +34,7 @@ export default function SessionSidebar({
   activeId,
   openedCount,
   query,
-  collapsed,
   onQueryChange,
-  onToggle,
   onDuplicate,
   onEdit,
   onRemove,
@@ -50,163 +42,120 @@ export default function SessionSidebar({
 }: Props) {
   const t = useT();
   return (
-    // aside 保留 complementary 语义；面板底色/描边/圆角走 .sidebar（HeroUI token）
-    <aside
-      className={
-        collapsed
-          ? "sidebar collapsed"
-          : "sidebar"
-      }
-    >
-      {collapsed ? (
-        // 收起态：细条顶部一颗展开钮，点它恢复整栏
-        <button
-          type="button"
-          className="sidebar-expand"
-          aria-label={t("sidebar.expand")}
-          onClick={onToggle}
-        >
-          <MenuUnfoldOutlined />
-        </button>
-      ) : (
-        <>
-          <Header className="sidebar-head">
-            <div>
-              <span>{t("sidebar.title")}</span>
-              <small>{sessions.length}</small>
-            </div>
-            <div className="sidebar-head-actions">
-              <Hint label={t("sidebar.collapse")}>
-                <Button
-                  size="sm"
-                  isIconOnly
-                  aria-label={t(
-                    "sidebar.collapse"
-                  )}
-                  onPress={onToggle}
-                >
-                  <MenuFoldOutlined />
-                </Button>
-              </Hint>
-              <Hint label={t("sidebar.newSsh")}>
-                <Button
-                  size="sm"
-                  isIconOnly
-                  aria-label={t("sidebar.newSsh")}
-                  onPress={onCreate}
-                >
-                  <PlusOutlined />
-                </Button>
-              </Hint>
-            </div>
-          </Header>
-          <TextField
-            className="search-box"
-            aria-label={t(
-              "sidebar.searchPlaceholder"
-            )}
-            value={query}
-            onChange={onQueryChange}
+    // aside 保留 complementary 语义；面板底色/描边/圆角走 .sidebar（HeroUI token）。
+    // 收起/展开的开关在左侧竖条（AppRail）上，这里只负责展开态的内容。
+    <aside className="sidebar">
+      <Header className="sidebar-head">
+        <div>
+          <span>{t("sidebar.title")}</span>
+          <small>{sessions.length}</small>
+        </div>
+        <Hint label={t("sidebar.newSsh")}>
+          <Button
+            size="sm"
+            isIconOnly
+            aria-label={t("sidebar.newSsh")}
+            onPress={onCreate}
           >
-            <SearchOutlined />
-            <Input
-              placeholder={t(
-                "sidebar.searchPlaceholder"
-              )}
-            />
-          </TextField>
-          <div className="group-title">
-            <span>{t("sidebar.mine")}</span>
-            <FolderOpenOutlined />
-          </div>
-          {sessions.length ? (
-            <ListBox
-              aria-label={t("sidebar.mine")}
-              className="session-list"
-              // 受控单选：高亮跟随 activeId（已打开标签），点击不改变选中
-              selectionMode="single"
-              selectedKeys={
-                activeId ? [activeId] : []
+            <PlusOutlined />
+          </Button>
+        </Hint>
+      </Header>
+      <TextField
+        className="search-box"
+        aria-label={t(
+          "sidebar.searchPlaceholder"
+        )}
+        value={query}
+        onChange={onQueryChange}
+      >
+        <SearchOutlined />
+        <Input
+          placeholder={t(
+            "sidebar.searchPlaceholder"
+          )}
+        />
+      </TextField>
+      <div className="group-title">
+        <span>{t("sidebar.mine")}</span>
+        <FolderOpenOutlined />
+      </div>
+      {sessions.length ? (
+        <ListBox
+          aria-label={t("sidebar.mine")}
+          className="session-list"
+          // 受控单选：高亮跟随 activeId（已打开标签），点击不改变选中
+          selectionMode="single"
+          selectedKeys={
+            activeId ? [activeId] : []
+          }
+          onSelectionChange={() => {}}
+        >
+          {sessions.map(session => (
+            <ListBox.Item
+              key={session.id}
+              id={session.id}
+              // RAC 无障碍：复合内容项需提供纯文本值（type-to-select）
+              textValue={session.name}
+              className="session-item"
+              onDoubleClick={() =>
+                onDuplicate(session)
               }
-              onSelectionChange={() => {}}
             >
-              {sessions.map(session => (
-                <ListBox.Item
-                  key={session.id}
-                  id={session.id}
-                  // RAC 无障碍：复合内容项需提供纯文本值（type-to-select）
-                  textValue={session.name}
-                  className="session-item"
-                  onDoubleClick={() =>
-                    onDuplicate(session)
+              <span className="session-icon">
+                <LinkOutlined />
+              </span>
+              <span className="session-copy">
+                <strong>{session.name}</strong>
+                <small>
+                  {session.kind === "local"
+                    ? t("sidebar.localTerminal")
+                    : `${session.username ? session.username + "@" : ""}${session.host}:${session.port}`}
+                </small>
+              </span>
+              {session.id !== "local" && (
+                <Button
+                  className="edit"
+                  variant="ghost"
+                  size="sm"
+                  isIconOnly
+                  aria-label={t("sidebar.edit")}
+                  onPress={() => onEdit(session)}
+                >
+                  <EditOutlined />
+                </Button>
+              )}
+              {session.id !== "local" && (
+                <Button
+                  className="delete"
+                  variant="ghost"
+                  size="sm"
+                  isIconOnly
+                  aria-label={t("sidebar.remove")}
+                  onPress={() =>
+                    onRemove(session.id)
                   }
                 >
-                  <span className="session-icon">
-                    <LinkOutlined />
-                  </span>
-                  <span className="session-copy">
-                    <strong>
-                      {session.name}
-                    </strong>
-                    <small>
-                      {session.kind === "local"
-                        ? t(
-                            "sidebar.localTerminal"
-                          )
-                        : `${session.username ? session.username + "@" : ""}${session.host}:${session.port}`}
-                    </small>
-                  </span>
-                  {session.id !== "local" && (
-                    <Button
-                      className="edit"
-                      variant="ghost"
-                      size="sm"
-                      isIconOnly
-                      aria-label={t(
-                        "sidebar.edit"
-                      )}
-                      onPress={() =>
-                        onEdit(session)
-                      }
-                    >
-                      <EditOutlined />
-                    </Button>
-                  )}
-                  {session.id !== "local" && (
-                    <Button
-                      className="delete"
-                      variant="ghost"
-                      size="sm"
-                      isIconOnly
-                      aria-label={t(
-                        "sidebar.remove"
-                      )}
-                      onPress={() =>
-                        onRemove(session.id)
-                      }
-                    >
-                      <DeleteOutlined />
-                    </Button>
-                  )}
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          ) : (
-            <p className="empty-list">
-              {t("sidebar.noMatch")}
-            </p>
-          )}
-          <div className="sidebar-foot">
-            <span className="status-dot"></span>
-            <span>{t("sidebar.ready")}</span>
-            <small>
-              {t("sidebar.connections", {
-                count: openedCount
-              })}
-            </small>
-          </div>
-        </>
+                  <DeleteOutlined />
+                </Button>
+              )}
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      ) : (
+        <p className="empty-list">
+          {t("sidebar.noMatch")}
+        </p>
       )}
+      <div className="sidebar-foot">
+        <span className="status-dot"></span>
+        <span>{t("sidebar.ready")}</span>
+        <small>
+          {t("sidebar.connections", {
+            count: openedCount
+          })}
+        </small>
+      </div>
     </aside>
   );
 }
