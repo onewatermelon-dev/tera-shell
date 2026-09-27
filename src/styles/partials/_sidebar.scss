@@ -374,3 +374,37 @@
     opacity: 0.5;
   }
 }
+
+// 流式思考内容：实时增长区，弱化色 + 限高滚动
+.ai-live-reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-live-reasoning-head {
+  display: flex;
+  align-items: center;
+}
+
+.ai-live-reasoning pre {
+  max-height: 160px;
+  padding: 8px 10px;
+  margin: 0;
+  overflow-y: auto;
+  font:
+    12px Consolas,
+    monospace;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+}
+
+// PromptInput（CSS module 限宽 420）在面板里撑满剩余宽度
+.ai-panel-compose > div {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}

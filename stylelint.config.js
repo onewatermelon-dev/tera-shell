@@ -31,6 +31,9 @@ export default {
   ignoreFiles: [
     "**/node_modules/**",
     "**/dist/**",
-    "**/src-tauri/**"
+    "**/src-tauri/**",
+    // CSS Modules 方言（:global 等）与 word-break 旧值不符合本项目规则，
+    // vendored 的第三方组件样式不检查
+    "**/*.module.css"
   ]
 };

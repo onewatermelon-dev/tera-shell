@@ -6,6 +6,9 @@ import {
 } from "react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
+import { ThinkingState } from "@aicss/react/thinking-state";
+import { ReasoningBlock } from "@/terminal/components/aicss/ReasoningBlock";
+import { PromptInput } from "@/terminal/components/aicss/PromptInput";
 import { useT } from "@/settings/lib/i18n";
 import {
   listOpenAiModels,
@@ -148,30 +151,23 @@ export default function AiPanel({
     busy,
     pendingCardId,
     error,
+    stream,
     send,
     confirm,
     skip,
     clear
   } = useAiChat(session);
-  const [draft, setDraft] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // 新消息 / 状态变化后滚到底部，聊天面板的默认阅读位置在最新一条
   useEffect(() => {
     const node = bodyRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [entries, error, pendingCardId]);
+  }, [entries, error, pendingCardId, stream]);
 
   function pickModel(value: string) {
     setSelectedKey(value);
     saveSelectedModel(value);
-  }
-
-  function submit() {
-    const text = draft.trim();
-    if (!text || busy) return;
-    setDraft("");
-    void send(text, selected);
   }
 
   return (
@@ -179,32 +175,6 @@ export default function AiPanel({
       <div className="ai-panel-head">
         <span>{t("ai.title")}</span>
         <div className="ai-panel-head-actions">
-          <select
-            className="ai-model-select"
-            aria-label={t("ai.selectModel")}
-            value={
-              selected
-                ? `${selected.providerId}::${selected.modelId}`
-                : ""
-            }
-            onChange={event =>
-              pickModel(event.target.value)
-            }
-          >
-            {selected ? null : (
-              <option value="">
-                {t("ai.noModel")}
-              </option>
-            )}
-            {options.map(option => (
-              <option
-                key={`${option.providerId}::${option.modelId}`}
-                value={`${option.providerId}::${option.modelId}`}
-              >
-                {option.label}
-              </option>
-            ))}
-          </select>
           <button
             type="button"
             className="ai-panel-clear"
@@ -257,9 +227,19 @@ export default function AiPanel({
                 key={index}
                 className="ai-entry is-assistant"
               >
-                <Streamdown>
-                  {entry.text}
-                </Streamdown>
+                {entry.reasoning && (
+                  <ReasoningBlock
+                    reasoning={entry.reasoning}
+                    elapsedSeconds={
+                      entry.elapsedSeconds ?? 1
+                    }
+                  />
+                )}
+                {entry.text && (
+                  <Streamdown>
+                    {entry.text}
+                  </Streamdown>
+                )}
               </div>
             );
           }
@@ -272,36 +252,51 @@ export default function AiPanel({
             </p>
           );
         })}
+        {stream && (
+          // 流式进行中的临时条目：思考内容实时增长，正文就绪后交给 Streamdown
+          <div className="ai-entry is-assistant">
+            {stream.reasoning ? (
+              <div className="ai-live-reasoning">
+                <div className="ai-live-reasoning-head">
+                  <ThinkingState />
+                </div>
+                <pre>{stream.reasoning}</pre>
+              </div>
+            ) : (
+              !stream.text && <ThinkingState />
+            )}
+            {stream.text && (
+              <Streamdown>
+                {stream.text}
+              </Streamdown>
+            )}
+          </div>
+        )}
         {error && (
           <p className="ai-entry is-error">
             {error}
           </p>
         )}
       </div>
+      {/* 输入框：@aicss/react PromptInput 改造版，模型选择在「+」菜单里 */}
       <div className="ai-panel-compose">
-        <input
-          className="ai-panel-input"
-          placeholder={t("ai.input")}
-          value={draft}
-          disabled={busy}
-          onChange={event =>
-            setDraft(event.target.value)
+        <PromptInput
+          models={options.map(option => ({
+            id: `${option.providerId}::${option.modelId}`,
+            name: option.label
+          }))}
+          modelId={
+            selected
+              ? `${selected.providerId}::${selected.modelId}`
+              : ""
           }
-          onKeyDown={event => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              submit();
-            }
-          }}
+          onModelChange={pickModel}
+          busy={busy}
+          placeholder={t("ai.input")}
+          onSend={text =>
+            void send(text, selected)
+          }
         />
-        <button
-          type="button"
-          className="ai-panel-send"
-          disabled={busy || !draft.trim()}
-          onClick={submit}
-        >
-          {t("ai.send")}
-        </button>
       </div>
     </aside>
   );

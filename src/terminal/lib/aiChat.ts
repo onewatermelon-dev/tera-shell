@@ -23,7 +23,14 @@ import type { OpenSession } from "@/terminal/lib/terminalTypes";
 /** 一条用户 / 助手可见消息。 */
 export type AiChatEntry =
   | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string }
+  | {
+      kind: "assistant";
+      text: string;
+      /** 思考内容（有才显示 ReasoningBlock） */
+      reasoning?: string;
+      /** 思考耗时（秒） */
+      elapsedSeconds?: number;
+    }
   | { kind: "tool"; call: AiToolCall };
 
 /** 一次命令执行卡片的状态。 */
@@ -54,6 +61,8 @@ type ProtocolMessage = {
     function: { name: string; arguments: string };
   }[];
   tool_call_id?: string;
+  /** 模型的思考内容：仅供展示，回传请求时必须剥离（见 buildBody） */
+  reasoning?: string;
 };
 
 /** 可选中的模型：供应商 × 模型。 */
@@ -190,9 +199,12 @@ const openAiAdapter: FormatAdapter = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`
   }),
+  // reasoning_content 只用于展示：回传请求时剥离（DeepSeek 等不接受回传）
   buildBody: (option, messages) => ({
     model: option.model.name.trim(),
-    messages,
+    messages: messages.map(
+      ({ reasoning: _reasoning, ...rest }) => rest
+    ),
     max_tokens: maxTokensOf(option),
     tools: [
       {
@@ -209,13 +221,23 @@ const openAiAdapter: FormatAdapter = {
   }),
   parse: text => {
     const parsed = JSON.parse(text) as {
-      choices?: { message?: ProtocolMessage }[];
+      choices?: {
+        message?: ProtocolMessage & {
+          reasoning_content?: string;
+          reasoning?: string;
+        };
+      }[];
     };
     const message = parsed.choices?.[0]?.message;
     if (!message) {
       throw new Error("模型响应里没有消息内容");
     }
-    return message;
+    return {
+      ...message,
+      reasoning:
+        message.reasoning_content ??
+        message.reasoning
+    };
   }
 };
 
@@ -315,6 +337,7 @@ export const anthropicAdapter: FormatAdapter = {
       content?: Array<{
         type: string;
         text?: string;
+        thinking?: string;
         id?: string;
         name?: string;
         input?: unknown;
@@ -324,6 +347,11 @@ export const anthropicAdapter: FormatAdapter = {
       .filter(block => block.type === "text")
       .map(block => block.text ?? "")
       .join("");
+    // 思考块只用于展示，回传时不带（缺签名会被服务端拒绝）
+    const reasoning = (parsed.content ?? [])
+      .filter(block => block.type === "thinking")
+      .map(block => block.thinking ?? "")
+      .join("\n\n");
     const toolCalls = (parsed.content ?? [])
       .filter(block => block.type === "tool_use")
       .map(block => ({
@@ -342,6 +370,7 @@ export const anthropicAdapter: FormatAdapter = {
     return {
       role: "assistant",
       content: content || null,
+      ...(reasoning ? { reasoning } : {}),
       ...(toolCalls.length
         ? { tool_calls: toolCalls }
         : {})
@@ -434,6 +463,10 @@ export const responsesAdapter: FormatAdapter = {
           type: string;
           text?: string;
         }>;
+        summary?: Array<{
+          type: string;
+          text?: string;
+        }>;
         call_id?: string;
         name?: string;
         arguments?: string;
@@ -445,6 +478,15 @@ export const responsesAdapter: FormatAdapter = {
       .filter(part => part.type === "output_text")
       .map(part => part.text ?? "")
       .join("");
+    // reasoning 项的摘要只用于展示，回传时不带
+    const reasoning = (parsed.output ?? [])
+      .filter(item => item.type === "reasoning")
+      .flatMap(item => item.summary ?? [])
+      .filter(
+        part => part.type === "summary_text"
+      )
+      .map(part => part.text ?? "")
+      .join("\n\n");
     const toolCalls = (parsed.output ?? [])
       .filter(
         item => item.type === "function_call"
@@ -463,6 +505,7 @@ export const responsesAdapter: FormatAdapter = {
     return {
       role: "assistant",
       content: content || null,
+      ...(reasoning ? { reasoning } : {}),
       ...(toolCalls.length
         ? { tool_calls: toolCalls }
         : {})
@@ -480,10 +523,310 @@ function adapterOf(
   return openAiAdapter;
 }
 
-/** 按供应商的 API 格式发一次对话补全，统一返回 OpenAI 消息形态。 */
-async function chatCompletion(
+/** 单条 SSE 载荷消化后产生的用户可见增量。 */
+export type StreamDelta = {
+  content?: string;
+  reasoning?: string;
+};
+
+/** 三种格式共用的流式累积器接口：逐条吃 SSE 载荷，吐增量与最终消息。 */
+export type StreamAccumulator = {
+  /** 处理一条已剥前缀的 SSE 载荷（JSON 文本），返回文本类增量 */
+  feed: (payload: string) => StreamDelta;
+  /** 组装最终的助手消息（content / reasoning / tool_calls） */
+  finalize: () => ProtocolMessage;
+};
+
+/** OpenAI 流：delta.content / delta.reasoning_content / delta.tool_calls 按分片累加。 */
+function openAiAccumulator(): StreamAccumulator {
+  let content = "";
+  let reasoning = "";
+  const tools = new Map<
+    number,
+    { id: string; name: string; args: string }
+  >();
+  return {
+    feed: payload => {
+      if (payload === "[DONE]") return {};
+      const chunk = JSON.parse(payload) as {
+        choices?: {
+          delta?: {
+            content?: string;
+            reasoning_content?: string;
+            reasoning?: string;
+            tool_calls?: {
+              index?: number;
+              id?: string;
+              function?: {
+                name?: string;
+                arguments?: string;
+              };
+            }[];
+          };
+        }[];
+      };
+      const delta = chunk.choices?.[0]?.delta;
+      if (!delta) return {};
+      content += delta.content ?? "";
+      reasoning +=
+        delta.reasoning_content ??
+        delta.reasoning ??
+        "";
+      for (const call of delta.tool_calls ?? []) {
+        const index = call.index ?? 0;
+        const held = tools.get(index) ?? {
+          id: "",
+          name: "",
+          args: ""
+        };
+        held.id = held.id || call.id || "";
+        held.name =
+          held.name || call.function?.name || "";
+        held.args +=
+          call.function?.arguments ?? "";
+        tools.set(index, held);
+      }
+      return {
+        content: delta.content,
+        reasoning:
+          delta.reasoning_content ??
+          delta.reasoning
+      };
+    },
+    finalize: () => {
+      const toolCalls = [...tools.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([index, tool]) => ({
+          id: tool.id || `call_${index}`,
+          type: "function" as const,
+          function: {
+            name: tool.name,
+            arguments: tool.args || "{}"
+          }
+        }));
+      if (
+        !content &&
+        !reasoning &&
+        toolCalls.length === 0
+      ) {
+        throw new Error("模型响应里没有消息内容");
+      }
+      return {
+        role: "assistant",
+        content: content || null,
+        ...(reasoning ? { reasoning } : {}),
+        ...(toolCalls.length
+          ? { tool_calls: toolCalls }
+          : {})
+      };
+    }
+  };
+}
+
+/** Anthropic 流：content_block_start/delta 按 index 归属，tool_use 的参数经 input_json_delta 分片。 */
+function anthropicAccumulator(): StreamAccumulator {
+  let text = "";
+  let thinking = "";
+  const tools = new Map<
+    number,
+    { id: string; name: string; args: string }
+  >();
+  return {
+    feed: payload => {
+      const event = JSON.parse(payload) as {
+        type: string;
+        index?: number;
+        content_block?: {
+          type: string;
+          id?: string;
+          name?: string;
+        };
+        delta?: {
+          type?: string;
+          text?: string;
+          thinking?: string;
+          partial_json?: string;
+        };
+      };
+      if (event.type === "content_block_start") {
+        // tool_use 块开始时登记 id / name；text 与 thinking 走 delta
+        if (
+          event.content_block?.type === "tool_use"
+        ) {
+          const index = event.index ?? 0;
+          tools.set(index, {
+            id: event.content_block.id ?? "",
+            name: event.content_block.name ?? "",
+            args: ""
+          });
+        }
+        return {};
+      }
+      if (event.type !== "content_block_delta")
+        return {};
+      const index = event.index ?? 0;
+      if (event.delta?.type === "text_delta") {
+        text += event.delta.text ?? "";
+        return { content: event.delta.text };
+      }
+      if (
+        event.delta?.type === "thinking_delta"
+      ) {
+        thinking += event.delta.thinking ?? "";
+        return {
+          reasoning: event.delta.thinking
+        };
+      }
+      if (
+        event.delta?.type === "input_json_delta"
+      ) {
+        const tool = tools.get(index);
+        if (tool)
+          tool.args +=
+            event.delta.partial_json ?? "";
+      }
+      return {};
+    },
+    finalize: () => {
+      const toolCalls = [...tools.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([index, tool]) => ({
+          id: tool.id || `toolu_${index}`,
+          type: "function" as const,
+          function: {
+            name: tool.name,
+            arguments: tool.args || "{}"
+          }
+        }));
+      if (
+        !text &&
+        !thinking &&
+        toolCalls.length === 0
+      ) {
+        throw new Error("模型响应里没有消息内容");
+      }
+      return {
+        role: "assistant",
+        content: text || null,
+        ...(thinking
+          ? { reasoning: thinking }
+          : {}),
+        ...(toolCalls.length
+          ? { tool_calls: toolCalls }
+          : {})
+      };
+    }
+  };
+}
+
+/** Responses 流：文本/摘要走 delta 事件，函数调用按 item_id 归并，completed 事件只做信号。 */
+function responsesAccumulator(): StreamAccumulator {
+  let content = "";
+  let reasoning = "";
+  const calls = new Map<
+    string,
+    { callId: string; name: string; args: string }
+  >();
+  return {
+    feed: payload => {
+      const event = JSON.parse(payload) as {
+        type: string;
+        delta?: string;
+        item?: {
+          type?: string;
+          id?: string;
+          call_id?: string;
+          name?: string;
+        };
+        item_id?: string;
+      };
+      if (
+        event.type ===
+        "response.output_text.delta"
+      ) {
+        content += event.delta ?? "";
+        return { content: event.delta };
+      }
+      if (
+        event.type ===
+        "response.reasoning_summary_text.delta"
+      ) {
+        reasoning += event.delta ?? "";
+        return { reasoning: event.delta };
+      }
+      if (
+        event.type ===
+          "response.output_item.added" &&
+        event.item?.type === "function_call"
+      ) {
+        const itemId = event.item.id ?? "";
+        calls.set(itemId, {
+          callId: event.item.call_id ?? itemId,
+          name: event.item.name ?? "",
+          args: ""
+        });
+        return {};
+      }
+      if (
+        event.type ===
+        "response.function_call_arguments.delta"
+      ) {
+        const call = calls.get(
+          event.item_id ?? ""
+        );
+        if (call) call.args += event.delta ?? "";
+      }
+      return {};
+    },
+    finalize: () => {
+      const toolCalls = [...calls.values()].map(
+        call => ({
+          id: call.callId,
+          type: "function" as const,
+          function: {
+            name: call.name,
+            arguments: call.args || "{}"
+          }
+        })
+      );
+      if (
+        !content &&
+        !reasoning &&
+        toolCalls.length === 0
+      ) {
+        throw new Error("模型响应里没有消息内容");
+      }
+      return {
+        role: "assistant",
+        content: content || null,
+        ...(reasoning ? { reasoning } : {}),
+        ...(toolCalls.length
+          ? { tool_calls: toolCalls }
+          : {})
+      };
+    }
+  };
+}
+
+function accumulatorOf(
+  format: ModelProvider["apiFormat"]
+): StreamAccumulator {
+  if (format === "anthropic")
+    return anthropicAccumulator();
+  if (format === "responses")
+    return responsesAccumulator();
+  return openAiAccumulator();
+}
+
+/**
+ * 流式对话补全：请求体加 stream:true 走 Rust SSE 桥，delta 通过
+ * onDelta 实时回调（content / reasoning 增量），结束后返回组装完
+ * 整的助手消息（与 chatCompletion 同形态，协议流无缝衔接）。
+ */
+async function streamChatCompletion(
   option: AiModelOption,
-  messages: ProtocolMessage[]
+  messages: ProtocolMessage[],
+  onDelta: (chunk: StreamDelta) => void
 ): Promise<ProtocolMessage> {
   const adapter = adapterOf(
     option.provider.apiFormat
@@ -491,17 +834,84 @@ async function chatCompletion(
   const base = option.provider.baseUrl
     .trim()
     .replace(/\/+$/, "");
-  const text = await invoke<string>(
-    "http_post_text",
-    {
+  const streamId = `ai-stream-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const accumulator = accumulatorOf(
+    option.provider.apiFormat
+  );
+
+  const { listen } =
+    await import("@tauri-apps/api/event");
+  let streamError: string | null = null;
+  let done = false;
+  let wakeDone: () => void = () => {};
+  const donePromise = new Promise<void>(
+    resolve => {
+      wakeDone = resolve;
+    }
+  );
+
+  // 单一监听器：数据载荷喂累积器并回调增量；done / error 负责收尾
+  const unlisten = await listen<{
+    streamId: string;
+    data?: string;
+    done?: boolean;
+    error?: string;
+  }>("ai-chat-stream", event => {
+    const payload = event.payload;
+    if (payload.streamId !== streamId) return;
+    if (payload.error) {
+      streamError = payload.error;
+    }
+    if (payload.done) {
+      done = true;
+      wakeDone();
+      return;
+    }
+    if (payload.data) {
+      try {
+        const delta = accumulator.feed(
+          payload.data
+        );
+        if (delta.content || delta.reasoning) {
+          onDelta(delta);
+        }
+      } catch {
+        /* 单条坏载荷跳过，不打断整条流 */
+      }
+    }
+  });
+
+  try {
+    await invoke("ai_chat_stream", {
+      streamId,
       url: adapter.endpoint(base),
       headers: adapter.headers(
         option.provider.apiKey
       ),
-      body: adapter.buildBody(option, messages)
+      body: {
+        ...(adapter.buildBody(
+          option,
+          messages
+        ) as Record<string, unknown>),
+        stream: true
+      }
+    });
+    // 命令返回前已广播 done 事件，这里等监听器确认到达（留宽限兜底）
+    if (!done) {
+      await Promise.race([
+        donePromise,
+        new Promise(resolve =>
+          setTimeout(resolve, 1500)
+        )
+      ]);
     }
-  );
-  return adapter.parse(text);
+    if (streamError) throw new Error(streamError);
+    return accumulator.finalize();
+  } finally {
+    unlisten();
+  }
 }
 
 /** 工具结果回填前的截断：保留尾部并注明。 */
@@ -577,6 +987,11 @@ export function useAiChat(
     >
   >(new Map());
   const [error, setError] = useState("");
+  /** 正在流式生成的助手消息（null = 没有进行中的流） */
+  const [stream, setStream] = useState<{
+    text: string;
+    reasoning: string;
+  } | null>(null);
 
   const clear = useCallback(() => {
     messagesRef.current = [];
@@ -584,6 +999,7 @@ export function useAiChat(
     setEntries([]);
     setPendingCardId(null);
     setError("");
+    setStream(null);
     resumeRef.current = null;
   }, []);
 
@@ -645,17 +1061,47 @@ export function useAiChat(
         hop < MAX_HOPS;
         hop += 1
       ) {
-        const message = await chatCompletion(
-          option,
-          messagesRef.current
-        );
+        const startedAt = Date.now();
+        // 流式：先挂一条空的流式条目，delta 到达就地追加，结束后落为正式条目
+        setStream({ text: "", reasoning: "" });
+        const message =
+          await streamChatCompletion(
+            option,
+            messagesRef.current,
+            chunk => {
+              setStream(prev =>
+                prev
+                  ? {
+                      text:
+                        prev.text +
+                        (chunk.content ?? ""),
+                      reasoning:
+                        prev.reasoning +
+                        (chunk.reasoning ?? "")
+                    }
+                  : prev
+              );
+            }
+          );
         messagesRef.current.push(message);
-        if (message.content?.trim()) {
+        setStream(null);
+        if (
+          message.content?.trim() ||
+          message.reasoning
+        ) {
           setEntries(list => [
             ...list,
             {
               kind: "assistant",
-              text: message.content ?? ""
+              text: message.content ?? "",
+              ...(message.reasoning
+                ? {
+                    reasoning: message.reasoning,
+                    elapsedSeconds:
+                      (Date.now() - startedAt) /
+                      1000
+                  }
+                : {})
             }
           ]);
         }
@@ -750,6 +1196,7 @@ export function useAiChat(
         setError(String(reason));
       } finally {
         setBusy(false);
+        setStream(null);
       }
     },
     [busy, runLoop, session]
@@ -776,6 +1223,7 @@ export function useAiChat(
         setError(String(reason));
       } finally {
         setBusy(false);
+        setStream(null);
       }
     },
     [executeCard, runLoop]
@@ -802,6 +1250,7 @@ export function useAiChat(
         setError(String(reason));
       } finally {
         setBusy(false);
+        setStream(null);
       }
     },
     [executeCard, runLoop]
@@ -812,6 +1261,7 @@ export function useAiChat(
     busy,
     pendingCardId,
     error,
+    stream,
     send,
     confirm,
     skip,

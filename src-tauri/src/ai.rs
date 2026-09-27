@@ -11,6 +11,7 @@
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::{
+	time::Duration,
 	collections::HashMap,
 	io::Read,
 	sync::{Arc, Mutex},
@@ -206,4 +207,101 @@ fn run_once(
 		stderr: String::from_utf8_lossy(&stderr).into_owned(),
 		exit_code,
 	})
+}
+
+// ---- AI 聊天的流式桥接 ----
+//
+// 模型网关普遍不带 CORS 头，前端 fetch 发不了；流式请求也必须走 Rust。
+// 这里不做任何格式解析（三种 API 格式的 delta 结构不同，全部由前端处理），
+// 只把 SSE 的 `data:` 行原样广播给前端，前端按供应商格式自行累积。
+
+use futures::StreamExt;
+use tauri::Emitter;
+
+/// 流式事件：前端按 stream_id 对号，data 是一条原始 SSE 载荷（已剥掉
+/// `data:` 前缀），done=true 表示流结束。
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamEvent<'a> {
+	stream_id: &'a str,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	data: Option<&'a str>,
+	done: bool,
+}
+
+/// 发起一次流式对话补全：请求体由前端按供应商格式构造好（含 stream:true），
+/// SSE 载荷逐条经 `ai-chat-stream` 事件广播，命令在流结束后返回。
+#[tauri::command(rename = "ai_chat_stream")]
+pub async fn chat_stream(
+	app: tauri::AppHandle,
+	stream_id: String,
+	url: String,
+	headers: HashMap<String, String>,
+	body: serde_json::Value,
+) -> Result<(), String> {
+	let client = reqwest::Client::builder()
+		.connect_timeout(Duration::from_secs(15))
+		// 不设总超时：长回答的流可能持续几分钟，中断由前端按 Esc / 错误处理
+		.build()
+		.map_err(|error| error.to_string())?;
+	let mut request = client.post(&url).json(&body);
+	for (name, value) in &headers {
+		request = request.header(name.as_str(), value.as_str());
+	}
+	let response = request
+		.send()
+		.await
+		.map_err(|error| format!("连接模型失败：{error}"))?;
+	let status = response.status();
+	if !status.is_success() {
+		let text = response.text().await.unwrap_or_default();
+		let snippet: String = text.chars().take(300).collect();
+		return Err(format!("HTTP {}: {}", status.as_u16(), snippet));
+	}
+
+	let mut stream = response.bytes_stream();
+	// SSE 跨 chunk 的缓冲：按行切，残行留到下一个 chunk
+	let mut buffer: Vec<u8> = Vec::new();
+	let emit = |stream_id: &str, data: &str, done: bool| {
+		let _ = app.emit(
+			"ai-chat-stream",
+			StreamEvent {
+				stream_id,
+				data: Some(data),
+				done,
+			},
+		);
+	};
+
+	while let Some(chunk) = stream.next().await {
+		let bytes = chunk.map_err(|error| error.to_string())?;
+		buffer.extend_from_slice(&bytes);
+		// 按换行切分；兼容 \r\n
+		while let Some(pos) =
+			buffer.iter().position(|&b| b == b'\n')
+		{
+			let line = String::from_utf8_lossy(&buffer[..pos])
+				.trim_end()
+				.to_string();
+			buffer.drain(..=pos);
+			if let Some(payload) = line.strip_prefix("data:") {
+				let payload = payload.trim_start();
+				if payload.is_empty() {
+					continue;
+				}
+				emit(&stream_id, payload, false);
+			}
+		}
+	}
+	if let Ok(line) = String::from_utf8(buffer.clone()) {
+		if let Some(payload) = line.strip_prefix("data:") {
+			let payload = payload.trim_start();
+			if !payload.is_empty() {
+				emit(&stream_id, payload, false);
+			}
+		}
+	}
+	info!(stream_id = %stream_id, "AI 聊天流结束");
+	emit(&stream_id, "", true);
+	Ok(())
 }
