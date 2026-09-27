@@ -414,3 +414,124 @@ export function parseProcesses(
   }
   return out;
 }
+
+/**
+ * 网络采集脚本：ss 输出全部 TCP/UDP 套接字及进程归属；
+ * `-H` 去表头。ponytail: 只认 ss（主流 Linux 自带），
+ * 极老机器没有 ss 时需回退 netstat，目前不预置。
+ */
+export const NET_SCRIPT =
+  "ss -tunapH 2>/dev/null";
+
+export type NetInfo = {
+  pid: number;
+  name: string;
+  ip: string;
+  port: string;
+  /** 该本地地址上不同远端 IP 数 */
+  ipCount: number;
+  /** 该本地地址上的已建立连接数（不含监听行本身） */
+  connCount: number;
+  /** 接收队列字节合计 */
+  recv: number;
+  /** 发送队列字节合计 */
+  send: number;
+};
+
+/** `127.0.0.1:40475` / `[::]:8888` → { ip, port }。 */
+function splitAddr(addr: string): {
+  ip: string;
+  port: string;
+} {
+  if (addr.startsWith("[")) {
+    const end = addr.indexOf("]");
+    return {
+      ip: addr.slice(0, end + 1),
+      port: addr.slice(end + 2)
+    };
+  }
+  const idx = addr.lastIndexOf(":");
+  return {
+    ip: idx < 0 ? addr : addr.slice(0, idx),
+    port: idx < 0 ? "" : addr.slice(idx + 1)
+  };
+}
+
+/**
+ * 解析 ss 输出：按 (协议, 本地地址) 聚合成一行 ——
+ * 监听 socket 与打到同一端口的连接合并统计连接数 / 远端 IP 数 / 队列。
+ */
+export function parseNetInfo(
+  stdout: string
+): NetInfo[] {
+  type Group = {
+    proto: string;
+    ip: string;
+    port: string;
+    pid: number;
+    name: string;
+    conns: number;
+    peers: Set<string>;
+    recv: number;
+    send: number;
+  };
+  const groups = new Map<string, Group>();
+  for (const line of stdout.split("\n")) {
+    const matched =
+      /^(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/.exec(
+        line.trim()
+      );
+    if (!matched) continue;
+    const [
+      ,
+      proto,
+      state,
+      recvq,
+      sendq,
+      local,
+      peer,
+      rest
+    ] = matched;
+    const { ip, port } = splitAddr(local ?? "");
+    const proc = /\("(.+?)"[^)]*?pid=(\d+)/.exec(
+      rest ?? ""
+    );
+    const key = `${proto}|${local}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        proto: proto ?? "",
+        ip,
+        port,
+        pid: Number(proc?.[2]) || 0,
+        name: proc?.[1] ?? "-",
+        conns: 0,
+        peers: new Set(),
+        recv: 0,
+        send: 0
+      };
+      groups.set(key, group);
+    }
+    group.recv += Number(recvq) || 0;
+    group.send += Number(sendq) || 0;
+    if (
+      state !== "LISTEN" &&
+      state !== "UNCONN"
+    ) {
+      group.conns += 1;
+      const peerIp = splitAddr(peer ?? "").ip;
+      if (peerIp && peerIp !== "*")
+        group.peers.add(peerIp);
+    }
+  }
+  return [...groups.values()].map(g => ({
+    pid: g.pid,
+    name: g.name,
+    ip: g.ip,
+    port: g.port,
+    ipCount: g.peers.size,
+    connCount: g.conns,
+    recv: g.recv,
+    send: g.send
+  }));
+}

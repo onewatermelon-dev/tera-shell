@@ -5,7 +5,10 @@ import {
   responsesAdapter,
   trimToolOutput
 } from "@/terminal/lib/aiChat";
-import { parseSysInfo } from "@/terminal/lib/sysInfo";
+import {
+  parseNetInfo,
+  parseSysInfo
+} from "@/terminal/lib/sysInfo";
 
 describe("parseToolArguments", () => {
   it("解析模型的工具调用参数", () => {
@@ -307,5 +310,33 @@ describe("parseSysInfo", () => {
     expect(info.net).toEqual([]);
     expect(info.rootDisk).toBeNull();
     expect(info.cpuTotal).toBeCloseTo(0, 5);
+  });
+});
+
+describe("parseNetInfo", () => {
+  const stdout = [
+    'tcp LISTEN 0 128 127.0.0.1:40475 0.0.0.0:* users:(("sing-box",pid=1916056,fd=20))',
+    'tcp LISTEN 0 128 [::]:8885 [::]:* users:(("sing-box",pid=1916056,fd=27))',
+    'tcp ESTAB 100 20 [::ffff:10.0.0.5]:8885 [::ffff:1.2.3.4]:52100 users:(("sing-box",pid=1916056,fd=31))',
+    'tcp ESTAB 0 0 [::ffff:10.0.0.5]:8885 [::ffff:1.2.3.4]:52101 users:(("sing-box",pid=1916056,fd=32))',
+    "udp UNCONN 0 0 0.0.0.0:68 0.0.0.0:*"
+  ].join("\n");
+
+  it("按协议+本地地址聚合连接数、远端IP数与队列", () => {
+    const rows = parseNetInfo(stdout);
+    expect(rows).toHaveLength(3);
+    const listener = rows.find(
+      r => r.port === "8885"
+    );
+    expect(listener?.connCount).toBe(2);
+    expect(listener?.ipCount).toBe(1);
+    expect(listener?.recv).toBe(100);
+    expect(listener?.send).toBe(20);
+    expect(listener?.pid).toBe(1916056);
+    expect(listener?.name).toBe("sing-box");
+    const udp = rows.find(r => r.port === "68");
+    expect(udp?.pid).toBe(0);
+    expect(udp?.name).toBe("-");
+    expect(udp?.connCount).toBe(0);
   });
 });

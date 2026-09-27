@@ -128,6 +128,14 @@ const zhCN = {
   "proc.colMem": "内存",
   "proc.colCpu": "CPU",
   "proc.colCmd": "名称/命令行",
+  "net.title": "网络信息",
+  "net.colName": "名称",
+  "net.colIp": "监听IP",
+  "net.colPort": "端口",
+  "net.colIpCount": "IP数",
+  "net.colConn": "连接数",
+  "net.colRecv": "接收",
+  "net.colSend": "发送",
   "sys.tip.core":
     "CPU、内存、磁盘三项最关键资源用量的概览",
   "sys.tip.system":
@@ -475,6 +483,14 @@ const enUS: Record<MessageKey, string> = {
   "proc.colMem": "Memory",
   "proc.colCpu": "CPU",
   "proc.colCmd": "Name/Command",
+  "net.title": "Network Info",
+  "net.colName": "Name",
+  "net.colIp": "Listening IP",
+  "net.colPort": "Port",
+  "net.colIpCount": "IPs",
+  "net.colConn": "Conns",
+  "net.colRecv": "RX",
+  "net.colSend": "TX",
   "sys.tip.core":
     "Overview of the three key resources: CPU, memory and disk usage",
   "sys.tip.system":

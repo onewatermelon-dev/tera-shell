@@ -25,6 +25,7 @@ import MacroBar from "@/terminal/components/MacroBar";
 import StatusInfoBar from "@/terminal/components/StatusInfoBar";
 import SystemInfoDrawer from "@/terminal/components/SystemInfoDrawer";
 import ProcessInfoDrawer from "@/terminal/components/ProcessInfoDrawer";
+import NetworkInfoDrawer from "@/terminal/components/NetworkInfoDrawer";
 import TabContextMenu, {
   type TabAction
 } from "@/terminal/components/TabContextMenu";
@@ -541,9 +542,11 @@ export default function TerminalWorkspace({
   const searchIndex = searchResult.index;
 
   // AI 面板可拖宽度：默认 390，最窄 320，最宽到终端区域的一半（见 max）
-  // 底部抽屉：none / 系统信息 / 进程信息
+  // 底部抽屉：none / 系统信息 / 进程信息 / 网络信息
   const [bottomDrawer, setBottomDrawer] =
-    useState<"none" | "sys" | "proc">("none");
+    useState<"none" | "sys" | "proc" | "net">(
+      "none"
+    );
   const drawerOpen = bottomDrawer !== "none";
 
   // 抽屉开合只缩/放本地视口，期间暂停向 PTY 同步行高：ConPTY 在 PTY
@@ -1100,6 +1103,13 @@ export default function TerminalWorkspace({
                 setBottomDrawer("none")
               }
             />
+          ) : bottomDrawer === "net" ? (
+            <NetworkInfoDrawer
+              session={active}
+              onClose={() =>
+                setBottomDrawer("none")
+              }
+            />
           ) : (
             <ProcessInfoDrawer
               session={active}
@@ -1126,6 +1136,11 @@ export default function TerminalWorkspace({
                   active?.kind === "ssh"
                     ? () =>
                         setBottomDrawer("proc")
+                    : undefined
+                }
+                onOpenNetwork={
+                  active?.kind === "ssh"
+                    ? () => setBottomDrawer("net")
                     : undefined
                 }
               />
