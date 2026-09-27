@@ -94,6 +94,11 @@ type Props = {
   ) => void;
   /** 点击 + ：弹出新增快捷宏的窗口。 */
   onAddMacro: () => void;
+  /** AI 执行卡片「存为宏」：名称用卡片说明文字，留空由宏层兜底用命令。 */
+  onAddMacroCommand: (
+    name: string,
+    command: string
+  ) => void;
   /** 右键某个宏 → 编辑。 */
   onEditMacro: (macro: TerminalMacro) => void;
   /** 右键某个宏 → 删除。 */
@@ -161,6 +166,7 @@ export default function TerminalWorkspace({
   macros,
   onRunMacro,
   onAddMacro,
+  onAddMacroCommand,
   onEditMacro,
   onDeleteMacro,
   onReorderMacro,
@@ -1165,7 +1171,10 @@ export default function TerminalWorkspace({
       </Card>
       {active?.kind === "ssh" && (
         // AI 助手面板：对话 + run_command 执行卡片（只读自动执行、读写等确认）
-        <AiPanel session={active} />
+        <AiPanel
+          session={active}
+          onAddMacroCommand={onAddMacroCommand}
+        />
       )}
     </div>
   );

@@ -104,6 +104,8 @@ const zhCN = {
   "ai.card.title": "准备执行命令",
   "ai.card.copy": "复制",
   "ai.card.copied": "已复制",
+  "ai.card.addMacro": "存为宏",
+  "ai.card.added": "已添加",
   "ai.card.result": "执行结果",
   "ai.badge.ro":
     "此命令为只读操作，不会修改服务器状态",
@@ -372,6 +374,8 @@ const enUS: Record<MessageKey, string> = {
   "ai.card.title": "Ready to run",
   "ai.card.copy": "Copy",
   "ai.card.copied": "Copied",
+  "ai.card.addMacro": "Save as macro",
+  "ai.card.added": "Added",
   "ai.card.result": "Result",
   "ai.badge.ro":
     "This command is read-only and will not modify the server",

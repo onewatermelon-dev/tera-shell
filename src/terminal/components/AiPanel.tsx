@@ -30,6 +30,11 @@ import type { OpenSession } from "@/terminal/lib/terminalTypes";
 type AiPanelProps = {
   /** 当前激活的 SSH 会话（命令执行目标与上下文来源）。 */
   session: OpenSession;
+  /** 把卡片命令存为快捷宏：名称用命令下方的说明文字，留空由宏层兜底用命令。 */
+  onAddMacroCommand: (
+    name: string,
+    command: string
+  ) => void;
 };
 
 /** 执行卡片的可见文本与操作。 */
@@ -38,7 +43,8 @@ function ToolCard({
   awaitingConfirm,
   busy,
   onConfirm,
-  onSkip
+  onSkip,
+  onAddMacro
 }: {
   call: AiToolCall;
   awaitingConfirm: boolean;
@@ -46,9 +52,13 @@ function ToolCard({
   /** mode：terminal = 写入活动终端；background = 独立 exec 通道 */
   onConfirm: (mode: ExecCardMode) => void;
   onSkip: () => void;
+  /** 把这条命令存为快捷宏 */
+  onAddMacro: () => void;
 }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [macroAdded, setMacroAdded] =
+    useState(false);
   const badge = call.isReadOnly
     ? t("ai.card.ro")
     : t("ai.card.rw");
@@ -106,6 +116,22 @@ function ToolCard({
         </div>
       )}
       <div className="ai-card-actions">
+        <button
+          type="button"
+          className="ai-card-btn"
+          onClick={() => {
+            onAddMacro();
+            setMacroAdded(true);
+            setTimeout(
+              () => setMacroAdded(false),
+              1500
+            );
+          }}
+        >
+          {macroAdded
+            ? t("ai.card.added")
+            : t("ai.card.addMacro")}
+        </button>
         <button
           type="button"
           className="ai-card-btn"
@@ -280,7 +306,8 @@ function AutoExecuteRiskDialog({
  * 「自动执行」「自动应用」开关控制，关闭时等用户确认。
  */
 export default function AiPanel({
-  session
+  session,
+  onAddMacroCommand
 }: AiPanelProps) {
   const t = useT();
   // 供应商/模型在设置页即改即存，监听变更事件即时刷新「+」菜单
@@ -412,6 +439,12 @@ export default function AiPanel({
                     entry.call.id,
                     selected,
                     mode
+                  )
+                }
+                onAddMacro={() =>
+                  onAddMacroCommand(
+                    entry.call.question,
+                    entry.call.command
                   )
                 }
                 onSkip={() =>

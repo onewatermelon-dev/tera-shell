@@ -382,6 +382,8 @@ export default function App() {
             setEditingMacro(null);
             setMacroOpen(true);
           }}
+          // AI 卡片一键存宏：名称用卡片说明，留空按既有约定用命令兜底
+          onAddMacroCommand={macroStore.add}
           onEditMacro={macro => {
             setEditingMacro(macro);
             setMacroOpen(true);
