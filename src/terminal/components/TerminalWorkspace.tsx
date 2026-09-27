@@ -1148,6 +1148,15 @@ export default function TerminalWorkspace({
                     ? () => setBottomDrawer("net")
                     : undefined
                 }
+                activeEntry={
+                  bottomDrawer === "sys"
+                    ? "system"
+                    : bottomDrawer === "proc"
+                      ? "process"
+                      : bottomDrawer === "net"
+                        ? "network"
+                        : undefined
+                }
               />
             ) : (
               <>

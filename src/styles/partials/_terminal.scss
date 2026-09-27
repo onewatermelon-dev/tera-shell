@@ -931,3 +931,13 @@ body.tab-dragging {
 .status-val.is-up {
   color: #f59e0b;
 }
+
+// 抽屉打开时对应入口按钮的选中态
+.status-info-btn.is-active {
+  color: var(--accent);
+  background: color-mix(
+    in srgb,
+    var(--accent) 14%,
+    transparent
+  );
+}

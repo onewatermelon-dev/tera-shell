@@ -28,6 +28,8 @@ type StatusInfoBarProps = {
   onOpenProcess?: () => void;
   /** 打开「网络信息」抽屉；仅 SSH 会话激活时提供，否则退化为提示。 */
   onOpenNetwork?: () => void;
+  /** 当前打开的抽屉对应的入口，按钮显示选中态。 */
+  activeEntry?: "system" | "process" | "network";
 };
 
 /** 状态栏轮询间隔：脚本自带 1s 采样，5s 一轮足够新鲜又不扰远端。 */
@@ -45,7 +47,8 @@ export default function StatusInfoBar({
   onNotify,
   onOpenSystem,
   onOpenProcess,
-  onOpenNetwork
+  onOpenNetwork,
+  activeEntry
 }: StatusInfoBarProps) {
   const t = useT();
   const [sample, setSample] =
@@ -104,7 +107,12 @@ export default function StatusInfoBar({
           <button
             key={key}
             type="button"
-            className="status-info-btn"
+            className={`status-info-btn ${
+              activeEntry &&
+              key === `status.info.${activeEntry}`
+                ? "is-active"
+                : ""
+            }`}
             onClick={() => {
               if (
                 key === "status.info.system" &&
