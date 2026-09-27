@@ -11,6 +11,8 @@ type StatusInfoBarProps = {
   onNotify: (message: string) => void;
   /** 打开「系统信息」抽屉；仅 SSH 会话激活时提供，否则退化为提示。 */
   onOpenSystem?: () => void;
+  /** 打开「进程信息」抽屉；仅 SSH 会话激活时提供，否则退化为提示。 */
+  onOpenProcess?: () => void;
 };
 
 /**
@@ -22,7 +24,8 @@ type StatusInfoBarProps = {
  */
 export default function StatusInfoBar({
   onNotify,
-  onOpenSystem
+  onOpenSystem,
+  onOpenProcess
 }: StatusInfoBarProps) {
   const t = useT();
   const pending = [
@@ -44,6 +47,13 @@ export default function StatusInfoBar({
                 onOpenSystem
               ) {
                 onOpenSystem();
+                return;
+              }
+              if (
+                key === "status.info.process" &&
+                onOpenProcess
+              ) {
+                onOpenProcess();
                 return;
               }
               onNotify(t("status.notReady"));

@@ -870,3 +870,38 @@ body.tab-dragging {
     );
   }
 }
+
+// 进程表：表头可点击排序，命令行列过长省略，占比条缩小
+.proc-table th.is-sortable {
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    color: var(--foreground);
+  }
+
+  // 当前排序列表头高亮成主题强调色
+  &.is-active {
+    color: var(--accent);
+  }
+}
+
+// PID 单元格：数字 + 紧跟其后的复制按钮
+.proc-table td.proc-pid {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.proc-table td.proc-cmd span {
+  display: block;
+  max-width: 460px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 表格单元格内的迷你占比条：撑满单元格宽度 */
+.sys-bar.is-mini {
+  margin-top: 4px;
+}

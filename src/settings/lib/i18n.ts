@@ -122,6 +122,12 @@ const zhCN = {
   "sys.unknown": "未知",
   "sys.loading": "采集中…",
   "sys.refresh": "刷新",
+  "proc.title": "进程信息",
+  "proc.colPid": "PID",
+  "proc.colUser": "用户",
+  "proc.colMem": "内存",
+  "proc.colCpu": "CPU",
+  "proc.colCmd": "名称/命令行",
   "sys.tip.core":
     "CPU、内存、磁盘三项最关键资源用量的概览",
   "sys.tip.system":
@@ -463,6 +469,12 @@ const enUS: Record<MessageKey, string> = {
   "sys.unknown": "Unknown",
   "sys.loading": "Collecting…",
   "sys.refresh": "Refresh",
+  "proc.title": "Process Info",
+  "proc.colPid": "PID",
+  "proc.colUser": "User",
+  "proc.colMem": "Memory",
+  "proc.colCpu": "CPU",
+  "proc.colCmd": "Name/Command",
   "sys.tip.core":
     "Overview of the three key resources: CPU, memory and disk usage",
   "sys.tip.system":

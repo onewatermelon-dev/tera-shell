@@ -374,3 +374,43 @@ export function fmtUptime(sec: number): string {
     ? `${hours} h ${mins} m`
     : `${mins} m`;
 }
+
+/**
+ * 进程采集脚本：`=` 抑制表头，args 放最后一列（含空格），
+ * 默认按 PID 倒序（新进程在前）。
+ */
+export const PROC_SCRIPT =
+  "ps -eo pid=,user=,%mem=,%cpu=,args= --sort=-pid";
+
+export type ProcInfo = {
+  pid: number;
+  user: string;
+  mem: number;
+  cpu: number;
+  cmd: string;
+};
+
+/**
+ * 解析 ps 输出。aiRunCommand 的包装前导行（hostname/pwd/---）
+ * 不匹配「数字 用户 数 数 命令」的行式，天然被跳过。
+ */
+export function parseProcesses(
+  stdout: string
+): ProcInfo[] {
+  const out: ProcInfo[] = [];
+  for (const line of stdout.split("\n")) {
+    const matched =
+      /^\s*(\d+)\s+(\S+)\s+([\d.]+)\s+([\d.]+)\s+(.*)$/.exec(
+        line
+      );
+    if (!matched) continue;
+    out.push({
+      pid: Number(matched[1]),
+      user: matched[2] ?? "",
+      mem: Number(matched[3]) || 0,
+      cpu: Number(matched[4]) || 0,
+      cmd: (matched[5] ?? "").trim()
+    });
+  }
+  return out;
+}

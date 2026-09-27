@@ -24,6 +24,7 @@ import AiPanel from "@/terminal/components/AiPanel";
 import MacroBar from "@/terminal/components/MacroBar";
 import StatusInfoBar from "@/terminal/components/StatusInfoBar";
 import SystemInfoDrawer from "@/terminal/components/SystemInfoDrawer";
+import ProcessInfoDrawer from "@/terminal/components/ProcessInfoDrawer";
 import TabContextMenu, {
   type TabAction
 } from "@/terminal/components/TabContextMenu";
@@ -540,16 +541,18 @@ export default function TerminalWorkspace({
   const searchIndex = searchResult.index;
 
   // AI 面板可拖宽度：默认 390，最窄 320，最宽到终端区域的一半（见 max）
-  // 「系统信息」底部抽屉开关
-  const [sysOpen, setSysOpen] = useState(false);
+  // 底部抽屉：none / 系统信息 / 进程信息
+  const [bottomDrawer, setBottomDrawer] =
+    useState<"none" | "sys" | "proc">("none");
+  const drawerOpen = bottomDrawer !== "none";
 
   // 抽屉开合只缩/放本地视口，期间暂停向 PTY 同步行高：ConPTY 在 PTY
   // 尺寸变化时会整屏重绘，若把 PTY 缩到十几行再放大，重绘内容只剩那
   // 十几行，会把本地已恢复的历史打回空白（「先恢复、一闪又缩回去」）。
   // 本地视口的重新 fit 由 ResizeObserver 链路完成（暂停只挡后端同步）。
   useEffect(() => {
-    setPtyResizePaused(sysOpen);
-  }, [sysOpen, setPtyResizePaused]);
+    setPtyResizePaused(drawerOpen);
+  }, [drawerOpen, setPtyResizePaused]);
   const [aiWidth, setAiWidth] = useState<number>(
     () => {
       try {
@@ -626,7 +629,7 @@ export default function TerminalWorkspace({
       {/* HeroUI Card 面板：圆角 + surface 底色，p-0/gap-0 抵消 Card 内边距 */}
       <Card
         className={`terminal-pane rounded-xl p-0 gap-0 ${
-          sysOpen && active?.kind === "ssh"
+          drawerOpen && active?.kind === "ssh"
             ? "has-sys-drawer"
             : ""
         } ${
@@ -1088,12 +1091,23 @@ export default function TerminalWorkspace({
           </EmptyState>
         )}
 
-        {sysOpen && active?.kind === "ssh" && (
-          <SystemInfoDrawer
-            session={active}
-            onClose={() => setSysOpen(false)}
-          />
-        )}
+        {drawerOpen &&
+          active?.kind === "ssh" &&
+          (bottomDrawer === "sys" ? (
+            <SystemInfoDrawer
+              session={active}
+              onClose={() =>
+                setBottomDrawer("none")
+              }
+            />
+          ) : (
+            <ProcessInfoDrawer
+              session={active}
+              onClose={() =>
+                setBottomDrawer("none")
+              }
+            />
+          ))}
 
         {/* 本地 PowerShell 会话不显示底部状态栏：快捷宏与系统信息都面向 SSH 场景 */}
         {active?.kind !== "local" && (
@@ -1105,7 +1119,13 @@ export default function TerminalWorkspace({
                 onNotify={onNotify}
                 onOpenSystem={
                   active?.kind === "ssh"
-                    ? () => setSysOpen(true)
+                    ? () => setBottomDrawer("sys")
+                    : undefined
+                }
+                onOpenProcess={
+                  active?.kind === "ssh"
+                    ? () =>
+                        setBottomDrawer("proc")
                     : undefined
                 }
               />
