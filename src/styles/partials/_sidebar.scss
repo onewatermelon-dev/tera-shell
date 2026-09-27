@@ -432,3 +432,37 @@
   min-width: 0;
   max-width: none;
 }
+
+// 「自动执行」安全确认弹窗（HeroUI Modal，只补内容区排版）
+.ai-risk-title {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ai-risk-icon {
+  color: #faad14;
+}
+
+.ai-risk-lead {
+  font-weight: 600;
+}
+
+.ai-risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 18px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ai-risk-ack {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 13px;
+  cursor: pointer;
+}

@@ -7,14 +7,20 @@ import {
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { ThinkingState } from "@aicss/react/thinking-state";
-import { InfoCircleOutlined } from "@ant-design/icons";
+import { Button, Modal } from "@heroui/react";
+import {
+  InfoCircleOutlined,
+  WarningFilled
+} from "@ant-design/icons";
 import { ReasoningBlock } from "@/terminal/components/aicss/ReasoningBlock";
 import { PromptInput } from "@/terminal/components/aicss/PromptInput";
 import type { ExecCardMode } from "@/terminal/lib/aiChat";
 import { useT } from "@/settings/lib/i18n";
 import {
   listOpenAiModels,
+  loadRunFlag,
   loadSelectedModel,
+  saveRunFlag,
   saveSelectedModel,
   useAiChat
 } from "@/terminal/lib/aiChat";
@@ -182,11 +188,96 @@ function ToolCard({
   );
 }
 
+/** 开启「自动执行」前的安全确认弹窗：勾选知晓风险后才可确认。 */
+function AutoExecuteRiskDialog({
+  onConfirm,
+  onClose
+}: {
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [ack, setAck] = useState(false);
+  return (
+    <Modal
+      isOpen
+      onOpenChange={next => {
+        if (!next) onClose();
+      }}
+    >
+      <Modal.Backdrop>
+        <Modal.Container
+          placement="center"
+          size="sm"
+        >
+          <Modal.Dialog className="ai-risk-dialog">
+            <Modal.Header>
+              <Modal.Heading>
+                <span className="ai-risk-title">
+                  <WarningFilled className="ai-risk-icon" />
+                  安全提示
+                </span>
+              </Modal.Heading>
+              <Modal.CloseTrigger
+                aria-label={t("app.action.close")}
+              />
+            </Modal.Header>
+            <Modal.Body>
+              <p className="ai-risk-lead">
+                开启自动执行只读命令存在潜在风险：
+              </p>
+              <ol className="ai-risk-list">
+                <li>
+                  命令的“只读”属性是由AI判断的，可能存在判断错误的情况。
+                </li>
+                <li>
+                  自动执行可能导致意料之外的服务器状态变更或数据泄露。
+                </li>
+              </ol>
+              <label className="ai-risk-ack">
+                <input
+                  type="checkbox"
+                  checked={ack}
+                  onChange={event =>
+                    setAck(event.target.checked)
+                  }
+                />
+                我已知晓风险，并同意开启自动执行只读命令功能
+              </label>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onPress={onClose}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                isDisabled={!ack}
+                onPress={() => {
+                  onConfirm();
+                  onClose();
+                }}
+              >
+                确认开启
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 /**
  * SSH 会话右侧的 AI 助手面板：模型对话 + run_command 执行卡片。
  *
  * 模型走「模型设置」里 OpenAI 兼容的供应商；命令执行走独立 exec 通道
- * （aiRunCommand），只读命令自动执行，读写命令等用户确认。
+ * （aiRunCommand），只读/读写命令是否自动执行由输入框「+」菜单的
+ * 「自动执行」「自动应用」开关控制，关闭时等用户确认。
  */
 export default function AiPanel({
   session
@@ -198,6 +289,15 @@ export default function AiPanel({
   );
   const [selectedKey, setSelectedKey] = useState(
     () => loadSelectedModel() ?? ""
+  );
+  // 「+」菜单里的执行策略开关（持久化，默认都关）
+  const [autoExecute, setAutoExecute] = useState(
+    () => loadRunFlag("autoExecute")
+  );
+  // 开启「自动执行」前的安全确认弹窗
+  const [riskOpen, setRiskOpen] = useState(false);
+  const [autoApply, setAutoApply] = useState(() =>
+    loadRunFlag("autoApply")
   );
   // 上次选中的模型可能已被删掉：找不到就退回第一个可选项
   const selected =
@@ -218,7 +318,10 @@ export default function AiPanel({
     confirm,
     skip,
     clear
-  } = useAiChat(session);
+  } = useAiChat(session, {
+    autoExecute,
+    autoApply
+  });
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // 新消息 / 状态变化后滚到底部，聊天面板的默认阅读位置在最新一条
@@ -230,6 +333,26 @@ export default function AiPanel({
   function pickModel(value: string) {
     setSelectedKey(value);
     saveSelectedModel(value);
+  }
+
+  function toggleAutoExecute(value: boolean) {
+    // 开启需过安全确认弹窗；关闭直接生效
+    if (value) {
+      setRiskOpen(true);
+      return;
+    }
+    setAutoExecute(false);
+    saveRunFlag("autoExecute", false);
+  }
+
+  function confirmAutoExecute() {
+    setAutoExecute(true);
+    saveRunFlag("autoExecute", true);
+  }
+
+  function toggleAutoApply(value: boolean) {
+    setAutoApply(value);
+    saveRunFlag("autoApply", value);
   }
 
   return (
@@ -354,6 +477,10 @@ export default function AiPanel({
               : ""
           }
           onModelChange={pickModel}
+          autoExecute={autoExecute}
+          onAutoExecuteChange={toggleAutoExecute}
+          autoApply={autoApply}
+          onAutoApplyChange={toggleAutoApply}
           busy={busy}
           placeholder={t("ai.input")}
           onSend={text =>
@@ -361,6 +488,12 @@ export default function AiPanel({
           }
         />
       </div>
+      {riskOpen && (
+        <AutoExecuteRiskDialog
+          onConfirm={confirmAutoExecute}
+          onClose={() => setRiskOpen(false)}
+        />
+      )}
     </aside>
   );
 }

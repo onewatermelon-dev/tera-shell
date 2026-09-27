@@ -32,6 +32,12 @@ type PromptInputProps = {
   /** 当前选中的模型 id */
   modelId: string;
   onModelChange: (id: string) => void;
+  /** 只读命令自动执行（关闭则也需手动确认） */
+  autoExecute: boolean;
+  onAutoExecuteChange: (value: boolean) => void;
+  /** 文件更改（读写命令）自动应用（关闭则需手动点击执行） */
+  autoApply: boolean;
+  onAutoApplyChange: (value: boolean) => void;
   /** 引擎忙时禁止发送 */
   busy: boolean;
   placeholder: string;
@@ -43,6 +49,10 @@ export function PromptInput({
   models,
   modelId,
   onModelChange,
+  autoExecute,
+  onAutoExecuteChange,
+  autoApply,
+  onAutoApplyChange,
   busy,
   placeholder,
   onSend
@@ -182,6 +192,83 @@ export function PromptInput({
                 className={styles.menu}
                 role="menu"
               >
+                <div className={styles.menuLabel}>
+                  执行
+                </div>
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={autoExecute}
+                  className={styles.menuItem}
+                  title="开启后只读命令自动执行，无需手动确认"
+                  onClick={() => {
+                    // 开启会弹安全确认框，先把菜单收起
+                    setMenuOpen(false);
+                    onAutoExecuteChange(
+                      !autoExecute
+                    );
+                  }}
+                >
+                  <span
+                    className={styles.menuName}
+                  >
+                    自动执行
+                  </span>
+                  {autoExecute && (
+                    <span
+                      className={styles.menuCheck}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={autoApply}
+                  className={styles.menuItem}
+                  title="开启后文件更改自动应用，无需手动点击执行"
+                  onClick={() =>
+                    onAutoApplyChange(!autoApply)
+                  }
+                >
+                  <span
+                    className={styles.menuName}
+                  >
+                    自动应用
+                  </span>
+                  {autoApply && (
+                    <span
+                      className={styles.menuCheck}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </span>
+                  )}
+                </button>
                 <div className={styles.menuLabel}>
                   模型
                 </div>

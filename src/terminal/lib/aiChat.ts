@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState
 } from "react";
@@ -48,7 +49,7 @@ function terminalTail(
  * AI 聊天的交互引擎：workspace 上下文注入 + run_command 工具循环。
  *
  * 借鉴 WisdomSSH 的交互模型 —— 模型通过 run_command 工具在当前服务器
- * 执行命令；只读命令自动执行，读写命令生成执行卡片等用户确认。
+ * 执行命令；「自动执行 / 自动应用」开关决定卡片自动执行还是等用户确认。
  * 会话只保存在内存里（应用关闭即消失），不落盘。
  */
 
@@ -71,7 +72,7 @@ export type AiToolCall = {
   command: string;
   /** 模型给出的执行说明，展示给用户 */
   question: string;
-  /** true = 只读（自动执行）；false = 读写（等用户点执行） */
+  /** true = 只读（受「自动执行」开关控制）；false = 读写（受「自动应用」开关控制） */
   isReadOnly: boolean;
   /** pending=等确认，running=执行中，done/failed=已结束 */
   state:
@@ -152,14 +153,58 @@ export function saveSelectedModel(
   }
 }
 
+/**
+ * 执行策略开关的存储键（值为 "1"/"0"）。
+ *
+ * v2：首版「自动执行」默认开，旧键可能残留用户当时保存的开启值；
+ * 换键让所有人回到「默认都关」的起点。
+ */
+export const RUN_FLAG_KEYS = {
+  autoExecute: "ai-auto-execute-v2",
+  autoApply: "ai-auto-apply-v2"
+} as const;
+
+/**
+ * 读取执行策略开关，跨启动记住。两个开关默认都关：
+ * 只读命令与文件更改都需要用户手动确认。
+ */
+export function loadRunFlag(
+  name: keyof typeof RUN_FLAG_KEYS
+): boolean {
+  try {
+    return (
+      localStorage.getItem(
+        RUN_FLAG_KEYS[name]
+      ) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** 保存执行策略开关，跨启动记住。 */
+export function saveRunFlag(
+  name: keyof typeof RUN_FLAG_KEYS,
+  value: boolean
+): void {
+  try {
+    localStorage.setItem(
+      RUN_FLAG_KEYS[name],
+      value ? "1" : "0"
+    );
+  } catch {
+    /* 忽略：只是记住偏好的次要功能 */
+  }
+}
+
 /** 工具结果回填给模型的上限：超长保留尾部（诊断价值在尾部）。 */
 const TOOL_RESULT_LIMIT = 10000;
 
 const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行在用户的 SSH 服务器环境中。
-你可以通过 run_command 工具在当前服务器上执行命令：
+你可以通过 run_command 工具在当前服务器上执行命令（客户端按设置自动执行或等用户确认）：
 - command：要执行的命令，在用户主目录下以登录 shell 运行；每个命令独立，需要操作其他目录请用绝对路径或 cd xxx && 组合。
 - question：一句话向用户解释这条命令做什么。
-- is_read_only：纯读取类命令（查看、搜索、统计）设为 true 会被自动执行；任何会修改服务器状态的命令（写文件、安装、重启、删除等）必须设为 false，等待用户确认。
+- is_read_only：纯读取类命令（查看、搜索、统计）设为 true；任何会修改服务器状态的命令（写文件、安装、重启、删除等）必须设为 false。
 除非用户明确要求，不要执行破坏性或高风险命令。回答用简体中文，简洁、结论先行。`;
 
 /** 拼一条用户消息末尾的上下文块（对齐 WisdomSSH 的 workspace 注入）。 */
@@ -190,7 +235,7 @@ const RUN_COMMAND_PARAMETERS = {
     is_read_only: {
       type: "boolean",
       description:
-        "纯读取类命令为 true（自动执行），会修改服务器状态必须为 false（等待用户确认）"
+        "纯读取类命令为 true，会修改服务器状态必须为 false"
     }
   },
   required: [
@@ -1004,8 +1049,18 @@ export function parseToolArguments(raw: string): {
 
 /** 面板内一轮对话的状态与动作。 */
 export function useAiChat(
-  session: OpenSession | undefined
+  session: OpenSession | undefined,
+  /** 执行策略：autoExecute = 只读命令自动执行；autoApply = 读写命令自动应用 */
+  runOptions: {
+    autoExecute: boolean;
+    autoApply: boolean;
+  }
 ) {
+  // ref 透传：切换开关即时生效且不必重建 runLoop 及其依赖链
+  const runOptionsRef = useRef(runOptions);
+  useEffect(() => {
+    runOptionsRef.current = runOptions;
+  }, [runOptions]);
   const [entries, setEntries] = useState<
     AiChatEntry[]
   >([]);
@@ -1218,11 +1273,29 @@ export function useAiChat(
             ...list,
             { kind: "tool", call: card }
           ]);
-          if (card.isReadOnly) {
+          const { autoExecute, autoApply } =
+            runOptionsRef.current;
+          // 关键决策日志：排查「没弹确认卡就执行了」时看模型给的只读
+          // 标记与生效开关（is_read_only 由模型自报，可能标错）
+          console.info(
+            "[ai-exec]",
+            card.command,
+            "isReadOnly:",
+            card.isReadOnly,
+            "autoExecute:",
+            autoExecute,
+            "autoApply:",
+            autoApply
+          );
+          if (
+            card.isReadOnly
+              ? autoExecute
+              : autoApply
+          ) {
             await executeCard(card, toolCallId);
             continue;
           }
-          // 读写命令：登记后暂停循环，等用户点执行 / 跳过
+          // 未开自动执行 / 应用：登记后暂停循环，等用户点执行 / 跳过
           pendingRef.current.set(toolCallId, {
             call: card,
             toolCallId
