@@ -654,3 +654,31 @@
   font-size: 13px;
   cursor: pointer;
 }
+
+// AI 面板收起后的浮窗按钮：贴窗口右缘垂直居中，点击向左拉回面板。
+// 用 top/bottom + margin auto 居中而非 transform：fixed 元素带 transform 时，
+// 面板展开引发重绘的那一帧 WebView2 合成层会先按未位移位置画一次（视觉上「先向下跳」）
+.ai-reopen-tab {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 72px;
+  margin: auto 0;
+  color: var(--accent);
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: var(--surface-secondary);
+  }
+}

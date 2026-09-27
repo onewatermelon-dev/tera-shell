@@ -36,6 +36,7 @@ import {
   PlusOutlined,
   DownOutlined,
   DesktopOutlined,
+  LeftOutlined,
   LinkOutlined
 } from "@ant-design/icons";
 
@@ -548,6 +549,9 @@ export default function TerminalWorkspace({
       "none"
     );
   const drawerOpen = bottomDrawer !== "none";
+  // AI 面板收起状态：收起后贴窗口右缘成浮窗按钮
+  const [aiCollapsed, setAiCollapsed] =
+    useState(false);
 
   // 抽屉开合只缩/放本地视口，期间暂停向 PTY 同步行高：ConPTY 在 PTY
   // 尺寸变化时会整屏重绘，若把 PTY 缩到十几行再放大，重绘内容只剩那
@@ -619,7 +623,7 @@ export default function TerminalWorkspace({
     <div
       ref={aiHostRef}
       className={
-        active?.kind === "ssh"
+        active?.kind === "ssh" && !aiCollapsed
           ? "terminal-with-ai has-panel"
           : "terminal-with-ai"
       }
@@ -1327,7 +1331,7 @@ export default function TerminalWorkspace({
           </Surface>
         )}
       </Card>
-      {active?.kind === "ssh" && (
+      {active?.kind === "ssh" && !aiCollapsed && (
         <div
           className="ai-resizer"
           aria-hidden="true"
@@ -1336,12 +1340,25 @@ export default function TerminalWorkspace({
           onPointerUp={endAiResize}
         />
       )}
-      {active?.kind === "ssh" && (
+      {active?.kind === "ssh" && !aiCollapsed && (
         // AI 助手面板：对话 + run_command 执行卡片（只读自动执行、读写等确认）
         <AiPanel
           session={active}
           onAddMacroCommand={onAddMacroCommand}
+          onCollapse={() => setAiCollapsed(true)}
         />
+      )}
+      {active?.kind === "ssh" && aiCollapsed && (
+        // 收起后的浮窗按钮：贴窗口右缘，点击向左拉回面板
+        <button
+          type="button"
+          className="ai-reopen-tab"
+          aria-label={t("ai.expand")}
+          title={t("ai.expand")}
+          onClick={() => setAiCollapsed(false)}
+        >
+          <LeftOutlined />
+        </button>
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import {
   HistoryOutlined,
   InfoCircleOutlined,
   PlusOutlined,
+  RightOutlined,
   WarningFilled
 } from "@ant-design/icons";
 import {
@@ -43,6 +44,8 @@ type AiPanelProps = {
     name: string,
     command: string
   ) => void;
+  /** 收起面板：贴到窗口右缘成浮窗按钮。 */
+  onCollapse: () => void;
 };
 
 /** 执行卡片的可见文本与操作。 */
@@ -315,7 +318,8 @@ function AutoExecuteRiskDialog({
  */
 export default function AiPanel({
   session,
-  onAddMacroCommand
+  onAddMacroCommand,
+  onCollapse
 }: AiPanelProps) {
   const t = useT();
   // 供应商/模型在设置页即改即存，监听变更事件即时刷新「+」菜单
@@ -619,6 +623,15 @@ export default function AiPanel({
               </div>
             )}
           </div>
+          <button
+            type="button"
+            className="ai-panel-clear"
+            aria-label={t("ai.collapse")}
+            title={t("ai.collapse")}
+            onClick={onCollapse}
+          >
+            <RightOutlined />
+          </button>
         </div>
       </div>
       <div
