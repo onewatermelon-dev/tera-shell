@@ -4,7 +4,8 @@
  * AI 输入框（改造自 @aicss/react 的 PromptInput，MIT 许可）。
  *
  * 相比原组件的裁剪：
- * - 移除附件上传、Skills 斜杠面板、Enhance Prompt 假流程（本项目无此能力）；
+ * - 附件上传改为仅图片（「+」菜单选文件 → data URL 交给父级随消息发送）；
+ *   移除 Skills 斜杠面板、Enhance Prompt 假流程（本项目无此能力）；
  * - 移除 lucide-react 依赖，用到的图标改为内联 SVG；
  * - 内置的演示模型列表换成 props 传入的真实模型清单。
  *
@@ -16,6 +17,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
 import styles from "./PromptInput.module.css";
@@ -38,12 +40,51 @@ type PromptInputProps = {
   /** 文件更改（读写命令）自动应用（关闭则需手动点击执行） */
   autoApply: boolean;
   onAutoApplyChange: (value: boolean) => void;
+  /** 待发送的图片（data URL），由父级持有；发送后由父级清空 */
+  images: string[];
+  /** 选图完成：读出 data URL 列表交给父级 */
+  onAddImages: (urls: string[]) => void;
+  onRemoveImage: (index: number) => void;
   /** 引擎忙时禁止发送 */
   busy: boolean;
   placeholder: string;
   /** 用户按下发送（Enter 或点击箭头），参数为编辑器纯文本 */
   onSend: (value: string) => void;
 };
+
+/** 单张图上限：base64 进请求体，超大图直接拒收。 */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/** 文件 → data URL；非图片或超限返回 null。 */
+async function fileToDataUrl(
+  file: File
+): Promise<string | null> {
+  if (
+    !file.type.startsWith("image/") ||
+    file.size > MAX_IMAGE_BYTES
+  ) {
+    console.warn(
+      "[ai-image] 跳过不支持的文件",
+      file.name,
+      file.type,
+      file.size
+    );
+    return null;
+  }
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      resolve(String(reader.result));
+    reader.onerror = () => {
+      console.warn(
+        "[ai-image] 读取失败",
+        file.name
+      );
+      resolve(null);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export function PromptInput({
   models,
@@ -53,6 +94,9 @@ export function PromptInput({
   onAutoExecuteChange,
   autoApply,
   onAutoApplyChange,
+  images,
+  onAddImages,
+  onRemoveImage,
   busy,
   placeholder,
   onSend
@@ -62,6 +106,25 @@ export function PromptInput({
   const editorRef = useRef<HTMLDivElement>(null);
   const plusWrapRef =
     useRef<HTMLDivElement>(null);
+  const fileInputRef =
+    useRef<HTMLInputElement>(null);
+
+  const pickImages = async (
+    event: ReactChangeEvent<HTMLInputElement>
+  ) => {
+    const files = Array.from(
+      event.target.files ?? []
+    );
+    // 先清空 input，重选同一张图也能触发 change
+    event.target.value = "";
+    const urls = await Promise.all(
+      files.map(fileToDataUrl)
+    );
+    const accepted = urls.filter(
+      (url): url is string => url !== null
+    );
+    if (accepted.length) onAddImages(accepted);
+  };
 
   // 模型菜单：点击外部 / Esc 关闭
   useEffect(() => {
@@ -97,7 +160,9 @@ export function PromptInput({
   }, [menuOpen]);
 
   const hasText = value.trim().length > 0;
-  const sendActive = hasText && !busy;
+  // 只发图不发消息也允许发送
+  const sendActive =
+    (hasText || images.length > 0) && !busy;
 
   const syncFromEditor = () => {
     setValue(
@@ -152,6 +217,44 @@ export function PromptInput({
           />
         </div>
 
+        {images.length > 0 && (
+          <div className={styles.attachments}>
+            {images.map((url, index) => (
+              <span
+                key={`${index}-${url.slice(-24)}`}
+                className={styles.thumb}
+              >
+                <img
+                  src={url}
+                  alt=""
+                  className={styles.thumbImg}
+                />
+                <button
+                  type="button"
+                  className={styles.thumbRemove}
+                  aria-label="移除图片"
+                  onClick={() =>
+                    onRemoveImage(index)
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={event =>
+            void pickImages(event)
+          }
+        />
+
         <div className={styles.row}>
           <div
             className={styles.plusWrap}
@@ -192,6 +295,25 @@ export function PromptInput({
                 className={styles.menu}
                 role="menu"
               >
+                <div className={styles.menuLabel}>
+                  附件
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  title="选择本地图片，随消息发送给模型识别"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <span
+                    className={styles.menuName}
+                  >
+                    上传图片
+                  </span>
+                </button>
                 <div className={styles.menuLabel}>
                   执行
                 </div>

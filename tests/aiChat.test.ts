@@ -128,9 +128,84 @@ describe("anthropic 适配器", () => {
       "t1"
     );
   });
+
+  it("用户消息带图片时转成 text + base64 image 块", () => {
+    const body = anthropicAdapter.buildBody(
+      option,
+      [
+        {
+          role: "user",
+          content: "看这张图",
+          images: ["data:image/jpeg;base64,QUJD"]
+        }
+      ]
+    ) as {
+      messages: [
+        {
+          content: Array<{
+            type: string;
+            source?: {
+              type: string;
+              media_type: string;
+              data: string;
+            };
+          }>;
+        }
+      ];
+    };
+    const blocks = body.messages[0].content;
+    expect(blocks.map(b => b.type)).toEqual([
+      "text",
+      "image"
+    ]);
+    expect(blocks[1]?.source).toEqual({
+      type: "base64",
+      media_type: "image/jpeg",
+      data: "QUJD"
+    });
+  });
 });
 
 describe("responses 适配器", () => {
+  it("用户消息带图片时转成 input_text + input_image", () => {
+    const option = {
+      provider: {
+        baseUrl: "https://api.example.com"
+      },
+      model: {
+        name: "gpt-x",
+        maxOutputTokens: "4096"
+      }
+    } as never;
+    const body = responsesAdapter.buildBody(
+      option,
+      [
+        {
+          role: "user",
+          content: "图",
+          images: ["data:image/png;base64,QUJD"]
+        }
+      ]
+    ) as {
+      input: [
+        {
+          content: Array<{
+            type: string;
+            image_url?: string;
+          }>;
+        }
+      ];
+    };
+    const parts = body.input[0].content;
+    expect(parts.map(p => p.type)).toEqual([
+      "input_text",
+      "input_image"
+    ]);
+    expect(parts[1]?.image_url).toBe(
+      "data:image/png;base64,QUJD"
+    );
+  });
+
   it("解析 function_call 项为 tool_calls", () => {
     const message = responsesAdapter.parse(
       '{"output":[{"type":"function_call","call_id":"c1","name":"run_command","arguments":"{\\"command\\":\\"ls\\"}"}]}'

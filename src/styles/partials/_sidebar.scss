@@ -433,6 +433,21 @@
   max-width: none;
 }
 
+// 用户消息里的图片缩略图
+.ai-entry-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.ai-entry-images img {
+  max-width: 140px;
+  max-height: 140px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 // 「自动执行」安全确认弹窗（HeroUI Modal，只补内容区排版）
 .ai-risk-title {
   display: inline-flex;

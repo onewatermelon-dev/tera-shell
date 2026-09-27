@@ -55,7 +55,12 @@ function terminalTail(
 
 /** 一条用户 / 助手可见消息。 */
 export type AiChatEntry =
-  | { kind: "user"; text: string }
+  | {
+      kind: "user";
+      text: string;
+      /** 用户上传的图片（data URL），仅展示用 */
+      images?: string[];
+    }
   | {
       kind: "assistant";
       text: string;
@@ -96,6 +101,8 @@ type ProtocolMessage = {
   tool_call_id?: string;
   /** 模型的思考内容：仅供展示，回传请求时必须剥离（见 buildBody） */
   reasoning?: string;
+  /** 用户上传的图片（data URL），仅 user 消息携带，适配器转多模态块 */
+  images?: string[];
 };
 
 /** 可选中的模型：供应商 × 模型。 */
@@ -280,7 +287,30 @@ const openAiAdapter: FormatAdapter = {
   buildBody: (option, messages) => ({
     model: option.model.name.trim(),
     messages: messages.map(
-      ({ reasoning: _reasoning, ...rest }) => rest
+      ({
+        reasoning: _reasoning,
+        images,
+        ...rest
+      }) =>
+        rest.role === "user" && images?.length
+          ? {
+              ...rest,
+              content: [
+                ...(rest.content
+                  ? [
+                      {
+                        type: "text",
+                        text: rest.content
+                      }
+                    ]
+                  : []),
+                ...images.map(url => ({
+                  type: "image_url",
+                  image_url: { url }
+                }))
+              ]
+            }
+          : rest
     ),
     max_tokens: maxTokensOf(option),
     tools: [
@@ -317,6 +347,27 @@ const openAiAdapter: FormatAdapter = {
     };
   }
 };
+
+/** data URL → Anthropic base64 图片块；解析不出 MIME 时按 png 兜底。 */
+function anthropicImageBlock(dataUrl: string): {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
+} {
+  const matched =
+    /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: matched?.[1] ?? "image/png",
+      data: matched?.[2] ?? ""
+    }
+  };
+}
 
 /** Anthropic Messages：system 顶层、tool_use/tool_result 块、结果必须并进下一条 user 消息。 */
 export const anthropicAdapter: FormatAdapter = {
@@ -390,7 +441,17 @@ export const anthropicAdapter: FormatAdapter = {
       }
       converted.push({
         role: "user",
-        content: message.content ?? ""
+        content: message.images?.length
+          ? [
+              {
+                type: "text",
+                text: message.content ?? ""
+              },
+              ...message.images.map(
+                anthropicImageBlock
+              )
+            ]
+          : (message.content ?? "")
       });
     }
     return {
@@ -510,7 +571,12 @@ export const responsesAdapter: FormatAdapter = {
           {
             type: "input_text",
             text: message.content ?? ""
-          }
+          },
+          // Responses 接受 data URL 作为 input_image 的 image_url
+          ...(message.images ?? []).map(url => ({
+            type: "input_image",
+            image_url: url
+          }))
         ]
       });
     }
@@ -1324,11 +1390,13 @@ export function useAiChat(
   const send = useCallback(
     async (
       text: string,
-      option: AiModelOption | null
+      option: AiModelOption | null,
+      /** 用户上传的图片（data URL），可只发图不发消息 */
+      images: string[] = []
     ) => {
       const trimmed = text.trim();
       if (
-        !trimmed ||
+        (!trimmed && images.length === 0) ||
         busy ||
         pendingCardId ||
         !session
@@ -1344,7 +1412,11 @@ export function useAiChat(
       setBusy(true);
       setEntries(list => [
         ...list,
-        { kind: "user", text: trimmed }
+        {
+          kind: "user",
+          text: trimmed,
+          ...(images.length ? { images } : {})
+        }
       ]);
       const messages = messagesRef.current;
       if (messages.length === 0) {
@@ -1355,7 +1427,8 @@ export function useAiChat(
       }
       messages.push({
         role: "user",
-        content: `${trimmed}\n\n${workspaceContext(session)}`
+        content: `${trimmed}\n\n${workspaceContext(session)}`,
+        ...(images.length ? { images } : {})
       });
       try {
         await runLoop(option);

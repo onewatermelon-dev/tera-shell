@@ -883,3 +883,41 @@
     animation-duration: 1.4s;
   }
 }
+
+/* 待发送图片缩略图条（编辑器与按钮行之间） */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.thumb {
+  position: relative;
+  display: inline-flex;
+}
+
+.thumbImg {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid var(--pi-menu-border, #e6e8ec);
+  border-radius: 6px;
+}
+
+.thumbRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--pi-fg, #1a1a1a);
+  cursor: pointer;
+  background: var(--pi-menu-bg, #fff);
+  border: 1px solid var(--pi-menu-border, #e6e8ec);
+  border-radius: 50%;
+}

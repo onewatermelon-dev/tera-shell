@@ -296,6 +296,10 @@ export default function AiPanel({
   );
   // 开启「自动执行」前的安全确认弹窗
   const [riskOpen, setRiskOpen] = useState(false);
+  // 待发送的图片（data URL），随下一条消息带走并清空
+  const [attachments, setAttachments] = useState<
+    string[]
+  >([]);
   const [autoApply, setAutoApply] = useState(() =>
     loadRunFlag("autoApply")
   );
@@ -429,13 +433,26 @@ export default function AiPanel({
               </div>
             );
           }
+          // user / error 条目：用户消息可能带图片，缩略图排在文本上方
           return (
-            <p
+            <div
               key={index}
               className={`ai-entry is-${entry.kind}`}
             >
+              {entry.kind === "user" &&
+              entry.images?.length ? (
+                <span className="ai-entry-images">
+                  {entry.images.map((url, i) => (
+                    <img
+                      key={i}
+                      src={url}
+                      alt=""
+                    />
+                  ))}
+                </span>
+              ) : null}
               {entry.text}
-            </p>
+            </div>
           );
         })}
         {stream && (
@@ -481,11 +498,28 @@ export default function AiPanel({
           onAutoExecuteChange={toggleAutoExecute}
           autoApply={autoApply}
           onAutoApplyChange={toggleAutoApply}
+          images={attachments}
+          onAddImages={urls =>
+            setAttachments(list => [
+              ...list,
+              ...urls
+            ])
+          }
+          onRemoveImage={index =>
+            setAttachments(list =>
+              list.filter((_, i) => i !== index)
+            )
+          }
           busy={busy}
           placeholder={t("ai.input")}
-          onSend={text =>
-            void send(text, selected)
-          }
+          onSend={text => {
+            void send(
+              text,
+              selected,
+              attachments
+            );
+            setAttachments([]);
+          }}
         />
       </div>
       {riskOpen && (
