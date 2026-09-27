@@ -3,7 +3,9 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
 } from "react";
 import type { OpenSession } from "@/terminal/lib/useTerminals";
 import {
@@ -21,6 +23,7 @@ import Hint from "@/shared/components/Hint";
 import AiPanel from "@/terminal/components/AiPanel";
 import MacroBar from "@/terminal/components/MacroBar";
 import StatusInfoBar from "@/terminal/components/StatusInfoBar";
+import SystemInfoDrawer from "@/terminal/components/SystemInfoDrawer";
 import TabContextMenu, {
   type TabAction
 } from "@/terminal/components/TabContextMenu";
@@ -112,6 +115,8 @@ type Props = {
   statusMode: StatusMode;
   /** 信息形态下点击未开放入口（系统 / 进程 / 网络信息）的提示出口。 */
   onNotify: (message: string) => void;
+  /** 暂停/恢复向 PTY 同步行高（系统信息抽屉开合期间只动本地视口）。 */
+  setPtyResizePaused: (paused: boolean) => void;
 };
 
 /**
@@ -171,7 +176,8 @@ export default function TerminalWorkspace({
   onDeleteMacro,
   onReorderMacro,
   statusMode,
-  onNotify
+  onNotify,
+  setPtyResizePaused
 }: Props) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -533,17 +539,98 @@ export default function TerminalWorkspace({
   const searchCount = searchResult.count;
   const searchIndex = searchResult.index;
 
+  // AI 面板可拖宽度：默认 390，最窄 320，最宽到终端区域的一半（见 max）
+  // 「系统信息」底部抽屉开关
+  const [sysOpen, setSysOpen] = useState(false);
+
+  // 抽屉开合只缩/放本地视口，期间暂停向 PTY 同步行高：ConPTY 在 PTY
+  // 尺寸变化时会整屏重绘，若把 PTY 缩到十几行再放大，重绘内容只剩那
+  // 十几行，会把本地已恢复的历史打回空白（「先恢复、一闪又缩回去」）。
+  // 本地视口的重新 fit 由 ResizeObserver 链路完成（暂停只挡后端同步）。
+  useEffect(() => {
+    setPtyResizePaused(sysOpen);
+  }, [sysOpen, setPtyResizePaused]);
+  const [aiWidth, setAiWidth] = useState<number>(
+    () => {
+      try {
+        // 最小宽度 390：旧存档里更小的值一并抬回来
+        return Math.max(
+          390,
+          Number(
+            localStorage.getItem("ai-panel-width")
+          ) || 390
+        );
+      } catch {
+        return 390;
+      }
+    }
+  );
+  const aiHostRef = useRef<HTMLDivElement>(null);
+  /** 拖拽开始时钉住容器矩形，避免拖动过程中重读布局 */
+  const aiDragRef = useRef<DOMRect | null>(null);
+
+  function startAiResize(
+    event: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const host = aiHostRef.current;
+    if (!host) return;
+    event.currentTarget.setPointerCapture(
+      event.pointerId
+    );
+    aiDragRef.current =
+      host.getBoundingClientRect();
+  }
+
+  function moveAiResize(
+    event: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const rect = aiDragRef.current;
+    if (!rect) return;
+    const min = 390;
+    // 上限 = 容器一半（再减去分隔条 5px 与两条 4px 间隙）
+    const max = (rect.width - 13) / 2;
+    const next = Math.min(
+      Math.max(min, rect.right - event.clientX),
+      Math.max(min, max)
+    );
+    setAiWidth(Math.round(next));
+  }
+
+  function endAiResize() {
+    aiDragRef.current = null;
+    try {
+      localStorage.setItem(
+        "ai-panel-width",
+        String(aiWidth)
+      );
+    } catch {
+      /* 记住宽度是次要功能，写失败忽略 */
+    }
+  }
+
   return (
     // SSH 会话激活时右侧并排 AI 聊天面板（占位态），本地会话只有终端卡片
     <div
+      ref={aiHostRef}
       className={
         active?.kind === "ssh"
           ? "terminal-with-ai has-panel"
           : "terminal-with-ai"
       }
+      style={
+        {
+          "--ai-panel-width": `${aiWidth}px`
+        } as CSSProperties
+      }
     >
       {/* HeroUI Card 面板：圆角 + surface 底色，p-0/gap-0 抵消 Card 内边距 */}
-      <Card className="terminal-pane rounded-xl p-0 gap-0">
+      <Card
+        className={`terminal-pane rounded-xl p-0 gap-0 ${
+          sysOpen && active?.kind === "ssh"
+            ? "has-sys-drawer"
+            : ""
+        }`}
+      >
         <div className="tabs-bar">
           {/* 左栏区域：标签条 + 新建/溢出按钮的定位锚点。flex 权重挂在这一层
             （拆分时＝主栏比例），+ 按钮因此钉在左栏末尾、分割线左侧，而不是
@@ -997,11 +1084,25 @@ export default function TerminalWorkspace({
           </EmptyState>
         )}
 
+        {sysOpen && active?.kind === "ssh" && (
+          <SystemInfoDrawer
+            session={active}
+            onClose={() => setSysOpen(false)}
+          />
+        )}
+
         <div className="terminal-status">
           {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
           {statusMode === "info" ? (
             // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
-            <StatusInfoBar onNotify={onNotify} />
+            <StatusInfoBar
+              onNotify={onNotify}
+              onOpenSystem={
+                active?.kind === "ssh"
+                  ? () => setSysOpen(true)
+                  : undefined
+              }
+            />
           ) : (
             <>
               <MacroBar
@@ -1169,6 +1270,15 @@ export default function TerminalWorkspace({
           </Surface>
         )}
       </Card>
+      {active?.kind === "ssh" && (
+        <div
+          className="ai-resizer"
+          aria-hidden="true"
+          onPointerDown={startAiResize}
+          onPointerMove={moveAiResize}
+          onPointerUp={endAiResize}
+        />
+      )}
       {active?.kind === "ssh" && (
         // AI 助手面板：对话 + run_command 执行卡片（只读自动执行、读写等确认）
         <AiPanel

@@ -18,9 +18,12 @@
   user-select: none;
 }
 
-// 终端区域整棵子树恢复可选（xterm 依赖它做拖选、双击选词）
+// 终端区域整棵子树恢复可选（xterm 依赖它做拖选、双击选词）；
+// AI 面板的对话文字同样要能划选复制
 .terminal-host,
 .terminal-host *,
+.ai-panel,
+.ai-panel *,
 input,
 textarea,
 [contenteditable="true"] {

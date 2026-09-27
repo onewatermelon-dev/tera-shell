@@ -581,3 +581,292 @@ body.tab-dragging {
   display: flex;
   gap: 8px;
 }
+
+// 底部「系统信息」抽屉：占 .terminal-pane 的一行栅格轨道（has-sys-drawer），
+// 终端区随之收缩到剩余高度，光标所在行始终可见
+.sys-drawer {
+  display: flex;
+  flex-direction: column;
+  height: 360px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.sys-drawer-head {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.sys-head-icon {
+  color: var(--accent);
+}
+
+.sys-drawer-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.sys-icon-btn {
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-secondary);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+.sys-drawer-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 14px 14px;
+  overflow-y: auto;
+}
+
+.sys-loading {
+  padding: 20px 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+
+  &.is-error {
+    color: #ef4444;
+  }
+}
+
+.sys-section {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+// 标题后的说明小图标：悬停出原生 tooltip 解释分区含义
+.sys-section-tip {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: help;
+
+  &:hover {
+    color: var(--accent);
+  }
+}
+
+.sys-cards {
+  display: grid;
+  grid-template-columns: repeat(
+    3,
+    minmax(0, 1fr)
+  );
+  gap: 12px;
+}
+
+.sys-card {
+  padding: 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+// 悬停外框与各自进度条同色，外圈带一层同色柔光
+.sys-card.is-cpu:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 12px rgb(59 130 246 / 35%);
+}
+
+.sys-card.is-mem:hover {
+  border-color: #22c55e;
+  box-shadow: 0 0 12px rgb(34 197 94 / 35%);
+}
+
+.sys-card.is-disk:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgb(245 158 11 / 35%);
+}
+
+.sys-card-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sys-card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 6px 0 8px;
+}
+
+.sys-card-value {
+  font-size: 18px;
+  font-weight: 600;
+
+  &.is-cpu {
+    color: #3b82f6;
+  }
+}
+
+.sys-card-unit {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.sys-card-pct {
+  font-size: 13px;
+
+  &.is-cpu {
+    color: var(--muted);
+  }
+
+  &.is-mem {
+    color: #22c55e;
+  }
+
+  &.is-disk {
+    color: #f59e0b;
+  }
+}
+
+.sys-bar {
+  height: 5px;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: 3px;
+}
+
+.sys-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+
+  &.is-cpu {
+    background: #3b82f6;
+  }
+
+  &.is-mem {
+    background: #22c55e;
+  }
+
+  &.is-disk {
+    background: #f59e0b;
+  }
+}
+
+.sys-grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  font-size: 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  > span {
+    color: var(--muted);
+  }
+
+  > dd {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.sys-table-wrap {
+  overflow: hidden;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+// 同一分区里连续两张表（如 CPU 信息）之间留间隙
+.sys-table-wrap + .sys-table-wrap {
+  margin-top: 10px;
+}
+
+.sys-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+
+  th {
+    padding: 8px 12px;
+    font-weight: 500;
+    color: var(--muted);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 8px 12px;
+    color: var(--foreground);
+  }
+}
+
+.sys-oneline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  > span:first-child {
+    color: var(--muted);
+  }
+}
+
+// 其余区块与核心指标卡同款悬停反馈：边框过渡成强调色 + 同色柔光
+.sys-grid,
+.sys-table-wrap,
+.sys-oneline {
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+
+  &:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 12px
+      color-mix(
+        in srgb,
+        var(--accent) 30%,
+        transparent
+      );
+  }
+}
+
+// 表格行悬停轻微高亮，方便逐行读数
+.sys-table tbody tr {
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: color-mix(
+      in srgb,
+      var(--foreground) 5%,
+      transparent
+    );
+  }
+}

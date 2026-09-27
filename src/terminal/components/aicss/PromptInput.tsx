@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
   type ChangeEvent as ReactChangeEvent,
+  type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode
 } from "react";
@@ -212,6 +213,27 @@ export function PromptInput({
     if (accepted.length) onAddImages(accepted);
   };
 
+  // 粘贴图片：剪贴板里有图片文件（截图直接 Ctrl+V）时收进待发送附件，
+  // 纯文本粘贴不受影响
+  const onEditorPaste = async (
+    event: ReactClipboardEvent<HTMLDivElement>
+  ) => {
+    const files = Array.from(
+      event.clipboardData.files
+    ).filter(file =>
+      file.type.startsWith("image/")
+    );
+    if (files.length === 0) return;
+    event.preventDefault();
+    const urls = await Promise.all(
+      files.map(fileToDataUrl)
+    );
+    const accepted = urls.filter(
+      (url): url is string => url !== null
+    );
+    if (accepted.length) onAddImages(accepted);
+  };
+
   // 浮层展开的供应商（null = 收起）。用 JS 状态 + 延迟关闭替代纯 CSS
   // :hover：斜向移动指针会短暂经过行与浮层之间的死区，hover 一断即收起
   const [openProvider, setOpenProvider] =
@@ -337,6 +359,9 @@ export function PromptInput({
             data-disabled={busy || undefined}
             onInput={syncFromEditor}
             onKeyDown={onEditorKeyDown}
+            onPaste={event =>
+              void onEditorPaste(event)
+            }
           />
         </div>
 

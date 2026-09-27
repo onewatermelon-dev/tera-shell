@@ -5,7 +5,7 @@ import {
 } from "react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
-import { ThinkingState } from "@aicss/react/thinking-state";
+import { ThinkingState } from "@/terminal/components/aicss/ThinkingState";
 import { Button, Modal } from "@heroui/react";
 import {
   HistoryOutlined,

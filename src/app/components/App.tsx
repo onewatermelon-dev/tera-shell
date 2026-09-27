@@ -394,6 +394,9 @@ export default function App() {
           onReorderMacro={macroStore.reorder}
           statusMode={statusMode}
           onNotify={setError}
+          setPtyResizePaused={
+            terminals.setPtyResizePaused
+          }
         />
         {/* 设置页盖在工作区之上（绝对定位），而不是替换它的内容 ——
             替换会让 TerminalWorkspace 卸载，xterm 的 DOM 随之被移除，

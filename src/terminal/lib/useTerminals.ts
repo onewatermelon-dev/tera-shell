@@ -165,6 +165,8 @@ export function useTerminals(
   };
 
   // ---- 1. Tab management ----
+  /** PTY 行高同步暂停标记（系统信息抽屉打开时为真） */
+  const ptyPausedRef = useRef(false);
   const resize = useCallback(
     (current?: OpenSession) => {
       // 显式指定就只动它；否则两栏各自跟一次 —— ResizeObserver 拖分隔线 /
@@ -189,6 +191,10 @@ export function useTerminals(
         ) {
           session.fit.fit();
           session.terminal.scrollToBottom();
+          // 抽屉打开期间暂停向 PTY 同步行高：ConPTY 收缩会丢掉屏幕
+          // 上方内容，恢复时整屏重绘把历史打回空白；只缩本地视口即可，
+          // 远端布局保持不变（见 setPtyResizePaused）
+          if (ptyPausedRef.current) continue;
           invoke("terminal_resize", {
             id: session.id,
             rows: session.terminal.rows,
@@ -198,6 +204,22 @@ export function useTerminals(
       }
     },
     []
+  );
+
+  /**
+   * 暂停/恢复向 PTY 同步行高（系统信息抽屉开合时调用）。
+   *
+   * 抽屉收缩终端时若把 PTY 一起缩到十几行，ConPTY 会丢掉屏幕上方内容，
+   * 恢复时整屏重绘只剩那十几行（表现为「先恢复、一闪又缩回去」）。
+   * 暂停后 ResizeObserver 只缩本地视口；恢复时补一次 resize，
+   * 把完整尺寸同步回远端。
+   */
+  const setPtyResizePaused = useCallback(
+    (paused: boolean) => {
+      ptyPausedRef.current = paused;
+      if (!paused) resize();
+    },
+    [resize]
   );
 
   /**
@@ -857,6 +879,7 @@ export function useTerminals(
     focusTerminal,
     close,
     closeMany,
+    setPtyResizePaused,
     splitIds,
     splitVisibleId,
     activateSplit,

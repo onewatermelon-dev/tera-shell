@@ -7,8 +7,10 @@ import {
 } from "@ant-design/icons";
 
 type StatusInfoBarProps = {
-  /** 点击尚未实现的入口（系统 / 进程 / 网络信息）时的提示出口。 */
+  /** 点击尚未实现的入口（进程 / 网络信息）时的提示出口。 */
   onNotify: (message: string) => void;
+  /** 打开「系统信息」抽屉；仅 SSH 会话激活时提供，否则退化为提示。 */
+  onOpenSystem?: () => void;
 };
 
 /**
@@ -19,7 +21,8 @@ type StatusInfoBarProps = {
  * （终端走系统 ssh 进程），接通后在这里填真实值。
  */
 export default function StatusInfoBar({
-  onNotify
+  onNotify,
+  onOpenSystem
 }: StatusInfoBarProps) {
   const t = useT();
   const pending = [
@@ -35,9 +38,16 @@ export default function StatusInfoBar({
             key={key}
             type="button"
             className="status-info-btn"
-            onClick={() =>
-              onNotify(t("status.notReady"))
-            }
+            onClick={() => {
+              if (
+                key === "status.info.system" &&
+                onOpenSystem
+              ) {
+                onOpenSystem();
+                return;
+              }
+              onNotify(t("status.notReady"));
+            }}
           >
             {key === "status.info.system" && (
               <InfoCircleOutlined />

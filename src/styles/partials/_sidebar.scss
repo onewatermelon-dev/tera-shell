@@ -111,6 +111,12 @@
 
   // 底色交给 Card（--surface）；overflow 裁掉标签栏直角，贴合 Card 圆角
   overflow: hidden;
+
+  // 系统信息抽屉打开时多占一行（auto 行轨 = 抽屉高度），
+  // 终端区 1fr 收缩到剩余空间，光标行始终可见
+  &.has-sys-drawer {
+    grid-template-rows: 38px 1fr auto 25px;
+  }
 }
 
 // 终端卡片与 AI 面板的横向容器：本地会话单列；SSH 会话右侧并排 AI 聊天面板
@@ -121,8 +127,36 @@
   min-height: 0;
 
   &.has-panel {
-    grid-template-columns: minmax(0, 1fr) 390px;
-    gap: 8px;
+    // 面板宽度由拖拽分隔条控制（--ai-panel-width，见 TerminalWorkspace）；
+    // min(…, 50vw) 兜底窗口缩小时不吞掉终端
+    grid-template-columns:
+      minmax(0, 1fr) 5px
+      min(
+        var(--ai-panel-width, 390px),
+        calc(50vw - 13px)
+      );
+    gap: 4px;
+  }
+}
+
+// 终端 ⇆ AI 面板拖拽分隔条：细命中区 + 居中握柄
+.ai-resizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  cursor: col-resize;
+
+  &::after {
+    width: 3px;
+    height: 28px;
+    content: "";
+    background: var(--border);
+    border-radius: 2px;
+  }
+
+  &:hover::after {
+    background: var(--muted);
   }
 }
 

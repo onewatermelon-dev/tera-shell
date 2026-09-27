@@ -5,6 +5,7 @@ import {
   responsesAdapter,
   trimToolOutput
 } from "@/terminal/lib/aiChat";
+import { parseSysInfo } from "@/terminal/lib/sysInfo";
 
 describe("parseToolArguments", () => {
   it("解析模型的工具调用参数", () => {
@@ -216,5 +217,95 @@ describe("responses 适配器", () => {
     expect(message.tool_calls?.[0]?.id).toBe(
       "c1"
     );
+  });
+});
+
+describe("parseSysInfo", () => {
+  const stdout = [
+    "host1",
+    "/root",
+    "---",
+    "===OS===",
+    "Ubuntu 24.04.3 LTS",
+    "6.8.0-90-generic",
+    "x86_64",
+    "cloud-1",
+    "===CPU===",
+    "Architecture: x86_64",
+    "Model name: Intel(R) Xeon(R) CPU",
+    "CPU(s): 2",
+    "L1d cache: 64 KiB (2 instances)",
+    "L3 cache: 16 MiB (1 instance)",
+    "BogoMIPS: 4988.44",
+    "===STAT===",
+    "cpu 100 0 50 800 10 0 0 0 0 0",
+    "cpu 101 0 51 846 11 0 0 0 0 0",
+    "===MEM===",
+    "MemTotal: 961536 kB",
+    "MemFree: 158464 kB",
+    "MemAvailable: 551680 kB",
+    "Buffers: 128 kB",
+    "Cached: 561920 kB",
+    "Shmem: 1280 kB",
+    "SwapTotal: 0 kB",
+    "SwapFree: 0 kB",
+    "===UPTIME===",
+    "6652800.00 100.00",
+    "===LOAD===",
+    "0.00 0.00 0.00",
+    "===NET===",
+    "Inter-| Receive | Transmit",
+    "face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed",
+    " lo: 1700000000 1 0 0 0 0 0 0 1700000000 1 0 0 0 0 0 0",
+    "ens3: 89800000000 1 0 0 0 0 0 0 68700000000 1 0 0 0 0 0 0",
+    " lo: 1700000000 1 0 0 0 0 0 0 1700000000 1 0 0 0 0 0 0",
+    "ens3: 89801000000 1 0 0 0 0 0 0 68700500000 1 0 0 0 0 0 0",
+    "===DISK===",
+    "Filesystem Size Used Avail Use% Mounted on",
+    "tmpfs 97M 1.1M 96M 2% /run",
+    "/dev/sda1 48G 4.2G 44G 9% /",
+    "tmpfs 481M 0 481M 0% /dev/shm"
+  ].join("\n");
+
+  it("解析各分节为结构化数据", () => {
+    const info = parseSysInfo(stdout);
+    expect(info.os).toBe("Ubuntu 24.04.3 LTS");
+    expect(info.hostname).toBe("cloud-1");
+    expect(info.cpu.name).toBe(
+      "Intel(R) Xeon(R) CPU"
+    );
+    expect(info.cpu.cores).toBe("2");
+    expect(info.cpu.caches).toEqual([
+      "L1d: 64 KiB (2 instances)",
+      "L3: 16 MiB (1 instance)"
+    ]);
+    // 两次采样差：user=1 system=1 idle=46 iowait=1，total=49
+    expect(info.cpuTotal).toBeCloseTo(
+      100 - (46 / 49) * 100 - (1 / 49) * 100,
+      1
+    );
+    expect(info.mem.total).toBe(961536 * 1024);
+    expect(info.mem.used).toBe(
+      (961536 - 551680) * 1024
+    );
+    expect(info.uptimeSec).toBe(6652800);
+    const ens3 = info.net.find(
+      n => n.name === "ens3"
+    );
+    expect(ens3?.rxBps).toBe(1000000);
+    expect(ens3?.txBps).toBe(500000);
+    expect(info.disks).toHaveLength(3);
+    expect(info.rootDisk).toEqual({
+      used: 4.2 * 1024 ** 3,
+      pct: 9
+    });
+  });
+
+  it("缺分节时不抛错、给空值", () => {
+    const info = parseSysInfo("===OS===\nfoo");
+    expect(info.os).toBe("foo");
+    expect(info.net).toEqual([]);
+    expect(info.rootDisk).toBeNull();
+    expect(info.cpuTotal).toBeCloseTo(0, 5);
   });
 });

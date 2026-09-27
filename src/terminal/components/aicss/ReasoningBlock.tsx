@@ -1,5 +1,6 @@
 import styles from "./ThinkingReasoning.module.css";
 import { useRef, useState } from "react";
+import { useT } from "@/settings/lib/i18n";
 
 /**
  * 模型思考过程的可折叠展示块（数据驱动版，改造自 @aicss/react 的
@@ -25,6 +26,7 @@ export function ReasoningBlock({
   reasoning,
   elapsedSeconds
 }: ReasoningBlockProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const viewportRef =
     useRef<HTMLDivElement>(null);
@@ -51,15 +53,12 @@ export function ReasoningBlock({
         onClick={toggle}
       >
         <span className={styles.trLabel}>
-          <span className={styles.trVerb}>
-            Thought
-          </span>{" "}
-          for{" "}
-          {Math.max(
-            1,
-            Math.round(elapsedSeconds)
-          )}
-          s
+          {t("ai.thoughtFor", {
+            s: Math.max(
+              1,
+              Math.round(elapsedSeconds)
+            )
+          })}
         </span>
         <svg
           className={styles.trChevron}
