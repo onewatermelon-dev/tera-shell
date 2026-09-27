@@ -126,7 +126,7 @@
   }
 }
 
-// AI 助手占位面板：与会话栏同风格的卡片，布局先落地、聊天功能后接
+// AI 助手面板：与会话栏同风格的卡片 —— 标题 + 消息流 + 输入区
 .ai-panel {
   display: flex;
   flex-direction: column;
@@ -140,34 +140,237 @@
 .ai-panel-head {
   display: flex;
   flex: none;
+  gap: 8px;
   align-items: center;
+  justify-content: space-between;
   height: 44px;
-  padding: 0 14px;
+  padding: 0 10px 0 14px;
   font-size: 13px;
   font-weight: 650;
   border-bottom: 1px solid var(--border);
 }
 
+.ai-panel-head-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-weight: 400;
+}
+
+.ai-model-select {
+  max-width: 150px;
+  height: 26px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--foreground);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ai-panel-clear {
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}
+
+// 消息流：纵向滚动，新消息靠 margin-auto 顶到最下
 .ai-panel-body {
   display: flex;
   flex: 1;
-  align-items: center;
-  justify-content: center;
-  padding: 14px;
-  font-size: 12px;
-  color: var(--muted);
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
 }
 
-// 底部输入框占位：仅静态外观，不可输入
-.ai-panel-input {
-  flex: none;
-  height: 42px;
-  padding: 0 12px;
-  margin: 10px;
+.ai-panel-empty {
+  margin: auto;
   font-size: 12px;
-  line-height: 40px;
   color: var(--muted);
+  text-align: center;
+}
+
+.ai-entry {
+  padding: 8px 10px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  border-radius: 8px;
+
+  &.is-user {
+    align-self: flex-end;
+    max-width: 90%;
+    background: var(--surface-secondary);
+  }
+
+  // 助手消息是 markdown（Streamdown 渲染），排版交给它本身
+  &.is-assistant {
+    align-self: stretch;
+    padding: 0;
+    white-space: normal;
+  }
+
+  &.is-error {
+    color: var(--danger);
+  }
+}
+
+// 执行卡片：一条 run_command 的完整生命周期
+.ai-card {
+  align-self: stretch;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ai-card-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.ai-card-badge {
+  flex: none;
+  padding: 1px 5px;
+  font:
+    9px Consolas,
+    monospace;
+  font-weight: 700;
+  border-radius: 4px;
+
+  &.ro {
+    color: var(--success);
+    background: rgb(0 0 0 / 12%);
+  }
+
+  &.rw {
+    color: var(--warning-foreground, #b45309);
+    background: rgb(180 83 9 / 14%);
+  }
+}
+
+.ai-card-question {
+  font-size: 11px;
+  color: var(--foreground);
+}
+
+.ai-card-command {
+  padding: 6px 8px;
+  margin: 0 0 6px;
+  overflow-x: auto;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  background: var(--surface-secondary);
+  border-radius: 6px;
+}
+
+.ai-card-result {
+  font-size: 11px;
+
+  summary {
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  pre {
+    max-height: 180px;
+    padding: 6px 8px;
+    margin: 6px 0 0;
+    overflow: auto;
+    font:
+      11px Consolas,
+      monospace;
+    white-space: pre-wrap;
+    background: var(--surface-secondary);
+    border-radius: 6px;
+  }
+
+  pre.is-error {
+    color: var(--danger);
+  }
+}
+
+.ai-card-state {
+  font-size: 11px;
+  color: var(--muted);
+
+  &.is-error {
+    color: var(--danger);
+  }
+}
+
+.ai-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-card-btn {
+  padding: 3px 12px;
+  font-size: 11px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &.is-primary {
+    color: var(--accent-foreground);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+.ai-panel-compose {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.ai-panel-compose .ai-panel-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
   background: var(--surface-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.ai-panel-send {
+  flex: none;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--accent-foreground);
+  cursor: pointer;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
 }

@@ -75,6 +75,7 @@ pub fn run() {
             infra::secret::encrypt,
             infra::secret::decrypt,
             infra::http::http_post_json,
+            infra::http::http_post_text,
             data::load_all,
             data::save_one,
             data::current_root,

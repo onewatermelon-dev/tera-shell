@@ -1,2 +1,34 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@import "streamdown/styles.css";
+
+/*
+ * Streamdown 的代码块等组件靠 tailwind 的 dark: 变体区分明暗，
+ * 这里把 dark 变体对齐到应用的主题语义（applyTheme）：
+ * 显式深色 / 显式浅色以 data-theme 为准，跟随系统时交给操作系统偏好。
+ * @custom-variant / @source 是 tailwind v4 专属语法，stylelint 不认识。
+ */
+/* stylelint-disable scss/at-rule-no-unknown, nesting-selector-no-missing-scoping-root, at-rule-empty-line-before */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(
+      :not(
+        [data-theme="light"],
+        [data-theme="light"] *
+      )
+    ) {
+      @slot;
+    }
+  }
+  @media (prefers-color-scheme: light) {
+    &:where(
+      [data-theme="dark"],
+      [data-theme="dark"] *
+    ) {
+      @slot;
+    }
+  }
+}
+
+@source "../../node_modules/streamdown/dist/*.js";
+/* stylelint-enable scss/at-rule-no-unknown, nesting-selector-no-missing-scoping-root, at-rule-empty-line-before */

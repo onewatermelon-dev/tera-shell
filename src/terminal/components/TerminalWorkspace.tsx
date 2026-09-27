@@ -18,6 +18,7 @@ import {
   Typography
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
+import AiPanel from "@/terminal/components/AiPanel";
 import MacroBar from "@/terminal/components/MacroBar";
 import StatusInfoBar from "@/terminal/components/StatusInfoBar";
 import TabContextMenu, {
@@ -1163,18 +1164,8 @@ export default function TerminalWorkspace({
         )}
       </Card>
       {active?.kind === "ssh" && (
-        // AI 助手占位面板：布局先落地，聊天功能后接
-        <aside className="ai-panel">
-          <div className="ai-panel-head">
-            <span>{t("ai.title")}</span>
-          </div>
-          <div className="ai-panel-body">
-            {t("ai.placeholder")}
-          </div>
-          <div className="ai-panel-input">
-            {t("ai.input")}
-          </div>
-        </aside>
+        // AI 助手面板：对话 + run_command 执行卡片（只读自动执行、读写等确认）
+        <AiPanel session={active} />
       )}
     </div>
   );

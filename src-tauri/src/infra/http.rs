@@ -57,3 +57,46 @@ pub async fn http_post_json(
 		}
 	}
 }
+
+/// 以 JSON 体 POST 一次并返回**响应正文**；非 2xx 返回 `Err(HTTP 状态 + 正文片段)`。
+///
+/// 模型聊天用：AI 的回复（含 tool_calls）就是响应正文，调用方必须拿到它。
+/// 模型推理可能远慢于连通性测试，超时放宽到 120 秒。
+#[tauri::command]
+pub async fn http_post_text(
+	url: String,
+	headers: HashMap<String, String>,
+	body: serde_json::Value,
+) -> Result<String, String> {
+	let client = reqwest::Client::builder()
+		.timeout(Duration::from_secs(120))
+		.build()
+		.map_err(|error| error.to_string())?;
+	let mut request = client.post(&url).json(&body);
+	for (name, value) in &headers {
+		request = request.header(name.as_str(), value.as_str());
+	}
+	match request.send().await {
+		Ok(response) => {
+			let status = response.status();
+			let text = response.text().await.unwrap_or_default();
+			if status.is_success() {
+				info!(url = %url, status = %status, "HTTP POST(文本) 收到响应");
+				Ok(text)
+			} else {
+				let snippet: String =
+					text.chars().take(300).collect();
+				error!(url = %url, status = %status, body = %snippet, "HTTP POST(文本) 非 2xx 响应");
+				Err(format!(
+					"HTTP {}: {}",
+					status.as_u16(),
+					snippet
+				))
+			}
+		}
+		Err(error) => {
+			error!(url = %url, error = %error, "HTTP POST(文本) 失败");
+			Err(error.to_string())
+		}
+	}
+}

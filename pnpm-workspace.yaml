@@ -1,0 +1,12 @@
+# pnpm 12 默认带 24h 供应链发布延迟（minimumReleaseAge=1440）。
+# streamdown 依赖的 micromark 系列刚被官方整组重发布（2026-09-26），
+# 触发了该策略；这几个包是 micromark 官方维护的核心解析器，予以豁免。
+minimumReleaseAgeExclude:
+  - micromark
+  - micromark-core-commonmark
+  - micromark-factory-space
+  - micromark-util-edit-map
+  - micromark-util-types
+
+allowBuilds:
+  "@parcel/watcher": true
