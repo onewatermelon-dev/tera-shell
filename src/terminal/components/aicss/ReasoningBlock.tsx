@@ -26,10 +26,6 @@ export function ReasoningBlock({
   elapsedSeconds
 }: ReasoningBlockProps) {
   const [open, setOpen] = useState(false);
-  const [fade, setFade] = useState({
-    top: false,
-    bottom: true
-  });
   const viewportRef =
     useRef<HTMLDivElement>(null);
 
@@ -38,17 +34,6 @@ export function ReasoningBlock({
     .map(line => line.trim())
     .filter(Boolean);
 
-  const onScroll = () => {
-    const el = viewportRef.current;
-    if (!el) return;
-    setFade({
-      top: el.scrollTop > 1,
-      bottom:
-        el.scrollTop + el.clientHeight <
-        el.scrollHeight - 1
-    });
-  };
-
   const toggle = () => {
     const next = !open;
     setOpen(next);
@@ -56,10 +41,6 @@ export function ReasoningBlock({
       viewportRef.current.scrollTop = 0;
     }
   };
-
-  const showTop = open ? fade.top : true;
-  const showBottom = open ? fade.bottom : true;
-  const mask = `linear-gradient(to bottom, transparent 0, #000 ${showTop ? 16 : 0}px, #000 calc(100% - ${showBottom ? 16 : 0}px), transparent 100%)`;
 
   return (
     <div className={styles.tr}>
@@ -112,13 +93,10 @@ export function ReasoningBlock({
             style={
               open
                 ? {
-                    maxHeight: `${MAX_VIEWPORT_PX}px`,
-                    WebkitMaskImage: mask,
-                    maskImage: mask
+                    maxHeight: `${MAX_VIEWPORT_PX}px`
                   }
                 : undefined
             }
-            onScroll={open ? onScroll : undefined}
           >
             <div className={styles.trStream}>
               {paragraphs.map((line, index) => (

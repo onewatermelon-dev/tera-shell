@@ -92,6 +92,10 @@ const zhCN = {
   "ai.card.copy": "复制",
   "ai.card.copied": "已复制",
   "ai.card.result": "执行结果",
+  "ai.badge.ro":
+    "此命令为只读操作，不会修改服务器状态",
+  "ai.badge.rw":
+    "此命令会修改服务器状态，点击执行后生效",
   "ai.card.running": "执行中…",
   "ai.card.done": "已完成",
   "ai.card.failed": "已失败",
@@ -343,6 +347,10 @@ const enUS: Record<MessageKey, string> = {
   "ai.card.copy": "Copy",
   "ai.card.copied": "Copied",
   "ai.card.result": "Result",
+  "ai.badge.ro":
+    "This command is read-only and will not modify the server",
+  "ai.badge.rw":
+    "This command modifies the server and takes effect after confirmation",
   "ai.card.running": "Running…",
   "ai.card.done": "Done",
   "ai.card.failed": "Failed",

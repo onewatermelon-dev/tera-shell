@@ -81,6 +81,11 @@ function ToolCard({
           className={`ai-card-badge ${
             call.isReadOnly ? "ro" : "rw"
           }`}
+          title={
+            call.isReadOnly
+              ? t("ai.badge.ro")
+              : t("ai.badge.rw")
+          }
         >
           {badge}
         </span>

@@ -153,7 +153,7 @@ export function saveSelectedModel(
 }
 
 /** 工具结果回填给模型的上限：超长保留尾部（诊断价值在尾部）。 */
-const TOOL_RESULT_LIMIT = 8000;
+const TOOL_RESULT_LIMIT = 10000;
 
 const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行在用户的 SSH 服务器环境中。
 你可以通过 run_command 工具在当前服务器上执行命令：
@@ -946,21 +946,31 @@ async function streamChatCompletion(
   }
 }
 
-/** 工具结果回填前的截断：保留尾部并注明。 */
-export function trimToolOutput(result: {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}): string {
-  const raw = `退出码: ${result.exitCode}\n${result.stdout}${
-    result.stderr
-      ? `\n[stderr]\n${result.stderr}`
-      : ""
-  }`;
+/** 工具结果 / 卡片展示的截断：超长保留尾部，并按 WisdomSSH 的格式注明。 */
+export function trimToolOutput(
+  raw: string
+): string {
   if (raw.length <= TOOL_RESULT_LIMIT) return raw;
-  return `[输出过长，已截断，保留尾部 ${TOOL_RESULT_LIMIT} 字符]\n${raw.slice(
+  return `[内容太长，已截断。原始长度: ${raw.length} 字符，显示最后 ${TOOL_RESULT_LIMIT} 字符]\n${raw.slice(
     -TOOL_RESULT_LIMIT
   )}`;
+}
+
+/** 解析包装命令（`hostname; pwd; echo ---; 原命令`）的输出头部。 */
+function parseWrappedOutput(stdout: string): {
+  hostName: string;
+  cwd: string;
+  output: string;
+} {
+  const [header = "", ...rest] =
+    stdout.split("\n---\n");
+  const [hostName = "", cwd = ""] =
+    header.split("\n");
+  return {
+    hostName: hostName.trim(),
+    cwd: cwd.trim(),
+    output: rest.join("\n---\n")
+  };
 }
 
 /** 解析模型的 tool_call 参数；参数不合法时给出可读错误。 */
@@ -1070,9 +1080,9 @@ export function useAiChat(
             30
           );
           call.state = "done";
-          call.stdout = tail;
+          call.stdout = trimToolOutput(tail);
           call.exitCode = -1;
-          content = `[已在终端执行，以下为终端当前输出尾部]\n${tail}`;
+          content = `[已在终端执行，以下为终端当前输出尾部]\n${call.stdout}`;
         } catch (reason) {
           call.state = "failed";
           call.error = String(reason);
@@ -1082,6 +1092,8 @@ export function useAiChat(
         call.state = "running";
         setEntries(list => [...list]);
         try {
+          // 包装命令：先取主机名与当前目录，用于合成终端风格的提示符行，
+          // 让执行结果与终端里看到的形态一致（含 `user@host:cwd# 命令`）
           const result = await aiRunCommand(
             {
               host: session?.host ?? "",
@@ -1089,15 +1101,26 @@ export function useAiChat(
               username: session?.username,
               password: session?.password
             },
-            call.command
+            `hostname; pwd; echo ---; ${call.command}`
           );
           // 通道执行完成即为 done：退出码非 0 是命令的正常输出
           // （如验证文件已删除的 ls、无匹配的 grep），由模型自行解读
           call.state = "done";
-          call.stdout = result.stdout;
           call.stderr = result.stderr;
           call.exitCode = result.exitCode;
-          content = trimToolOutput(result);
+          const { hostName, cwd, output } =
+            parseWrappedOutput(result.stdout);
+          const promptLine = `${session?.username ?? "root"}@${hostName || session?.host || ""}:${cwd}# ${call.command}`;
+          call.stdout = trimToolOutput(
+            `${promptLine}\n${output}`
+          );
+          content = trimToolOutput(
+            `退出码: ${result.exitCode}\n${promptLine}\n${output}${
+              result.stderr
+                ? `\n[stderr]\n${result.stderr}`
+                : ""
+            }`
+          );
         } catch (reason) {
           call.state = "failed";
           call.error = String(reason);

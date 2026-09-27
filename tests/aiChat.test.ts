@@ -30,24 +30,16 @@ describe("parseToolArguments", () => {
 });
 
 describe("trimToolOutput", () => {
-  it("短输出原样带回退出码", () => {
-    expect(
-      trimToolOutput({
-        stdout: "ok",
-        stderr: "",
-        exitCode: 0
-      })
-    ).toContain("退出码: 0");
+  it("短输出原样返回", () => {
+    expect(trimToolOutput("ok")).toBe("ok");
   });
 
-  it("超长输出保留尾部并注明", () => {
-    const out = trimToolOutput({
-      stdout: "x".repeat(9000),
-      stderr: "",
-      exitCode: 1
-    });
-    expect(out).toContain("已截断");
-    expect(out.length).toBeLessThan(8300);
+  it("超长输出保留尾部并按 WisdomSSH 格式注明", () => {
+    const out = trimToolOutput("x".repeat(10500));
+    expect(out).toContain(
+      "[内容太长，已截断。原始长度: 10500 字符，显示最后 10000 字符]"
+    );
+    expect(out.length).toBeLessThan(10200);
   });
 });
 
