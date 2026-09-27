@@ -117,6 +117,11 @@
   &.has-sys-drawer {
     grid-template-rows: 38px 1fr auto 25px;
   }
+
+  // 本地会话没有底部状态栏：行轨收为两行，终端直接顶到卡片底缘
+  &.no-status {
+    grid-template-rows: 38px 1fr;
+  }
 }
 
 // 终端卡片与 AI 面板的横向容器：本地会话单列；SSH 会话右侧并排 AI 聊天面板

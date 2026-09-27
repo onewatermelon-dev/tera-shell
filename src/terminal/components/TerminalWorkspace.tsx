@@ -629,6 +629,10 @@ export default function TerminalWorkspace({
           sysOpen && active?.kind === "ssh"
             ? "has-sys-drawer"
             : ""
+        } ${
+          active?.kind === "local"
+            ? "no-status"
+            : ""
         }`}
       >
         <div className="tabs-bar">
@@ -1091,55 +1095,59 @@ export default function TerminalWorkspace({
           />
         )}
 
-        <div className="terminal-status">
-          {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
-          {statusMode === "info" ? (
-            // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
-            <StatusInfoBar
-              onNotify={onNotify}
-              onOpenSystem={
-                active?.kind === "ssh"
-                  ? () => setSysOpen(true)
-                  : undefined
-              }
-            />
-          ) : (
-            <>
-              <MacroBar
-                macros={macros}
-                disabled={
-                  !macroTargetId ||
-                  disconnected[macroTargetId] ===
-                    true
+        {/* 本地 PowerShell 会话不显示底部状态栏：快捷宏与系统信息都面向 SSH 场景 */}
+        {active?.kind !== "local" && (
+          <div className="terminal-status">
+            {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
+            {statusMode === "info" ? (
+              // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
+              <StatusInfoBar
+                onNotify={onNotify}
+                onOpenSystem={
+                  active?.kind === "ssh"
+                    ? () => setSysOpen(true)
+                    : undefined
                 }
-                onRun={macro => {
-                  if (macroTargetId)
-                    onRunMacro(
-                      macro,
-                      macroTargetId
-                    );
-                }}
-                onAdd={onAddMacro}
-                onEdit={onEditMacro}
-                onDelete={onDeleteMacro}
-                onReorder={onReorderMacro}
               />
-              {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
-              <div className="status-meta">
-                <span>
-                  {active?.kind === "ssh"
-                    ? "SSH"
-                    : "LOCAL"}
-                </span>
-                <span>UTF-8</span>
-                <span>
-                  {active?.terminal.cols || 0} ×{" "}
-                  {active?.terminal.rows || 0}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                <MacroBar
+                  macros={macros}
+                  disabled={
+                    !macroTargetId ||
+                    disconnected[
+                      macroTargetId
+                    ] === true
+                  }
+                  onRun={macro => {
+                    if (macroTargetId)
+                      onRunMacro(
+                        macro,
+                        macroTargetId
+                      );
+                  }}
+                  onAdd={onAddMacro}
+                  onEdit={onEditMacro}
+                  onDelete={onDeleteMacro}
+                  onReorder={onReorderMacro}
+                />
+                {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
+                <div className="status-meta">
+                  <span>
+                    {active?.kind === "ssh"
+                      ? "SSH"
+                      : "LOCAL"}
+                  </span>
+                  <span>UTF-8</span>
+                  <span>
+                    {active?.terminal.cols || 0} ×{" "}
+                    {active?.terminal.rows || 0}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {searchOpen && (
           // HeroUI Surface：查找浮层的底色/描边/阴影跟随主题 token
