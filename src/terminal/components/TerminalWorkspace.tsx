@@ -1126,6 +1126,11 @@ export default function TerminalWorkspace({
             {statusMode === "info" ? (
               // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
               <StatusInfoBar
+                session={
+                  active?.kind === "ssh"
+                    ? active
+                    : undefined
+                }
                 onNotify={onNotify}
                 onOpenSystem={
                   active?.kind === "ssh"

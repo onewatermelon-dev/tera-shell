@@ -905,3 +905,29 @@ body.tab-dragging {
 .sys-bar.is-mini {
   margin-top: 4px;
 }
+
+// 状态栏信息形态的彩色图标与数值（参考 WisdomSSH）
+.status-icon {
+  margin-right: 4px;
+  font-size: 12px;
+}
+
+.status-icon.is-blue {
+  color: #3b82f6;
+}
+
+.status-icon.is-green {
+  color: #22c55e;
+}
+
+.status-val.is-green {
+  color: #22c55e;
+}
+
+.status-val.is-down {
+  color: #22c55e;
+}
+
+.status-val.is-up {
+  color: #f59e0b;
+}

@@ -535,3 +535,110 @@ export function parseNetInfo(
     send: g.send
   }));
 }
+
+/**
+ * 状态栏采集脚本：负载 + 运行时长 + 两次 /proc/net/dev 采样求速率。
+ * 间隔 1s，整体约 1.2s 返回，供状态栏低频轮询。
+ */
+export const STATUS_SCRIPT = `echo ===L===
+cat /proc/loadavg
+echo ===U===
+cut -d" " -f1 /proc/uptime
+echo ===N1===
+cat /proc/net/dev
+sleep 1
+echo ===N2===
+cat /proc/net/dev`;
+
+export type StatusSample = {
+  load: string;
+  uptimeSec: number;
+  rxBps: number;
+  txBps: number;
+};
+
+function markerSection(
+  stdout: string,
+  mark: string
+): string[] {
+  // indexOf 切段，避免模板字符串里正则转义的双层反斜杠坑
+  const begin = `===${mark}===\n`;
+  const start = stdout.indexOf(begin);
+  if (start < 0) return [];
+  const body = stdout.slice(start + begin.length);
+  const end = body.indexOf("\n===");
+  return (
+    end < 0 ? body : body.slice(0, end)
+  ).split("\n");
+}
+
+/** /proc/net/dev 行内合计所有网卡（除 lo）的收发字节。 */
+function netTotals(lines: string[]): {
+  rx: number;
+  tx: number;
+} {
+  let rx = 0;
+  let tx = 0;
+  for (const line of lines) {
+    const parts = line
+      .split(/[:\s]+/)
+      .filter(Boolean);
+    if (
+      parts.length < 10 ||
+      parts[0] === "lo" ||
+      parts[0] === "Inter" ||
+      parts[0] === "face"
+    )
+      continue;
+    rx += Number(parts[1]) || 0;
+    tx += Number(parts[9]) || 0;
+  }
+  return { rx, tx };
+}
+
+/** 解析状态栏采样；缺段给零值不抛错。 */
+export function parseStatusSample(
+  stdout: string
+): StatusSample {
+  const load = markerSection(stdout, "L")[0]
+    ?.trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .join(" / ");
+  const uptimeSec =
+    Number(
+      markerSection(stdout, "U")[0]
+        ?.trim()
+        .split(/\s+/)[0]
+    ) || 0;
+  const n1 = netTotals(
+    markerSection(stdout, "N1")
+  );
+  const n2 = netTotals(
+    markerSection(stdout, "N2")
+  );
+  return {
+    load: load ?? "",
+    uptimeSec,
+    rxBps: Math.max(0, n2.rx - n1.rx),
+    txBps: Math.max(0, n2.tx - n1.tx)
+  };
+}
+
+/** 速率紧凑格式：5K / 1.2M（状态栏空间小，不要 "5.0 KB"）。 */
+export function fmtShort(bytes: number): string {
+  if (bytes < 1024)
+    return `${Math.round(bytes)}B`;
+  const units = ["K", "M", "G", "T"];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  const text =
+    value >= 100
+      ? String(Math.round(value))
+      : value.toFixed(1).replace(/\.0$/, "");
+  return `${text}${units[i]}`;
+}
