@@ -187,6 +187,10 @@ export function loadProviders(): ModelProvider[] {
   }
 }
 
+/** 供应商配置变更的 window 事件名：所有消费方监听它即时刷新。 */
+export const PROVIDERS_CHANGED_EVENT =
+  "model-providers-changed";
+
 /** 保存供应商列表；写盘失败只记日志，不影响本次会话的使用。 */
 export function saveProviders(
   providers: ModelProvider[]
@@ -194,5 +198,9 @@ export function saveProviders(
   writeData(
     DataName.models,
     JSON.stringify(providers)
+  );
+  // 同一文档内 storage 事件不会自己触发，广播给 AI 面板等消费方
+  window.dispatchEvent(
+    new Event(PROVIDERS_CHANGED_EVENT)
   );
 }

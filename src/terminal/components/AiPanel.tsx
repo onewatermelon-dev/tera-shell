@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState
 } from "react";
@@ -16,6 +15,7 @@ import { ReasoningBlock } from "@/terminal/components/aicss/ReasoningBlock";
 import { PromptInput } from "@/terminal/components/aicss/PromptInput";
 import type { ExecCardMode } from "@/terminal/lib/aiChat";
 import { useT } from "@/settings/lib/i18n";
+import { PROVIDERS_CHANGED_EVENT } from "@/settings/lib/modelProviders";
 import {
   listOpenAiModels,
   loadRunFlag,
@@ -283,10 +283,23 @@ export default function AiPanel({
   session
 }: AiPanelProps) {
   const t = useT();
-  const options = useMemo(
-    () => listOpenAiModels(),
-    []
+  // 供应商/模型在设置页即改即存，监听变更事件即时刷新「+」菜单
+  const [options, setOptions] = useState(
+    listOpenAiModels
   );
+  useEffect(() => {
+    const refresh = () =>
+      setOptions(listOpenAiModels());
+    window.addEventListener(
+      PROVIDERS_CHANGED_EVENT,
+      refresh
+    );
+    return () =>
+      window.removeEventListener(
+        PROVIDERS_CHANGED_EVENT,
+        refresh
+      );
+  }, []);
   const [selectedKey, setSelectedKey] = useState(
     () => loadSelectedModel() ?? ""
   );
@@ -486,7 +499,8 @@ export default function AiPanel({
         <PromptInput
           models={options.map(option => ({
             id: `${option.providerId}::${option.modelId}`,
-            name: option.label
+            name: option.model.name,
+            provider: option.provider.name
           }))}
           modelId={
             selected

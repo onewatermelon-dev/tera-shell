@@ -921,3 +921,16 @@
   border: 1px solid var(--pi-menu-border, #e6e8ec);
   border-radius: 50%;
 }
+
+/* 供应商悬停浮层：展开态由 JS data-open 控制（带延迟关闭，见 PromptInput）。
+   纯 :hover 会在指针斜穿行与浮层之间的死区时瞬间收起 */
+.menuFlyout {
+  display: none;
+  z-index: 30;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.menuSub[data-open] .menuFlyout {
+  display: block;
+}

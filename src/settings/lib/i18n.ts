@@ -86,6 +86,19 @@ const zhCN = {
   "ai.noModel": "未配置模型",
   "ai.clear": "清空",
   "ai.send": "发送",
+  "ai.menu.attach": "附件",
+  "ai.menu.uploadImage": "上传图片",
+  "ai.menu.uploadImageHint":
+    "选择本地图片，随消息发送给模型识别",
+  "ai.menu.removeImage": "移除图片",
+  "ai.menu.exec": "执行",
+  "ai.menu.autoExecute": "自动执行",
+  "ai.menu.autoExecuteHint":
+    "开启后只读命令自动执行，无需手动确认",
+  "ai.menu.autoApply": "自动应用",
+  "ai.menu.autoApplyHint":
+    "开启后文件更改自动应用，无需手动点击执行",
+  "ai.menu.model": "模型",
   "ai.card.ro": "RO",
   "ai.card.rw": "RW",
   "ai.card.title": "准备执行命令",
@@ -341,6 +354,19 @@ const enUS: Record<MessageKey, string> = {
   "ai.noModel": "No model configured",
   "ai.clear": "Clear",
   "ai.send": "Send",
+  "ai.menu.attach": "Attachments",
+  "ai.menu.uploadImage": "Upload image",
+  "ai.menu.uploadImageHint":
+    "Pick local images, sent to the model with the message",
+  "ai.menu.removeImage": "Remove image",
+  "ai.menu.exec": "Execution",
+  "ai.menu.autoExecute": "Auto-execute",
+  "ai.menu.autoExecuteHint":
+    "Read-only commands run automatically without confirmation",
+  "ai.menu.autoApply": "Auto-apply",
+  "ai.menu.autoApplyHint":
+    "File changes are applied automatically without clicking Execute",
+  "ai.menu.model": "Models",
   "ai.card.ro": "RO",
   "ai.card.rw": "RW",
   "ai.card.title": "Ready to run",

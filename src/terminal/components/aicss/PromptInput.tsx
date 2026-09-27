@@ -20,13 +20,16 @@ import {
   type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
+import { useT } from "@/settings/lib/i18n";
 import styles from "./PromptInput.module.css";
 
 export type PromptModel = {
   /** 稳定 id：providerId::modelId */
   id: string;
-  /** 下拉展示名 */
+  /** 模型展示名（浮层里一行一个） */
   name: string;
+  /** 供应商名：主菜单按它分组，一行一个供应商 */
+  provider: string;
 };
 
 type PromptInputProps = {
@@ -51,6 +54,25 @@ type PromptInputProps = {
   /** 用户按下发送（Enter 或点击箭头），参数为编辑器纯文本 */
   onSend: (value: string) => void;
 };
+
+/** 菜单行共用的选中对勾图标。 */
+function CheckIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
 
 /** 单张图上限：base64 进请求体，超大图直接拒收。 */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -101,6 +123,7 @@ export function PromptInput({
   placeholder,
   onSend
 }: PromptInputProps) {
+  const t = useT();
   const [value, setValue] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -124,6 +147,27 @@ export function PromptInput({
       (url): url is string => url !== null
     );
     if (accepted.length) onAddImages(accepted);
+  };
+
+  // 浮层展开的供应商（null = 收起）。用 JS 状态 + 延迟关闭替代纯 CSS
+  // :hover：斜向移动指针会短暂经过行与浮层之间的死区，hover 一断即收起
+  const [openProvider, setOpenProvider] =
+    useState<string | null>(null);
+  const flyoutTimerRef = useRef<number | null>(
+    null
+  );
+
+  const hoverProvider = (name: string) => {
+    if (flyoutTimerRef.current !== null)
+      window.clearTimeout(flyoutTimerRef.current);
+    setOpenProvider(name);
+  };
+
+  const leaveProvider = () => {
+    flyoutTimerRef.current = window.setTimeout(
+      () => setOpenProvider(null),
+      250
+    );
   };
 
   // 模型菜单：点击外部 / Esc 关闭
@@ -163,6 +207,22 @@ export function PromptInput({
   // 只发图不发消息也允许发送
   const sendActive =
     (hasText || images.length > 0) && !busy;
+
+  // 按供应商分组（保持传入顺序）：主菜单一行一个供应商，悬停展开模型浮层
+  const providerGroups: Array<
+    [string, PromptModel[]]
+  > = [];
+  for (const model of models) {
+    const group = providerGroups.find(
+      ([name]) => name === model.provider
+    );
+    if (group) group[1].push(model);
+    else
+      providerGroups.push([
+        model.provider,
+        [model]
+      ]);
+  }
 
   const syncFromEditor = () => {
     setValue(
@@ -232,7 +292,9 @@ export function PromptInput({
                 <button
                   type="button"
                   className={styles.thumbRemove}
-                  aria-label="移除图片"
+                  aria-label={t(
+                    "ai.menu.removeImage"
+                  )}
                   onClick={() =>
                     onRemoveImage(index)
                   }
@@ -267,11 +329,13 @@ export function PromptInput({
                 styles.plus
               ].join(" ")}
               data-open={menuOpen || undefined}
-              aria-label="切换模型"
+              aria-label={t("ai.selectModel")}
               aria-expanded={menuOpen}
-              onClick={() =>
-                setMenuOpen(open => !open)
-              }
+              onClick={() => {
+                // 打开时复位浮层，避免还停在上次悬停的供应商行
+                setOpenProvider(null);
+                setMenuOpen(open => !open);
+              }}
             >
               <span className={styles.plusIcon}>
                 <svg
@@ -296,13 +360,15 @@ export function PromptInput({
                 role="menu"
               >
                 <div className={styles.menuLabel}>
-                  附件
+                  {t("ai.menu.attach")}
                 </div>
                 <button
                   type="button"
                   role="menuitem"
                   className={styles.menuItem}
-                  title="选择本地图片，随消息发送给模型识别"
+                  title={t(
+                    "ai.menu.uploadImageHint"
+                  )}
                   onClick={() => {
                     setMenuOpen(false);
                     fileInputRef.current?.click();
@@ -311,18 +377,20 @@ export function PromptInput({
                   <span
                     className={styles.menuName}
                   >
-                    上传图片
+                    {t("ai.menu.uploadImage")}
                   </span>
                 </button>
                 <div className={styles.menuLabel}>
-                  执行
+                  {t("ai.menu.exec")}
                 </div>
                 <button
                   type="button"
                   role="menuitemcheckbox"
                   aria-checked={autoExecute}
                   className={styles.menuItem}
-                  title="开启后只读命令自动执行，无需手动确认"
+                  title={t(
+                    "ai.menu.autoExecuteHint"
+                  )}
                   onClick={() => {
                     // 开启会弹安全确认框，先把菜单收起
                     setMenuOpen(false);
@@ -334,7 +402,7 @@ export function PromptInput({
                   <span
                     className={styles.menuName}
                   >
-                    自动执行
+                    {t("ai.menu.autoExecute")}
                   </span>
                   {autoExecute && (
                     <span
@@ -361,7 +429,9 @@ export function PromptInput({
                   role="menuitemcheckbox"
                   aria-checked={autoApply}
                   className={styles.menuItem}
-                  title="开启后文件更改自动应用，无需手动点击执行"
+                  title={t(
+                    "ai.menu.autoApplyHint"
+                  )}
                   onClick={() =>
                     onAutoApplyChange(!autoApply)
                   }
@@ -369,7 +439,7 @@ export function PromptInput({
                   <span
                     className={styles.menuName}
                   >
-                    自动应用
+                    {t("ai.menu.autoApply")}
                   </span>
                   {autoApply && (
                     <span
@@ -392,57 +462,120 @@ export function PromptInput({
                   )}
                 </button>
                 <div className={styles.menuLabel}>
-                  模型
+                  {t("ai.menu.model")}
                 </div>
                 {models.length === 0 && (
                   <div
                     className={styles.menuLabel}
                   >
-                    未配置模型
+                    {t("ai.noModel")}
                   </div>
                 )}
-                {models.map(model => (
-                  <button
-                    key={model.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={
-                      modelId === model.id
-                    }
-                    className={styles.menuItem}
-                    onClick={() => {
-                      onModelChange(model.id);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    <span
-                      className={styles.menuName}
+                {providerGroups.map(
+                  ([provider, list]) => (
+                    <div
+                      key={provider}
+                      className={styles.menuSub}
+                      data-open={
+                        openProvider ===
+                          provider || undefined
+                      }
+                      onMouseEnter={() =>
+                        hoverProvider(provider)
+                      }
+                      onMouseLeave={leaveProvider}
                     >
-                      {model.name}
-                    </span>
-                    {modelId === model.id && (
-                      <span
+                      {/* 供应商行：悬停在右侧展开模型浮层 */}
+                      <div
                         className={
-                          styles.menuCheck
+                          styles.menuItem
                         }
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                        <span
+                          className={
+                            styles.menuName
+                          }
                         >
-                          <path d="M20 6 9 17l-5-5" />
-                        </svg>
-                      </span>
-                    )}
-                  </button>
-                ))}
+                          {provider}
+                        </span>
+                        {list.some(
+                          m => m.id === modelId
+                        ) && (
+                          <span
+                            className={
+                              styles.menuCheck
+                            }
+                          >
+                            <CheckIcon />
+                          </span>
+                        )}
+                        <span
+                          className={
+                            styles.menuChevron
+                          }
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="m9 18 6-6-6-6" />
+                          </svg>
+                        </span>
+                      </div>
+                      <div
+                        className={
+                          styles.menuFlyout
+                        }
+                        role="menu"
+                      >
+                        {list.map(model => (
+                          <button
+                            key={model.id}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={
+                              modelId === model.id
+                            }
+                            className={
+                              styles.menuItem
+                            }
+                            onClick={() => {
+                              onModelChange(
+                                model.id
+                              );
+                              setMenuOpen(false);
+                            }}
+                          >
+                            <span
+                              className={
+                                styles.menuName
+                              }
+                            >
+                              {model.name}
+                            </span>
+                            {modelId ===
+                              model.id && (
+                              <span
+                                className={
+                                  styles.menuCheck
+                                }
+                              >
+                                <CheckIcon />
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                )}
               </div>
             )}
           </div>
@@ -457,7 +590,7 @@ export function PromptInput({
               ]
                 .filter(Boolean)
                 .join(" ")}
-              aria-label="发送"
+              aria-label={t("ai.send")}
               disabled={!sendActive}
               onClick={send}
             >
