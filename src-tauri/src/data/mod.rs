@@ -7,7 +7,8 @@
 //!   ├── sessions.json
 //!   ├── settings.json
 //!   ├── macros.json
-//!   └── models.json
+//!   ├── models.json
+//!   └── ai_history.json
 //! ```
 //!
 //! 根目录本身记在 `<用户主目录>/.tera-shell/location.json` —— 配置不能和
@@ -28,11 +29,12 @@ const SUBDIR: &str = ".tera-shell";
 const LOCATION_FILE: &str = "location.json";
 
 /// 允许被读写的逻辑数据名。限定白名单，避免前端传任意文件名。
-const ALLOWED: [&str; 4] = [
+const ALLOWED: [&str; 5] = [
 	"sessions",
 	"settings",
 	"macros",
 	"models",
+	"ai_history",
 ];
 
 fn ensure_name(name: &str) -> Result<(), String> {

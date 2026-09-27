@@ -18,7 +18,8 @@ import {
   useRef,
   useState,
   type ChangeEvent as ReactChangeEvent,
-  type KeyboardEvent as ReactKeyboardEvent
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode
 } from "react";
 import { useT } from "@/settings/lib/i18n";
 import styles from "./PromptInput.module.css";
@@ -54,6 +55,68 @@ type PromptInputProps = {
   /** 用户按下发送（Enter 或点击箭头），参数为编辑器纯文本 */
   onSend: (value: string) => void;
 };
+
+/** 菜单行图标统一规格：14px 描边 SVG，固定列宽保证文字对齐。 */
+function MenuSvg({
+  children
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <span className={styles.menuIcon}>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {children}
+      </svg>
+    </span>
+  );
+}
+
+/** 上传图片：山景图。 */
+function ImageIcon() {
+  return (
+    <MenuSvg>
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="2"
+      />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+    </MenuSvg>
+  );
+}
+
+/** 自动执行：播放三角。 */
+function PlayIcon() {
+  return (
+    <MenuSvg>
+      <polygon points="6 3 20 12 6 21 6 3" />
+    </MenuSvg>
+  );
+}
+
+/** 自动应用：带对勾的文件。 */
+function FileCheckIcon() {
+  return (
+    <MenuSvg>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v5h5" />
+      <path d="m9 15 2 2 4-4" />
+    </MenuSvg>
+  );
+}
 
 /** 菜单行共用的选中对勾图标。 */
 function CheckIcon() {
@@ -374,6 +437,7 @@ export function PromptInput({
                     fileInputRef.current?.click();
                   }}
                 >
+                  <ImageIcon />
                   <span
                     className={styles.menuName}
                   >
@@ -399,6 +463,7 @@ export function PromptInput({
                     );
                   }}
                 >
+                  <PlayIcon />
                   <span
                     className={styles.menuName}
                   >
@@ -436,6 +501,7 @@ export function PromptInput({
                     onAutoApplyChange(!autoApply)
                   }
                 >
+                  <FileCheckIcon />
                   <span
                     className={styles.menuName}
                   >
@@ -491,6 +557,13 @@ export function PromptInput({
                           styles.menuItem
                         }
                       >
+                        {/* 无图标行垫同宽占位，文字与上方图标行对齐 */}
+                        <span
+                          className={
+                            styles.menuIconSpacer
+                          }
+                          aria-hidden="true"
+                        />
                         <span
                           className={
                             styles.menuName

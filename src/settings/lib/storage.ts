@@ -17,7 +17,8 @@ export const DataName = {
   sessions: "sessions",
   settings: "settings",
   macros: "macros",
-  models: "models"
+  models: "models",
+  aiHistory: "ai_history"
 } as const;
 
 /**

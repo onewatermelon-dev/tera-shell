@@ -81,10 +81,19 @@ const zhCN = {
   "ai.title": "AI 助手",
   "ai.placeholder":
     "向 AI 描述你想在服务器上做的事",
+  "ai.welcome.title": "欢迎使用运维 AI 助手",
+  "ai.welcome.desc":
+    "我是一名服务器运维 AI 助手，可以帮助您完成各种服务器运维和管理任务。您可以直接输入需求，我会尽力帮助您解决问题！",
+  "ai.welcome.tip":
+    "磁盘空间不足：可以对我说“帮我清理一下磁盘空间”，我会帮您分析磁盘占用情况，并给出清理建议",
   "ai.input": "输入消息…",
   "ai.selectModel": "选择模型",
   "ai.noModel": "未配置模型",
-  "ai.clear": "清空",
+  "ai.newChat": "新对话",
+  "ai.history": "历史任务",
+  "ai.history.empty": "暂无历史任务",
+  "ai.history.rename": "重命名",
+  "ai.history.delete": "删除",
   "ai.send": "发送",
   "ai.menu.attach": "附件",
   "ai.menu.uploadImage": "上传图片",
@@ -351,10 +360,20 @@ const enUS: Record<MessageKey, string> = {
   "ai.title": "AI Assistant",
   "ai.placeholder":
     "Describe what you want to do on the server",
+  "ai.welcome.title":
+    "Welcome to the Ops AI Assistant",
+  "ai.welcome.desc":
+    "I'm a server operations AI assistant that can help you with all kinds of maintenance and management tasks. Just type your request and I'll do my best to help!",
+  "ai.welcome.tip":
+    'Low disk space? Try saying "clean up my disk" — I\'ll analyze disk usage and suggest what to remove',
   "ai.input": "Type a message…",
   "ai.selectModel": "Select model",
   "ai.noModel": "No model configured",
-  "ai.clear": "Clear",
+  "ai.newChat": "New chat",
+  "ai.history": "History",
+  "ai.history.empty": "No history yet",
+  "ai.history.rename": "Rename",
+  "ai.history.delete": "Delete",
   "ai.send": "Send",
   "ai.menu.attach": "Attachments",
   "ai.menu.uploadImage": "Upload image",

@@ -121,7 +121,7 @@
   min-height: 0;
 
   &.has-panel {
-    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-columns: minmax(0, 1fr) 390px;
     gap: 8px;
   }
 }
@@ -168,9 +168,10 @@
   border-radius: 6px;
 }
 
+// 头部图标按钮（新对话 / 历史任务）：文字提示走 title / aria-label
 .ai-panel-clear {
   padding: 0 6px;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--muted);
   cursor: pointer;
   background: none;
@@ -179,6 +180,113 @@
   &:hover {
     color: var(--foreground);
   }
+}
+
+// 「历史任务」下拉：挂在头部按钮下方
+.ai-history-wrap {
+  position: relative;
+}
+
+.ai-history-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 260px;
+  max-height: 300px;
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.ai-history-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+
+  &:hover {
+    background: var(--surface);
+  }
+}
+
+.ai-history-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.ai-history-time {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+// 行悬停才露出的重命名 / 删除操作
+.ai-history-ops {
+  display: flex;
+  visibility: hidden;
+  flex: none;
+  gap: 2px;
+}
+
+.ai-history-item:hover .ai-history-ops {
+  visibility: visible;
+}
+
+.ai-history-op {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}
+
+.ai-history-rename {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ai-history-empty {
+  padding: 10px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
 }
 
 // 消息流：纵向滚动，新消息靠 margin-auto 顶到最下
@@ -192,11 +300,37 @@
   overflow-y: auto;
 }
 
-.ai-panel-empty {
-  margin: auto;
-  font-size: 12px;
+// 空面板欢迎卡片：贴底显示在输入框上方（参考 WisdomSSH 截图）
+.ai-welcome {
+  padding: 16px;
+  margin-top: auto;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ai-welcome-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ai-welcome-divider {
+  margin: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.ai-welcome-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ai-welcome-tip {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
   color: var(--muted);
-  text-align: center;
 }
 
 .ai-entry {

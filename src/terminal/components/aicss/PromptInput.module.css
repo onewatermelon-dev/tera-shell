@@ -934,3 +934,12 @@
 .menuSub[data-open] .menuFlyout {
   display: block;
 }
+
+/* 菜单行图标列：固定 14px 宽，保证各行文字左缘对齐 */
+.menuIcon,
+.menuIconSpacer {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  color: var(--pi-muted, #a1a1a1);
+}

@@ -8,9 +8,17 @@ import "streamdown/styles.css";
 import { ThinkingState } from "@aicss/react/thinking-state";
 import { Button, Modal } from "@heroui/react";
 import {
+  HistoryOutlined,
   InfoCircleOutlined,
+  PlusOutlined,
   WarningFilled
 } from "@ant-design/icons";
+import {
+  deleteHistory,
+  loadHistories,
+  renameHistory,
+  type AiHistory
+} from "@/terminal/lib/aiHistory";
 import { ReasoningBlock } from "@/terminal/components/aicss/ReasoningBlock";
 import { PromptInput } from "@/terminal/components/aicss/PromptInput";
 import type { ExecCardMode } from "@/terminal/lib/aiChat";
@@ -361,12 +369,83 @@ export default function AiPanel({
     send,
     confirm,
     skip,
-    clear
+    clear,
+    restore,
+    renameCurrent
   } = useAiChat(session, {
     autoExecute,
     autoApply
   });
   const bodyRef = useRef<HTMLDivElement>(null);
+  // 「历史任务」下拉：只列当前服务器的历史，点开可恢复续聊
+  const [historyOpen, setHistoryOpen] =
+    useState(false);
+  const [histories, setHistories] = useState<
+    AiHistory[]
+  >([]);
+  // 行内重命名的目标历史 id 与草稿
+  const [renamingId, setRenamingId] = useState<
+    string | null
+  >(null);
+  const [renameValue, setRenameValue] =
+    useState("");
+  const historyWrapRef =
+    useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!historyOpen) return;
+    const onDown = (event: PointerEvent) => {
+      if (
+        !historyWrapRef.current?.contains(
+          event.target as Node
+        )
+      )
+        setHistoryOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape")
+        setHistoryOpen(false);
+    };
+    document.addEventListener(
+      "pointerdown",
+      onDown
+    );
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        onDown
+      );
+      document.removeEventListener(
+        "keydown",
+        onKey
+      );
+    };
+  }, [historyOpen]);
+
+  function toggleHistory() {
+    setHistories(
+      loadHistories().filter(
+        item => item.host === session.host
+      )
+    );
+    setHistoryOpen(open => !open);
+  }
+
+  function commitRename() {
+    const id = renamingId;
+    if (!id) return;
+    setRenamingId(null);
+    const title = renameValue.trim().slice(0, 40);
+    if (!title) return;
+    renameHistory(id, title);
+    setHistories(list =>
+      list.map(item =>
+        item.id === id ? { ...item, title } : item
+      )
+    );
+    renameCurrent(id, title);
+  }
 
   // 新消息 / 状态变化后滚到底部，聊天面板的默认阅读位置在最新一条
   useEffect(() => {
@@ -407,12 +486,139 @@ export default function AiPanel({
           <button
             type="button"
             className="ai-panel-clear"
-            aria-label={t("ai.clear")}
-            title={t("ai.clear")}
+            aria-label={t("ai.newChat")}
+            title={t("ai.newChat")}
             onClick={clear}
           >
-            {t("ai.clear")}
+            <PlusOutlined />
           </button>
+          <div
+            className="ai-history-wrap"
+            ref={historyWrapRef}
+          >
+            <button
+              type="button"
+              className="ai-panel-clear"
+              aria-label={t("ai.history")}
+              title={t("ai.history")}
+              aria-expanded={historyOpen}
+              onClick={toggleHistory}
+            >
+              <HistoryOutlined />
+            </button>
+            {historyOpen && (
+              <div
+                className="ai-history-menu"
+                role="menu"
+              >
+                {histories.length === 0 && (
+                  <p className="ai-history-empty">
+                    {t("ai.history.empty")}
+                  </p>
+                )}
+                {histories.map(history => (
+                  <div
+                    key={history.id}
+                    className="ai-history-item"
+                  >
+                    {renamingId === history.id ? (
+                      <input
+                        className="ai-history-rename"
+                        autoFocus
+                        value={renameValue}
+                        onChange={event =>
+                          setRenameValue(
+                            event.target.value
+                          )
+                        }
+                        onKeyDown={event => {
+                          if (
+                            event.key === "Enter"
+                          )
+                            commitRename();
+                          if (
+                            event.key === "Escape"
+                          ) {
+                            event.stopPropagation();
+                            setRenamingId(null);
+                          }
+                        }}
+                        onBlur={commitRename}
+                      />
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="ai-history-name"
+                          onClick={() => {
+                            restore(history);
+                            setHistoryOpen(false);
+                          }}
+                        >
+                          {history.title}
+                        </button>
+                        <span className="ai-history-time">
+                          {new Date(
+                            history.updatedAt
+                          ).toLocaleString(
+                            "zh-CN",
+                            {
+                              hour12: false,
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            }
+                          )}
+                        </span>
+                        <span className="ai-history-ops">
+                          <button
+                            type="button"
+                            className="ai-history-op"
+                            title={t(
+                              "ai.history.rename"
+                            )}
+                            onClick={() => {
+                              setRenamingId(
+                                history.id
+                              );
+                              setRenameValue(
+                                history.title
+                              );
+                            }}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            className="ai-history-op"
+                            title={t(
+                              "ai.history.delete"
+                            )}
+                            onClick={() => {
+                              deleteHistory(
+                                history.id
+                              );
+                              setHistories(list =>
+                                list.filter(
+                                  item =>
+                                    item.id !==
+                                    history.id
+                                )
+                              );
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <div
@@ -420,9 +626,19 @@ export default function AiPanel({
         ref={bodyRef}
       >
         {entries.length === 0 && !error && (
-          <p className="ai-panel-empty">
-            {t("ai.placeholder")}
-          </p>
+          // 空面板欢迎卡片：介绍助手能力 + 一条示例用法
+          <div className="ai-welcome">
+            <h3 className="ai-welcome-title">
+              {t("ai.welcome.title")}
+            </h3>
+            <div className="ai-welcome-divider" />
+            <p className="ai-welcome-desc">
+              {t("ai.welcome.desc")}
+            </p>
+            <p className="ai-welcome-tip">
+              💡 {t("ai.welcome.tip")}
+            </p>
+          </div>
         )}
         {entries.map((entry, index) => {
           if (entry.kind === "tool") {

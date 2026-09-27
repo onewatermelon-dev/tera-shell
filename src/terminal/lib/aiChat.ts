@@ -11,6 +11,10 @@ import {
   type ModelEntry,
   type ModelProvider
 } from "@/settings/lib/modelProviders";
+import {
+  saveHistory,
+  type AiHistory
+} from "@/terminal/lib/aiHistory";
 import { aiRunCommand } from "@/terminal/lib/aiExec";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
 
@@ -1156,6 +1160,69 @@ export function useAiChat(
     reasoning: string;
   } | null>(null);
 
+  /** 当前对话对应的历史 id（null = 还没落过盘，首次保存时新建） */
+  const historyIdRef = useRef<string | null>(
+    null
+  );
+  /** 标题钉死在首次落盘/恢复/手动重命名时，避免后续保存把改名冲掉 */
+  const historyTitleRef = useRef<string | null>(
+    null
+  );
+
+  // 引擎空闲且有内容时自动落一份历史快照（含协议消息，恢复后可续聊）
+  useEffect(() => {
+    if (busy || !session || entries.length === 0)
+      return;
+    if (!historyIdRef.current) {
+      historyIdRef.current = crypto.randomUUID();
+      const firstUser = entries.find(
+        entry => entry.kind === "user"
+      );
+      const title =
+        firstUser && firstUser.kind === "user"
+          ? firstUser.text.trim() || "（图片）"
+          : "对话";
+      historyTitleRef.current = title.slice(
+        0,
+        40
+      );
+    }
+    saveHistory({
+      id: historyIdRef.current,
+      title: historyTitleRef.current ?? "对话",
+      host: session.host,
+      updatedAt: Date.now(),
+      entries,
+      messages: messagesRef.current
+    });
+  }, [busy, entries, session]);
+
+  /** 列表里改名：若改的正是当前对话，钉住标题防止下次自动保存冲掉。 */
+  const renameCurrent = useCallback(
+    (id: string, title: string) => {
+      if (historyIdRef.current === id)
+        historyTitleRef.current = title;
+    },
+    []
+  );
+
+  /** 恢复一条历史：替换展示与协议流，继续对话会覆盖这条历史。 */
+  const restore = useCallback(
+    (history: AiHistory) => {
+      historyIdRef.current = history.id;
+      historyTitleRef.current = history.title;
+      messagesRef.current =
+        history.messages as ProtocolMessage[];
+      setEntries(
+        history.entries as AiChatEntry[]
+      );
+      setPendingCardId(null);
+      setError("");
+      setStream(null);
+    },
+    []
+  );
+
   const clear = useCallback(() => {
     messagesRef.current = [];
     pendingRef.current.clear();
@@ -1164,6 +1231,9 @@ export function useAiChat(
     setError("");
     setStream(null);
     resumeRef.current = null;
+    // 清空后下一次保存开一条新历史，不覆盖旧的
+    historyIdRef.current = null;
+    historyTitleRef.current = null;
   }, []);
 
   /** 执行一张卡片并把结果回填进协议流。mode 见 ExecCardMode。 */
@@ -1508,6 +1578,8 @@ export function useAiChat(
     send,
     confirm,
     skip,
-    clear
+    clear,
+    restore,
+    renameCurrent
   };
 }
