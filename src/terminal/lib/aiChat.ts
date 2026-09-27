@@ -4,6 +4,7 @@ import {
   useState
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { Terminal } from "@xterm/xterm";
 import {
   loadProviders,
   type ModelEntry,
@@ -11,6 +12,37 @@ import {
 } from "@/settings/lib/modelProviders";
 import { aiRunCommand } from "@/terminal/lib/aiExec";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
+
+/** 执行卡片上命令的执行方式：terminal = 写入活动会话终端；background = 独立 exec 通道。 */
+export type ExecCardMode =
+  "terminal" | "background";
+
+/** 读 xterm 缓冲区的最后 N 行（去掉尾部空行），用于收集终端执行的输出。 */
+function terminalTail(
+  terminal: Terminal | undefined,
+  lines: number
+): string {
+  if (!terminal) return "";
+  const buffer = terminal.buffer.active;
+  const out: string[] = [];
+  const start = Math.max(
+    0,
+    buffer.length - lines
+  );
+  for (let i = start; i < buffer.length; i++) {
+    const line = buffer.getLine(i);
+    if (line) {
+      out.push(line.translateToString(true));
+    }
+  }
+  while (
+    out.length &&
+    !out[out.length - 1]?.trim()
+  ) {
+    out.pop();
+  }
+  return out.join("\n");
+}
 
 /**
  * AI 聊天的交互引擎：workspace 上下文注入 + run_command 工具循环。
@@ -1003,11 +1035,12 @@ export function useAiChat(
     resumeRef.current = null;
   }, []);
 
-  /** 执行一张卡片并把结果回填进协议流。 */
+  /** 执行一张卡片并把结果回填进协议流。mode 见 ExecCardMode。 */
   const executeCard = useCallback(
     async (
       call: AiToolCall,
       toolCallId: string,
+      mode: ExecCardMode = "background",
       skip = false
     ) => {
       let content: string;
@@ -1015,6 +1048,36 @@ export function useAiChat(
         call.state = "failed";
         call.error = "用户跳过了这条命令";
         content = "[用户跳过了这条命令，未执行]";
+      } else if (mode === "terminal") {
+        // 终端模式：命令写进活动会话的 PTY（同快捷宏路径），
+        // 输出在终端里可见；稍后抓取缓冲区尾部作为工具结果回填
+        call.state = "running";
+        setEntries(list => [...list]);
+        try {
+          await invoke("terminal_write", {
+            id: session?.id,
+            data: `${call.command}\r`,
+            command: call.command
+          });
+          session?.terminal.focus();
+          // 固定 1.2 秒后抓缓冲区尾部：ponytail 简化 —— 慢命令拿到的只是
+          // 中间输出，升级方向是监听输出静默期再抓
+          await new Promise(resolve =>
+            setTimeout(resolve, 1200)
+          );
+          const tail = terminalTail(
+            session?.terminal,
+            30
+          );
+          call.state = "done";
+          call.stdout = tail;
+          call.exitCode = -1;
+          content = `[已在终端执行，以下为终端当前输出尾部]\n${tail}`;
+        } catch (reason) {
+          call.state = "failed";
+          call.error = String(reason);
+          content = `[执行失败] ${String(reason)}`;
+        }
       } else {
         call.state = "running";
         setEntries(list => [...list]);
@@ -1028,10 +1091,9 @@ export function useAiChat(
             },
             call.command
           );
-          call.state =
-            result.exitCode === 0
-              ? "done"
-              : "failed";
+          // 通道执行完成即为 done：退出码非 0 是命令的正常输出
+          // （如验证文件已删除的 ls、无匹配的 grep），由模型自行解读
+          call.state = "done";
           call.stdout = result.stdout;
           call.stderr = result.stderr;
           call.exitCode = result.exitCode;
@@ -1148,7 +1210,10 @@ export function useAiChat(
         }
         if (yielded) {
           // 挂起：等确认 / 跳过后由 confirm / skip 里新一轮
-          // runLoop 接管剩余循环，这里直接收尾
+          // runLoop 接管剩余循环，这里直接收尾。
+          // 关键：runLoop 挂起时 send 的 await 还没返回，busy 仍是 true，
+          // 不释放的话执行 / 后台执行 / 跳过按钮会一直处于禁用状态
+          setBusy(false);
           await new Promise<void>(resolve => {
             resumeRef.current = resolve;
           });
@@ -1166,7 +1231,13 @@ export function useAiChat(
       option: AiModelOption | null
     ) => {
       const trimmed = text.trim();
-      if (!trimmed || busy || !session) return;
+      if (
+        !trimmed ||
+        busy ||
+        pendingCardId ||
+        !session
+      )
+        return;
       if (!option) {
         setError(
           "请先在「模型设置」里配置一个 OpenAI 兼容的供应商和模型"
@@ -1199,14 +1270,15 @@ export function useAiChat(
         setStream(null);
       }
     },
-    [busy, runLoop, session]
+    [busy, pendingCardId, runLoop, session]
   );
 
   /** 确认执行一张待确认的读写卡片，随后继续工具循环。 */
   const confirm = useCallback(
     async (
       cardId: string,
-      option: AiModelOption | null
+      option: AiModelOption | null,
+      mode: ExecCardMode = "background"
     ) => {
       const held = pendingRef.current.get(cardId);
       if (!held || !option) return;
@@ -1215,7 +1287,8 @@ export function useAiChat(
       resumeRef.current?.();
       await executeCard(
         held.call,
-        held.toolCallId
+        held.toolCallId,
+        mode
       );
       try {
         await runLoop(option);
@@ -1242,6 +1315,7 @@ export function useAiChat(
       await executeCard(
         held.call,
         held.toolCallId,
+        "background",
         true
       );
       try {

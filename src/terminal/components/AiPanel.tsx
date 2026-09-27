@@ -7,8 +7,10 @@ import {
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { ThinkingState } from "@aicss/react/thinking-state";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { ReasoningBlock } from "@/terminal/components/aicss/ReasoningBlock";
 import { PromptInput } from "@/terminal/components/aicss/PromptInput";
+import type { ExecCardMode } from "@/terminal/lib/aiChat";
 import { useT } from "@/settings/lib/i18n";
 import {
   listOpenAiModels,
@@ -35,26 +37,46 @@ function ToolCard({
   call: AiToolCall;
   awaitingConfirm: boolean;
   busy: boolean;
-  onConfirm: () => void;
+  /** mode：terminal = 写入活动终端；background = 独立 exec 通道 */
+  onConfirm: (mode: ExecCardMode) => void;
   onSkip: () => void;
 }) {
   const t = useT();
+  const [copied, setCopied] = useState(false);
   const badge = call.isReadOnly
     ? t("ai.card.ro")
     : t("ai.card.rw");
+  // 终端执行的命令拿不到退出码（-1 为未知），此时不展示括号
+  // 完成态不展示退出码：命令是否成功由输出和模型解读决定
   const stateText =
     call.state === "running"
       ? t("ai.card.running")
       : call.state === "done"
-        ? `${t("ai.card.done")} (${call.exitCode})`
+        ? t("ai.card.done")
         : call.state === "failed"
           ? t("ai.card.failed")
           : awaitingConfirm
             ? t("ai.card.waiting")
             : "";
+
+  async function copyCommand() {
+    try {
+      await navigator.clipboard.writeText(
+        call.command
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* 剪贴板不可用时静默：低频辅助操作 */
+    }
+  }
+
   return (
     <div className="ai-card">
       <div className="ai-card-head">
+        <span className="ai-card-title">
+          {t("ai.card.title")}
+        </span>
         <span
           className={`ai-card-badge ${
             call.isReadOnly ? "ro" : "rw"
@@ -62,17 +84,77 @@ function ToolCard({
         >
           {badge}
         </span>
-        <span className="ai-card-question">
-          {call.question}
-        </span>
       </div>
       <pre className="ai-card-command">
         {call.command}
       </pre>
+      {call.question && (
+        <div className="ai-card-question">
+          <InfoCircleOutlined />
+          {call.question}
+        </div>
+      )}
+      <div className="ai-card-actions">
+        <button
+          type="button"
+          className="ai-card-btn"
+          onClick={() => void copyCommand()}
+        >
+          {copied
+            ? t("ai.card.copied")
+            : t("ai.card.copy")}
+        </button>
+        {awaitingConfirm && (
+          <>
+            <button
+              type="button"
+              className="ai-card-btn"
+              disabled={busy}
+              onClick={onSkip}
+            >
+              {t("ai.card.skip")}
+            </button>
+            <button
+              type="button"
+              className="ai-card-btn is-wide"
+              disabled={busy}
+              onClick={() =>
+                onConfirm("terminal")
+              }
+            >
+              ▶ {t("ai.card.execute")}
+            </button>
+            <button
+              type="button"
+              className="ai-card-btn is-primary is-wide"
+              disabled={busy}
+              onClick={() =>
+                onConfirm("background")
+              }
+            >
+              {t("ai.card.background")}
+            </button>
+          </>
+        )}
+        {!awaitingConfirm &&
+          (call.state === "running" ||
+            call.state === "failed" ||
+            call.error) && (
+            <span className="ai-card-state">
+              {stateText}
+            </span>
+          )}
+        {!awaitingConfirm &&
+          call.state === "done" && (
+            <span className="ai-card-state">
+              {stateText}
+            </span>
+          )}
+      </div>
       {(call.state === "done" ||
         call.state === "failed") && (
         <details className="ai-card-result">
-          <summary>{stateText}</summary>
+          <summary>{t("ai.card.result")}</summary>
           {call.stdout && (
             <pre>{call.stdout}</pre>
           )}
@@ -86,34 +168,9 @@ function ToolCard({
           )}
         </details>
       )}
-      {call.state === "running" && (
-        <div className="ai-card-state">
-          {stateText}
-        </div>
-      )}
       {call.state === "failed" && call.error && (
         <div className="ai-card-state is-error">
           {call.error}
-        </div>
-      )}
-      {awaitingConfirm && (
-        <div className="ai-card-actions">
-          <button
-            type="button"
-            className="ai-card-btn is-primary"
-            disabled={busy}
-            onClick={onConfirm}
-          >
-            {t("ai.card.execute")}
-          </button>
-          <button
-            type="button"
-            className="ai-card-btn"
-            disabled={busy}
-            onClick={onSkip}
-          >
-            {t("ai.card.skip")}
-          </button>
         </div>
       )}
     </div>
@@ -205,10 +262,11 @@ export default function AiPanel({
                   pendingCardId === entry.call.id
                 }
                 busy={busy}
-                onConfirm={() =>
+                onConfirm={mode =>
                   void confirm(
                     entry.call.id,
-                    selected
+                    selected,
+                    mode
                   )
                 }
                 onSkip={() =>

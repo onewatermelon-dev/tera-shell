@@ -237,7 +237,15 @@
   display: flex;
   gap: 6px;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 6px;
+}
+
+// 卡片标题：对齐参考样式「准备执行命令」
+.ai-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
 }
 
 .ai-card-badge {
@@ -260,9 +268,18 @@
   }
 }
 
+// 命令下方的作用解释行（ⓘ + 一句话说明）
 .ai-card-question {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin: 6px 0 0;
   font-size: 11px;
-  color: var(--foreground);
+  color: var(--muted);
+
+  svg {
+    flex: none;
+  }
 }
 
 .ai-card-command {
@@ -316,11 +333,12 @@
 .ai-card-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
   margin-top: 8px;
 }
 
 .ai-card-btn {
-  padding: 3px 12px;
+  padding: 4px 12px;
   font-size: 11px;
   color: var(--foreground);
   cursor: pointer;
@@ -328,6 +346,12 @@
   border: 1px solid var(--border);
   border-radius: 6px;
 
+  // 宽按钮（执行 / 后台执行）：对齐参考样式均分剩余宽度
+  &.is-wide {
+    flex: 1;
+  }
+
+  // 主操作（后台执行）：强调色
   &.is-primary {
     color: var(--accent-foreground);
     background: var(--accent);
