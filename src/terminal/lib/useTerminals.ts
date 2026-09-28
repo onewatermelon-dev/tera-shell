@@ -15,6 +15,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/sessions/lib/session";
 import { registerTerminalLinks } from "@/terminal/lib/terminalLinks";
+import { explainCommand } from "@/terminal/lib/aiExplain";
 import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
@@ -47,6 +48,27 @@ const TERMINAL_THEME = {
     "rgb(41 103 206)"
 };
 
+/**
+ * 按终端显示宽度截断：CJK 全角字符占两列，
+ * 按字符数截断会让中文行折行、把整块解释推歪。
+ */
+const WIDE_CHAR =
+  /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹯＀-｠￠-￦]/;
+function sliceToWidth(
+  text: string,
+  max: number
+): string {
+  let width = 0;
+  let out = "";
+  for (const ch of text) {
+    const w = WIDE_CHAR.test(ch) ? 2 : 1;
+    if (width + w > max) break;
+    width += w;
+    out += ch;
+  }
+  return out;
+}
+
 export function useTerminals(
   onError: (reason: unknown) => void,
   onSavePassword:
@@ -73,6 +95,10 @@ export function useTerminals(
       sourceSessionId: string;
     } | null>(null);
   const openedRef = useRef(opened);
+  /** 解释落画期间按会话扣住远端输出的队列（见 terminal-output 监听） */
+  const outputHoldRef = useRef(
+    new Map<string, string[]>()
+  );
   const activeIdRef = useRef(activeId);
   const disconnectedRef = useRef(disconnected);
   useEffect(() => {
@@ -265,13 +291,9 @@ export function useTerminals(
     current.element.className =
       "terminal-instance";
     host.replaceChildren(current.element);
-    if (!current.mounted) {
+    const first = !current.mounted;
+    if (first) {
       current.terminal.open(current.element);
-      if (current.kind === "ssh") {
-        current.terminal.writeln(
-          "\x1b[38;5;244m密码输入不会显示字符或 *，输入完成后直接按 Enter。\x1b[0m"
-        );
-      }
       current.mounted = true;
     }
     resizeObserver.current?.observe(host);
@@ -292,7 +314,8 @@ export function useTerminals(
     session.element.className =
       "terminal-instance";
     host.replaceChildren(session.element);
-    if (!session.mounted) {
+    const first = !session.mounted;
+    if (first) {
       session.terminal.open(session.element);
       session.mounted = true;
     }
@@ -334,10 +357,16 @@ export function useTerminals(
       );
       registerTerminalLinks(terminal, onError);
       renderTextOnlySelection(terminal, element);
+      // 解释流程进行中吞掉键盘输入：期间终端坐标由流程接管，
+      // 敲字会被远端回显进正在画的解释块里造成叠加
+      let explaining = false;
       terminal.onData(data => {
         // 会话断开后 PTY 可能已被移除，继续向后端写只会收到
         // "终端会话不存在"的错误气泡 —— 断连的终端敲键本就无意义。
-        if (disconnectedRef.current[session.id]) {
+        if (
+          disconnectedRef.current[session.id] ||
+          explaining
+        ) {
           return;
         }
         let command: string | null = null;
@@ -354,6 +383,177 @@ export function useTerminals(
             stripPrompt(
               line?.translateToString(true) ?? ""
             ) || null;
+          // 快捷命令解释：SSH 会话里「命令/?」回车 → 本地拦截 Enter、
+          // Ctrl+U 清掉远端输入缓冲（不执行），等远端清行重绘到达后
+          // 回显命令并攒完整段解释，再用空回车把提示符推下去、
+          // 中间腾出的行覆盖成解释（详见 flush）
+          const trimmed = command?.trim() ?? "";
+          if (
+            session.kind === "ssh" &&
+            trimmed.endsWith("/?")
+          ) {
+            const target = trimmed
+              .slice(0, -2)
+              .trim();
+            if (target) {
+              explaining = true;
+              void (async () => {
+                // 事件驱动的两段落画：等该会话输出静默 idleMs（无新输出）
+                // 再执行 action；fallbackMs 兜底（远端不发重绘也不能卡死）
+                const untilIdle = (
+                  idleMs: number,
+                  fallbackMs: number,
+                  action: () => void
+                ) => {
+                  let done = false;
+                  let un: (() => void) | null =
+                    null;
+                  let timer = window.setTimeout(
+                    fire,
+                    fallbackMs
+                  );
+                  function fire() {
+                    if (done) return;
+                    done = true;
+                    window.clearTimeout(timer);
+                    un?.();
+                    action();
+                  }
+                  void import("@tauri-apps/api/event").then(
+                    ({ listen }) =>
+                      listen<{ id: string }>(
+                        "terminal-output",
+                        ({ payload }) => {
+                          if (
+                            payload.id !==
+                              session.id ||
+                            done
+                          )
+                            return;
+                          window.clearTimeout(
+                            timer
+                          );
+                          timer =
+                            window.setTimeout(
+                              fire,
+                              idleMs
+                            );
+                        }
+                      ).then(fn => {
+                        un = fn;
+                      })
+                  );
+                };
+                // 第二段：攒完整段解释（行数定了我才知道要预留几行），
+                // 用 n+1 次空回车让 bash 把提示符推下去（真实输出，
+                // ConPTY 坐标同步前进），等重绘静默后把中间 n 行覆盖成解释
+                const generate = () => {
+                  // 光标坐标在 Ctrl+U 重绘静默后才捕获：
+                  // 此时光标恰好停在提示符末尾，回显与重写不会错位
+                  const buffer =
+                    terminal.buffer.active;
+                  const homeRow =
+                    buffer.baseY + buffer.cursorY;
+                  const homeCol = buffer.cursorX;
+                  // 回显「命令/?」+ 临时标题，给即时反馈
+                  terminal.write(
+                    `\x1b[K${trimmed}\r\n\x1b[38;2;222;220;18m[AI正在分析: ${target}]\x1b[0m`
+                  );
+                  let text = "";
+                  void explainCommand(
+                    target,
+                    chunk => {
+                      text += chunk;
+                    }
+                  )
+                    .catch(reason => {
+                      text += `\n[解释失败] ${String(
+                        reason
+                      )}`;
+                    })
+                    .finally(() => {
+                      const cols = terminal.cols;
+                      // 预留 2 行（回显行 + 当前提示符行），超长截断
+                      const maxLines = Math.max(
+                        1,
+                        terminal.rows - 2
+                      );
+                      const lines = text
+                        .replace(/\r/g, "")
+                        .split("\n")
+                        .slice(0, maxLines)
+                        .map(
+                          l =>
+                            `\x1b[38;2;27;186;233m${sliceToWidth(l, cols - 1)}\x1b[0m`
+                        );
+                      const block = [
+                        `\x1b[38;2;222;220;18m[AI正在分析: ${target}]\x1b[0m`,
+                        ...lines
+                      ];
+                      const n = block.length;
+                      // 扣住该会话输出：空回车推出来的中间提示符不渲染，
+                      // 解释落画后按原序冲刷 —— 不依赖同步输出计时窗口
+                      const hold: string[] = [];
+                      outputHoldRef.current.set(
+                        session.id,
+                        hold
+                      );
+                      invoke("terminal_write", {
+                        id: session.id,
+                        data: "\r".repeat(n + 1),
+                        command: null
+                      }).catch(onError);
+                      untilIdle(250, 1500, () => {
+                        // 先冲刷提示符流，等 xterm 处理完（可能滚动）
+                        // 再按最新 baseY 重算行号落画：
+                        // 用旧坐标会在滚动后整体错位
+                        const paint = () => {
+                          // 冲刷流处理完后，光标恰好停在最后一个提示符
+                          // 之后（bash 自己留下的）—— 记下它，盖完解释
+                          // 再回去，不靠行数推算光标位
+                          const endRow =
+                            buffer.baseY +
+                            buffer.cursorY;
+                          const endCol =
+                            buffer.cursorX;
+                          const row = Math.max(
+                            1,
+                            homeRow -
+                              buffer.baseY +
+                              1
+                          );
+                          const out =
+                            `\x1b[${row};${homeCol + 1}H\x1b[K${trimmed}\r\n\x1b[K` +
+                            block.join(
+                              "\r\n\x1b[K"
+                            ) +
+                            `\x1b[${endRow - buffer.baseY + 1};${endCol + 1}H`;
+                          terminal.write(out);
+                          outputHoldRef.current.delete(
+                            session.id
+                          );
+                          explaining = false;
+                        };
+                        if (hold.length)
+                          terminal.write(
+                            hold.join(""),
+                            paint
+                          );
+                        else paint();
+                      });
+                    });
+                };
+                // 第一段：Ctrl+U 清远端输入行，等清行重绘静默后回显+生成
+                invoke("terminal_write", {
+                  id: session.id,
+                  data: "\x15",
+                  command: null
+                }).catch(onError);
+                untilIdle(250, 1000, generate);
+              })();
+            }
+            return;
+          }
         }
         invoke("terminal_write", {
           id: session.id,
@@ -450,9 +650,21 @@ export function useTerminals(
         disconnectedRef.current = next;
         return next;
       });
+      if (activate) setActiveId(session.id);
+      // 先挂载再启动 PTY：等两帧让 open+fit 落定，PTY 直接按最终尺寸出生。
+      // 这样首帧不再有 resize，ConPTY 的整屏重绘（会抹掉欢迎横幅）根本不会发生
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => resolve())
+        )
+      );
       try {
         await invoke("terminal_start", {
-          config: session
+          config: {
+            ...session,
+            rows: current.terminal.rows,
+            cols: current.terminal.cols
+          }
         });
       } catch (reason) {
         setOpened(prev => {
@@ -465,7 +677,6 @@ export function useTerminals(
         onError(reason);
         return false;
       }
-      if (activate) setActiveId(session.id);
       return true;
     },
     [createTerminal, onError]
@@ -797,9 +1008,22 @@ export function useTerminals(
           "terminal-output",
           ({ payload }) => {
             // 拆分会话是独立会话，输出天然只写它自己这一只终端
-            openedRef.current
-              .find(({ id }) => id === payload.id)
-              ?.terminal.write(payload.data);
+            const session =
+              openedRef.current.find(
+                ({ id }) => id === payload.id
+              );
+            if (!session) return;
+            // 解释落画期间扣住该会话输出（见 outputHoldRef）：
+            // 空回车推出来的中间提示符不进渲染，落画后统一冲刷
+            const hold =
+              outputHoldRef.current.get(
+                payload.id
+              );
+            if (hold) {
+              hold.push(payload.data);
+              return;
+            }
+            session.terminal.write(payload.data);
           }
         ),
         listen<string>(

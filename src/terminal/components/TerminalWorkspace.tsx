@@ -118,6 +118,8 @@ type Props = {
   statusMode: StatusMode;
   /** 信息形态下点击未开放入口（系统 / 进程 / 网络信息）的提示出口。 */
   onNotify: (message: string) => void;
+  /** SSH 欢迎卡片开关（设置-终端）。 */
+  welcomeCard: boolean;
   /** 暂停/恢复向 PTY 同步行高（系统信息抽屉开合期间只动本地视口）。 */
   setPtyResizePaused: (paused: boolean) => void;
 };
@@ -180,6 +182,7 @@ export default function TerminalWorkspace({
   onReorderMacro,
   statusMode,
   onNotify,
+  welcomeCard,
   setPtyResizePaused
 }: Props) {
   const t = useT();
@@ -549,6 +552,10 @@ export default function TerminalWorkspace({
       "none"
     );
   const drawerOpen = bottomDrawer !== "none";
+  // SSH 欢迎卡片：ConPTY 整屏重绘会抹掉直写 xterm 的内容，
+  // 欢迎说明只能做在终端缓冲之外的浮层上；记录已关闭的会话 id
+  const [welcomeClosedFor, setWelcomeClosedFor] =
+    useState<string | null>(null);
   // AI 面板收起状态：收起后贴窗口右缘成浮窗按钮
   const [aiCollapsed, setAiCollapsed] =
     useState(false);
@@ -1097,6 +1104,55 @@ export default function TerminalWorkspace({
             </div>
           </EmptyState>
         )}
+
+        {welcomeCard &&
+          active?.kind === "ssh" &&
+          active.id !== welcomeClosedFor && (
+            // SSH 欢迎卡片：钉在终端区顶部的浮层，手动关闭
+            <div className="term-welcome">
+              <button
+                type="button"
+                className="term-welcome-close"
+                aria-label={t("app.action.close")}
+                onClick={() =>
+                  setWelcomeClosedFor(active.id)
+                }
+              >
+                ×
+              </button>
+              <p>
+                <span className="is-title">
+                  ✓ Tera Shell 智能终端
+                </span>{" "}
+                <span className="is-gray">
+                  AI Edition
+                </span>{" "}
+                ·{" "}
+                <span className="is-red">
+                  {active.username}@{active.host}:
+                  {active.port}
+                </span>
+              </p>
+              <p>
+                ✓ 直接 SSH 连接 · 独立 exec
+                执行通道 · AI 运维助手（右侧面板）
+              </p>
+              <p>
+                ✓
+                快捷命令解释：输入「命令/?」回车，如
+                ls -a/?
+              </p>
+              <p>
+                ✓ 系统 / 进程 /
+                网络信息见底部状态栏 ·
+                密码输入不回显
+              </p>
+              <p className="is-gray">
+                💡 内容由 AI
+                生成，执行前请仔细甄别
+              </p>
+            </div>
+          )}
 
         {drawerOpen &&
           active?.kind === "ssh" &&

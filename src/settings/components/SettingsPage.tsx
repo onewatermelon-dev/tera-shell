@@ -17,6 +17,7 @@ import {
   TranslationOutlined
 } from "@ant-design/icons";
 import SettingsRow from "@/settings/components/SettingsRow";
+import Toggle from "@/shared/components/Toggle";
 import DataDirRow from "@/settings/components/DataDirRow";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
 import SettingsSelect, {
@@ -348,6 +349,26 @@ export default function SettingsPage({
                 }}
               />
             </SettingsRow>
+
+            <SettingsRow
+              title={t("settings.welcome.title")}
+              description={t(
+                "settings.welcome.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.welcome.title"
+                  )}
+                  isSelected={
+                    settings.welcomeCard
+                  }
+                  onChange={welcomeCard =>
+                    onChange({ welcomeCard })
+                  }
+                />
+              }
+            />
           </>
         ) : (
           <ModelProvidersPage />

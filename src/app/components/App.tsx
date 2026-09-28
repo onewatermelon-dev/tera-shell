@@ -393,6 +393,9 @@ export default function App() {
           }
           onReorderMacro={macroStore.reorder}
           statusMode={statusMode}
+          welcomeCard={
+            appSettings.settings.welcomeCard
+          }
           onNotify={setError}
           setPtyResizePaused={
             terminals.setPtyResizePaused

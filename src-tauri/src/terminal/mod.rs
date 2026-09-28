@@ -26,6 +26,9 @@ struct Session {
 	input_buf: Arc<Mutex<Vec<u8>>>,
 	/// reader 线程检测到密码提示时置位；该提示后的输入行只跳过、不记录内容。
 	expecting_password: Arc<AtomicBool>,
+	/// 当前 PTY 尺寸：resize 收到同尺寸直接跳过 —— ConPTY 对 resize（哪怕
+	/// 等尺寸）可能整屏重绘，会抹掉前端画的欢迎横幅。
+	size: Mutex<(u16, u16)>,
 }
 
 #[derive(Default)]
@@ -41,6 +44,10 @@ pub struct Config {
 	username: Option<String>,
 	/// 已保存的明文密码；由前端解密后传入，用于 SSH 登录时自动应答。
 	password: Option<String>,
+	/// 前端挂载后实测的终端尺寸：PTY 按最终尺寸出生，避免首帧 resize
+	/// 触发 ConPTY 整屏重绘抹掉前端欢迎横幅。缺省退回 30x100。
+	rows: Option<u16>,
+	cols: Option<u16>,
 }
 
 #[derive(Clone, Serialize)]
@@ -69,10 +76,12 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 	} else {
 		info!(session = %config.id, "本地会话启动");
 	}
+	let rows = config.rows.unwrap_or(30);
+	let cols = config.cols.unwrap_or(100);
 	let pty = native_pty_system()
 		.openpty(PtySize {
-			rows: 30,
-			cols: 100,
+			rows,
+			cols,
 			pixel_width: 0,
 			pixel_height: 0,
 		})
@@ -118,6 +127,7 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 				exited: exited.clone(),
 				input_buf,
 				expecting_password: expecting_password.clone(),
+				size: Mutex::new((rows, cols)),
 			},
 		)
 	{
@@ -327,20 +337,27 @@ fn record_input(id: &str, session: &mut Session, data: &str, command: Option<&st
 #[tauri::command(rename = "terminal_resize")]
 pub fn resize(id: String, rows: u16, cols: u16, terminals: State<Terminals>) -> Result<(), String> {
 	debug!(session = %id, rows, cols, "终端缩放");
-	terminals
+	let mut terminals = terminals
 		.0
 		.lock()
-		.map_err(|_| "终端状态不可用")?
-		.get(&id)
-		.ok_or("终端会话不存在")?
-		.master
-		.resize(PtySize {
-			rows,
-			cols,
-			pixel_width: 0,
-			pixel_height: 0,
-		})
-		.map_err(|error| error.to_string())
+		.map_err(|_| "终端状态不可用")?;
+	let session = terminals
+		.get_mut(&id)
+		.ok_or("终端会话不存在")?;
+	// 同尺寸直接跳过：ConPTY 对 resize（哪怕等尺寸）可能整屏重绘，
+	// 会抹掉前端画的欢迎横幅
+	if *session.size.lock().map_err(|_| "尺寸状态不可用")? == (rows, cols) {
+		return Ok(());
+	}
+	session.master.resize(PtySize {
+		rows,
+		cols,
+		pixel_width: 0,
+		pixel_height: 0,
+	})
+	.map_err(|error| error.to_string())?;
+	*session.size.lock().map_err(|_| "尺寸状态不可用")? = (rows, cols);
+	Ok(())
 }
 
 #[tauri::command(rename = "terminal_close")]

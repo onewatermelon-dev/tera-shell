@@ -361,6 +361,9 @@ const zhCN = {
   "settings.fontSize.title": "终端字号",
   "settings.fontSize.desc":
     "单位像素，可填 {min} 到 {max}，超出范围会自动收敛。",
+  "settings.welcome.title": "SSH 欢迎提示",
+  "settings.welcome.desc":
+    "新 SSH 会话打开时在终端顶部显示功能说明卡片，可随时手动关闭。",
   "settings.dataDir.title": "数据存储路径",
   "settings.dataDir.desc":
     "会话、设置与快捷宏的导出目录（默认为用户主目录）。保存后会把现有数据复制到新位置；路径后缀 .tera-shell 不可更改。",
@@ -725,6 +728,9 @@ const enUS: Record<MessageKey, string> = {
   "settings.fontSize.title": "Terminal font size",
   "settings.fontSize.desc":
     "In pixels, from {min} to {max}; out-of-range values are clamped.",
+  "settings.welcome.title": "SSH welcome tip",
+  "settings.welcome.desc":
+    "Show a feature overview card at the top of each new SSH session; dismiss it manually anytime.",
   "settings.dataDir.title": "Data location",
   "settings.dataDir.desc":
     "Where sessions, settings and macros are exported (defaults to your home directory). Saving copies the current data to the new location; the .tera-shell suffix is fixed.",

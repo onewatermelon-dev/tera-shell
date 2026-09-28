@@ -941,3 +941,52 @@ body.tab-dragging {
     transparent
   );
 }
+
+// SSH 欢迎卡片：ConPTY 整屏重绘会抹掉直写 xterm 的内容，
+// 欢迎说明做在终端缓冲之外的顶部浮层，手动关闭
+.term-welcome {
+  position: absolute;
+  top: 46px;
+  right: 12px;
+  left: 12px;
+  z-index: 5;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  opacity: 0.96;
+}
+
+.term-welcome p {
+  margin: 0;
+}
+
+.term-welcome .is-title {
+  font-weight: 600;
+  color: #4fc3f7;
+}
+
+.term-welcome .is-gray {
+  color: var(--muted);
+}
+
+.term-welcome .is-red {
+  color: #f87171;
+}
+
+.term-welcome-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}

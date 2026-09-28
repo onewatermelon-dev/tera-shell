@@ -33,6 +33,8 @@ export type AppSettings = {
   sidebarOpen: boolean;
   /** 底部状态栏内容：见 StatusMode。 */
   statusMode: StatusMode;
+  /** SSH 会话欢迎卡片浮层是否展示（设置-终端里开关）。 */
+  welcomeCard: boolean;
   /**
    * 数据存储目录。空字符串表示用默认位置（用户主目录）。
    *
@@ -58,6 +60,7 @@ export const defaultSettings: AppSettings = {
   locale: "system",
   sidebarOpen: true,
   statusMode: "macros",
+  welcomeCard: true,
   dataDir: ""
 };
 
@@ -106,6 +109,8 @@ export function loadSettings(): AppSettings {
         parsed.statusMode === "info"
           ? "info"
           : "macros",
+      // 默认开：只有显式存过 false 才关（旧数据缺字段视为开）
+      welcomeCard: parsed.welcomeCard !== false,
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir
