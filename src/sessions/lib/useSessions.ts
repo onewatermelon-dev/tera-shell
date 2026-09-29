@@ -114,6 +114,33 @@ export function useSessions() {
     [persist]
   );
 
+  /** 拖拽换位：把 id 的会话移到 beforeId 之前；beforeId 为 null 表示
+   *  追加到末尾（拖到最后一条下方空白处）。顺序改动随数组一起落盘。 */
+  const reorder = useCallback(
+    (id: string, beforeId: string | null) => {
+      setSessions(prev => {
+        const from = prev.findIndex(
+          item => item.id === id
+        );
+        if (from < 0) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(from, 1);
+        if (!moved) return prev;
+        const to =
+          beforeId === null
+            ? next.length
+            : next.findIndex(
+                item => item.id === beforeId
+              );
+        if (to < 0) return prev;
+        next.splice(to, 0, moved);
+        persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+
   const filteredSessions = useMemo(() => {
     const needle = query.toLowerCase();
     return sessions.filter(({ name, host }) =>
@@ -130,6 +157,7 @@ export function useSessions() {
     filteredSessions,
     save,
     update,
-    remove
+    remove,
+    reorder
   };
 }

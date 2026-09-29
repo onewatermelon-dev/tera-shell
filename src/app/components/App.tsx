@@ -68,7 +68,8 @@ export default function App() {
     filteredSessions,
     save,
     update,
-    remove
+    remove,
+    reorder
   } = useSessions();
 
   // 显示偏好：字体、字号、主题。必须早于 useTerminals —— 终端要用它建实例
@@ -336,6 +337,7 @@ export default function App() {
           onEdit={openEdit}
           onRemove={remove}
           onCreate={openCreate}
+          onReorder={reorder}
         />
         <TerminalWorkspace
           opened={terminals.opened}
