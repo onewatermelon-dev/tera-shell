@@ -17,6 +17,12 @@ import type { SavedSession } from "@/sessions/lib/session";
 import { registerTerminalLinks } from "@/terminal/lib/terminalLinks";
 import { explainCommand } from "@/terminal/lib/aiExplain";
 import { aiRunCommand } from "@/terminal/lib/aiExec";
+import {
+  highlightToAnsi,
+  parseCatCommand,
+  parseVimCommand,
+  VIM_SCHEME_SETUP
+} from "@/terminal/lib/catView";
 import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
@@ -331,12 +337,24 @@ export function useTerminals(
       // 解释流程进行中吞掉键盘输入：期间终端坐标由流程接管，
       // 敲字会被远端回显进正在画的解释块里造成叠加
       let explaining = false;
+      // cat 拦截查看进行中同样吞输入（exec 拉文件 + 高亮 + pts 注入期间）
+      let viewing = false;
+      // pts 注入与 exec 共用：SSH 会话的 exec 目标 + 找该用户最新 pts 的
+      // 脚本（cat 高亮、/? 解释、vim 改写都用这套回环）
+      const ptsFind = `p=$(ps -u "$(whoami)" -o tty= --sort=start_time | grep pts | tail -1)`;
+      const execTarget = {
+        host: session.host,
+        port: session.port,
+        username: session.username,
+        password: session.password
+      };
       terminal.onData(data => {
         // 会话断开后 PTY 可能已被移除，继续向后端写只会收到
         // "终端会话不存在"的错误气泡 —— 断连的终端敲键本就无意义。
         if (
           disconnectedRef.current[session.id] ||
-          explaining
+          explaining ||
+          viewing
         ) {
           return;
         }
@@ -359,6 +377,13 @@ export function useTerminals(
           // 本会话的 pts —— 输出流经 ConPTY 进它自己的屏幕缓冲，
           // 天然抗 resize 整屏重绘；此前所有本地注入方案都会被抹掉
           const trimmed = command?.trim() ?? "";
+          // 提示符原文（pts 注入的收尾要把它写回输入行）
+          const rawLine =
+            line?.translateToString(true) ?? "";
+          const cut =
+            rawLine.lastIndexOf(trimmed);
+          const prompt =
+            cut > 0 ? rawLine.slice(0, cut) : "";
           if (
             session.kind === "ssh" &&
             trimmed.endsWith("/?")
@@ -368,15 +393,6 @@ export function useTerminals(
               .trim();
             if (target) {
               explaining = true;
-              const rawLine =
-                line?.translateToString(true) ??
-                "";
-              const cut =
-                rawLine.lastIndexOf(trimmed);
-              const prompt =
-                cut > 0
-                  ? rawLine.slice(0, cut)
-                  : "";
               invoke("terminal_write", {
                 id: session.id,
                 data: "\x15",
@@ -387,13 +403,6 @@ export function useTerminals(
               // 本地写不进 ConPTY 缓冲，resize 后会丢
               // ponytail: 取该用户最新启动的 pts shell；同一用户并发
               // 多个交互会话时可能写错窗口，需比对 SSH_CLIENT 端口
-              const ptsFind = `p=$(ps -u "$(whoami)" -o tty= --sort=start_time | grep pts | tail -1)`;
-              const execTarget = {
-                host: session.host,
-                port: session.port,
-                username: session.username,
-                password: session.password
-              };
               aiRunCommand(
                 execTarget,
                 [
@@ -514,6 +523,103 @@ export function useTerminals(
                 });
             }
             return;
+          }
+          // vim/vi 查看代码：远端 vim 默认 syntax off 是白字的根源 ——
+          // 改写成 `-c 'syntax on'` 放行，远端自己按 ANSI 渲染配色。
+          // 仅 SSH 会话（本地 PowerShell 的 vim 是另一个世界）
+          if (session.kind === "ssh") {
+            const rewritten =
+              parseVimCommand(trimmed);
+            if (rewritten) {
+              // 先确保远端有 One Dark Pro colorscheme（只部署一次，
+              // 已存在则跳过），改写命令挂上它；部署失败退纯 syntax on
+              aiRunCommand(
+                execTarget,
+                VIM_SCHEME_SETUP
+              )
+                .then(
+                  result => result.exitCode === 0
+                )
+                .catch(() => false)
+                .then(schemeReady => {
+                  const cmd = parseVimCommand(
+                    trimmed,
+                    schemeReady
+                  );
+                  invoke("terminal_write", {
+                    id: session.id,
+                    // Ctrl+U 清掉原行再写改写命令，一次写入完成回车
+                    data: `\x15${cmd}\r`,
+                    command: cmd
+                  }).catch(onError);
+                });
+              return;
+            }
+            // cat 查看代码：拦截单文件 cat，exec 拉内容 → cli-highlight 转
+            // One Dark Pro ANSI → 直接写进 xterm（换行转 \r\n）。曾经尝试
+            // heredoc/base64 注入远端 bash stdin：交互 bash 的 readline 自
+            // 管显示（raw 模式），stty -echo 拦不住，内容全被 readline 画
+            // 出来搅成乱码 —— 本地注入是唯一干净的路径。代价：远端有输出
+            // 或 resize 重绘时内容会被覆盖（只在查看后改窗口大小才发生）
+            const catPath =
+              parseCatCommand(trimmed);
+            if (catPath) {
+              viewing = true;
+              invoke("terminal_write", {
+                id: session.id,
+                data: "\x15",
+                command: null
+              }).catch(onError);
+              const quoted = catPath.replace(
+                /'/g,
+                `'\\''`
+              );
+              const plain = `cat ${catPath}`;
+              aiRunCommand(
+                execTarget,
+                `cat -- '${quoted}'`
+              )
+                .then(result => {
+                  if (
+                    result.exitCode !== 0 ||
+                    !result.stdout
+                  ) {
+                    // 拉取失败：放行原命令，让远端给出真实报错
+                    invoke("terminal_write", {
+                      id: session.id,
+                      data: `${plain}\r`,
+                      command: plain
+                    }).catch(onError);
+                    return undefined;
+                  }
+                  return highlightToAnsi(
+                    result.stdout,
+                    catPath
+                  ).then(code =>
+                    // 本地显示：写 xterm 屏幕（terminal.write），
+                    // 不是 invoke("terminal_write") —— 那是 PTY 输入，
+                    // 会把内容发给 bash 当命令执行。多行必须 \n → \r\n
+                    terminal.write(
+                      `${code
+                        .replace(/\r/g, "")
+                        .replace(
+                          /\n/g,
+                          "\r\n"
+                        )}\r\n`
+                    )
+                  );
+                })
+                .catch(reason =>
+                  console.warn(
+                    "[cat-view] 拦截失败，回退原始命令",
+                    reason
+                  )
+                )
+                .finally(() => {
+                  viewing = false;
+                });
+              return;
+            }
           }
         }
         invoke("terminal_write", {
