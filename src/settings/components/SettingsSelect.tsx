@@ -78,6 +78,8 @@ export default function SettingsSelect<
       >
         <Dropdown.Menu
           aria-label={ariaLabel}
+          // 选项可能上百条（字体清单），限高滚动；短菜单（主题等）不受影响
+          className="settings-select-menu-list"
           selectionMode="single"
           selectedKeys={[value]}
           onAction={key => onChange(key as T)}

@@ -357,10 +357,10 @@ const zhCN = {
   "settings.font.title": "终端字体",
   "settings.font.desc":
     "留空时使用内置字体栈；填写后作为首选，缺失时按内置列表回退。",
-  "settings.font.placeholder": "当前字体：{name}",
+  "settings.font.default": "默认（{name}）",
   "settings.fontSize.title": "终端字号",
   "settings.fontSize.desc":
-    "单位像素，可填 {min} 到 {max}，超出范围会自动收敛。",
+    "单位像素，可选 {min} 到 {max}。",
   "settings.welcome.title": "SSH 欢迎提示",
   "settings.welcome.desc":
     "新 SSH 会话打开时在终端顶部显示功能说明卡片，可随时手动关闭。",
@@ -723,11 +723,10 @@ const enUS: Record<MessageKey, string> = {
   "settings.font.title": "Terminal font",
   "settings.font.desc":
     "Leave empty to use the built-in stack. A custom family is tried first and falls back to the built-in list.",
-  "settings.font.placeholder":
-    "Current font: {name}",
+  "settings.font.default": "Default ({name})",
   "settings.fontSize.title": "Terminal font size",
   "settings.fontSize.desc":
-    "In pixels, from {min} to {max}; out-of-range values are clamped.",
+    "In pixels, pick from {min} to {max}.",
   "settings.welcome.title": "SSH welcome tip",
   "settings.welcome.desc":
     "Show a feature overview card at the top of each new SSH session; dismiss it manually anytime.",

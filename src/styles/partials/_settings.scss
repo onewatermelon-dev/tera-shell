@@ -187,11 +187,14 @@
   color: var(--muted);
 }
 
-// 标签占满剩余宽度，把箭头顶到最右侧，视觉上更像个下拉
+// 标签占满剩余宽度，把箭头顶到最右侧，视觉上更像个下拉；超长文字省略
 .settings-select-label {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: left;
+  white-space: nowrap;
 }
 
 .settings-select-caret {
@@ -201,9 +204,17 @@
 
 // 展开的菜单：HeroUI 的 Dropdown 默认给菜单一个较宽的 min-width，
 // 比触发器宽出一大截、显得突兀。这里按内容定宽，并对齐触发器的下限宽度。
+// 长字体名会把菜单撑得过宽，给个上限，超出由菜单项省略号兜底。
 .settings-select-menu {
   width: max-content;
   min-width: 132px;
+  max-width: min(360px, 80vw);
+}
+
+// 菜单项列表：字体清单可能上百条，限高滚动
+.settings-select-menu-list {
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 // 下拉里的每项：图标 + 文字，左对齐排一行
@@ -213,11 +224,14 @@
   color: var(--muted);
 }
 
-// 菜单项文字占满剩余宽度，把选中勾顶到最右侧
+// 菜单项文字占满剩余宽度，把选中勾顶到最右侧；超长字体名省略
 .settings-select-item-label {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: left;
+  white-space: nowrap;
 }
 
 .settings-select-check {
@@ -238,10 +252,6 @@
   background: var(--surface-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
-}
-
-.settings-input--size {
-  width: 120px;
 }
 
 .settings-input:focus {

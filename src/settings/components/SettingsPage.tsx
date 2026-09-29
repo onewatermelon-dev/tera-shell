@@ -4,7 +4,6 @@ import {
   useState
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "@heroui/react";
 import {
   ApiOutlined,
   ArrowLeftOutlined,
@@ -28,11 +27,10 @@ import {
   type Translator
 } from "@/settings/lib/i18n";
 import {
-  clampFontSize,
   firstFontOf,
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
-  resolveFontFamily,
+  TERMINAL_FONT_FALLBACK,
   type AppSettings,
   type LanguageMode,
   type ThemeMode
@@ -92,8 +90,8 @@ type SettingsPageProps = {
 /**
  * 设置页：左侧导航 + 右侧卡片列表。
  *
- * 字体与字号采用「草稿 + 保存」而不是即时生效 —— 它们会触发终端重排，
- * 每敲一个字符就重算一次既卡顿又闪烁。主题是纯属性切换，改用即时生效。
+ * 字体与字号都是下拉点选（一次一个离散动作），即时生效 —— 不会像文本
+ * 输入那样每敲一个字符就触发一次终端重排，又卡又闪。
  */
 export default function SettingsPage({
   settings,
@@ -112,15 +110,25 @@ export default function SettingsPage({
   );
   const [section, setSection] =
     useState<Section>("general");
-  // 草稿与已保存值分开，才能判断"有没有改动"来决定保存按钮是否可点
-  const [fontDraft, setFontDraft] = useState(
-    settings.fontFamily
-  );
-  const [sizeDraft, setSizeDraft] = useState(
-    String(settings.fontSize)
-  );
-  // 本机字体清单：字体名上百条，用 <datalist> 而不是自绘下拉 ——
-  // 输入框保留手输能力（可以填字体栈），下拉部分由浏览器按输入过滤
+  // 字号候选：合法区间内的每个像素值一项，选中即生效
+  const sizeOptions = useMemo(() => {
+    const options: SelectOption<string>[] = [];
+    for (
+      let size = MIN_FONT_SIZE;
+      size <= MAX_FONT_SIZE;
+      size++
+    ) {
+      options.push({
+        value: String(size),
+        label: String(size)
+      });
+    }
+    return options;
+  }, []);
+
+  // 本机字体清单：来自后端的 GDI 枚举，用与主题一致的自绘下拉全量列出。
+  // 不用 <datalist> —— 它按输入框文字过滤候选，选中字体后菜单就只剩
+  // 匹配它的一项，想换字体得先把输入框删干净
   const [fonts, setFonts] = useState<string[]>(
     []
   );
@@ -131,22 +139,35 @@ export default function SettingsPage({
       .catch(() => {});
   }, []);
 
-  const fontChanged =
-    fontDraft.trim() !== settings.fontFamily;
-  const sizeChanged =
-    clampFontSize(sizeDraft) !==
-    settings.fontSize;
-
-  function saveFont() {
-    onChange({ fontFamily: fontDraft.trim() });
-  }
-
-  function saveSize() {
-    const size = clampFontSize(sizeDraft);
-    // 输入越界时把输入框校正回合法值，免得用户以为改没生效
-    setSizeDraft(String(size));
-    onChange({ fontSize: size });
-  }
+  // 字体下拉选项：「默认」项（存空串）置顶；历史手输的字体栈不在枚举里
+  // 时补进去，免得触发器显示成「默认」
+  const fontOptions = useMemo(() => {
+    const options: SelectOption<string>[] =
+      fonts.map(name => ({
+        value: name,
+        label: name
+      }));
+    if (
+      settings.fontFamily &&
+      !fonts.includes(settings.fontFamily)
+    ) {
+      options.unshift({
+        value: settings.fontFamily,
+        label: settings.fontFamily
+      });
+    }
+    return [
+      {
+        value: "",
+        label: t("settings.font.default", {
+          name: firstFontOf(
+            TERMINAL_FONT_FALLBACK
+          )
+        })
+      },
+      ...options
+    ];
+  }, [fonts, settings.fontFamily, t]);
 
   return (
     <div className="settings-page">
@@ -262,53 +283,18 @@ export default function SettingsPage({
                 "settings.font.desc"
               )}
               control={
-                <Button
-                  variant="primary"
-                  size="sm"
-                  isDisabled={!fontChanged}
-                  onPress={saveFont}
-                >
-                  {t("common.save")}
-                </Button>
-              }
-            >
-              <input
-                className="settings-input"
-                value={fontDraft}
-                spellCheck={false}
-                list="font-options"
-                aria-label={t(
-                  "settings.font.title"
-                )}
-                placeholder={t(
-                  "settings.font.placeholder",
-                  {
-                    name: firstFontOf(
-                      resolveFontFamily(
-                        settings.fontFamily
-                      )
-                    )
+                <SettingsSelect
+                  value={settings.fontFamily}
+                  options={fontOptions}
+                  ariaLabel={t(
+                    "settings.font.title"
+                  )}
+                  onChange={fontFamily =>
+                    onChange({ fontFamily })
                   }
-                )}
-                onChange={event =>
-                  setFontDraft(event.target.value)
-                }
-                onKeyDown={event => {
-                  if (event.key === "Enter")
-                    saveFont();
-                }}
-              />
-              {/* 候选来自后端的 GDI 枚举；datalist 让浏览器按输入过滤，
-                  输入框本身仍可手填任意字体栈 */}
-              <datalist id="font-options">
-                {fonts.map(name => (
-                  <option
-                    key={name}
-                    value={name}
-                  />
-                ))}
-              </datalist>
-            </SettingsRow>
+                />
+              }
+            />
 
             <SettingsRow
               title={t("settings.fontSize.title")}
@@ -320,35 +306,22 @@ export default function SettingsPage({
                 }
               )}
               control={
-                <Button
-                  variant="primary"
-                  size="sm"
-                  isDisabled={!sizeChanged}
-                  onPress={saveSize}
-                >
-                  {t("common.save")}
-                </Button>
+                <SettingsSelect
+                  value={String(
+                    settings.fontSize
+                  )}
+                  options={sizeOptions}
+                  ariaLabel={t(
+                    "settings.fontSize.title"
+                  )}
+                  onChange={size =>
+                    onChange({
+                      fontSize: Number(size)
+                    })
+                  }
+                />
               }
-            >
-              <input
-                className="settings-input settings-input--size"
-                value={sizeDraft}
-                inputMode="numeric"
-                aria-label={t(
-                  "settings.fontSize.title"
-                )}
-                placeholder={String(
-                  settings.fontSize
-                )}
-                onChange={event =>
-                  setSizeDraft(event.target.value)
-                }
-                onKeyDown={event => {
-                  if (event.key === "Enter")
-                    saveSize();
-                }}
-              />
-            </SettingsRow>
+            />
 
             <SettingsRow
               title={t("settings.welcome.title")}
