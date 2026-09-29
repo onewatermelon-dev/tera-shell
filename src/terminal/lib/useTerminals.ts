@@ -16,6 +16,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/sessions/lib/session";
 import { registerTerminalLinks } from "@/terminal/lib/terminalLinks";
 import { explainCommand } from "@/terminal/lib/aiExplain";
+import { aiRunCommand } from "@/terminal/lib/aiExec";
 import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
@@ -96,9 +97,6 @@ export function useTerminals(
     } | null>(null);
   const openedRef = useRef(opened);
   /** 解释落画期间按会话扣住远端输出的队列（见 terminal-output 监听） */
-  const outputHoldRef = useRef(
-    new Map<string, string[]>()
-  );
   const activeIdRef = useRef(activeId);
   const disconnectedRef = useRef(disconnected);
   useEffect(() => {
@@ -384,9 +382,9 @@ export function useTerminals(
               line?.translateToString(true) ?? ""
             ) || null;
           // 快捷命令解释：SSH 会话里「命令/?」回车 → 本地拦截 Enter、
-          // Ctrl+U 清掉远端输入缓冲（不执行），等远端清行重绘到达后
-          // 回显命令并攒完整段解释，再用空回车把提示符推下去、
-          // 中间腾出的行覆盖成解释（详见 flush）
+          // Ctrl+U 清掉远端输入缓冲（不执行），解释攒完后从远端写进
+          // 本会话的 pts —— 输出流经 ConPTY 进它自己的屏幕缓冲，
+          // 天然抗 resize 整屏重绘；此前所有本地注入方案都会被抹掉
           const trimmed = command?.trim() ?? "";
           if (
             session.kind === "ssh" &&
@@ -397,160 +395,105 @@ export function useTerminals(
               .trim();
             if (target) {
               explaining = true;
-              void (async () => {
-                // 事件驱动的两段落画：等该会话输出静默 idleMs（无新输出）
-                // 再执行 action；fallbackMs 兜底（远端不发重绘也不能卡死）
-                const untilIdle = (
-                  idleMs: number,
-                  fallbackMs: number,
-                  action: () => void
-                ) => {
-                  let done = false;
-                  let un: (() => void) | null =
-                    null;
-                  let timer = window.setTimeout(
-                    fire,
-                    fallbackMs
-                  );
-                  function fire() {
-                    if (done) return;
-                    done = true;
-                    window.clearTimeout(timer);
-                    un?.();
-                    action();
-                  }
-                  void import("@tauri-apps/api/event").then(
-                    ({ listen }) =>
-                      listen<{ id: string }>(
-                        "terminal-output",
-                        ({ payload }) => {
-                          if (
-                            payload.id !==
-                              session.id ||
-                            done
-                          )
-                            return;
-                          window.clearTimeout(
-                            timer
-                          );
-                          timer =
-                            window.setTimeout(
-                              fire,
-                              idleMs
-                            );
-                        }
-                      ).then(fn => {
-                        un = fn;
-                      })
-                  );
-                };
-                // 第二段：攒完整段解释（行数定了我才知道要预留几行），
-                // 用 n+1 次空回车让 bash 把提示符推下去（真实输出，
-                // ConPTY 坐标同步前进），等重绘静默后把中间 n 行覆盖成解释
-                const generate = () => {
-                  // 光标坐标在 Ctrl+U 重绘静默后才捕获：
-                  // 此时光标恰好停在提示符末尾，回显与重写不会错位
-                  const buffer =
-                    terminal.buffer.active;
-                  const homeRow =
-                    buffer.baseY + buffer.cursorY;
-                  const homeCol = buffer.cursorX;
-                  // 回显「命令/?」+ 临时标题，给即时反馈
-                  terminal.write(
-                    `\x1b[K${trimmed}\r\n\x1b[38;2;222;220;18m[AI正在分析: ${target}]\x1b[0m`
-                  );
-                  let text = "";
-                  void explainCommand(
-                    target,
-                    chunk => {
-                      text += chunk;
-                    }
-                  )
-                    .catch(reason => {
-                      text += `\n[解释失败] ${String(
-                        reason
-                      )}`;
-                    })
-                    .finally(() => {
-                      const cols = terminal.cols;
-                      // 预留 2 行（回显行 + 当前提示符行），超长截断
-                      const maxLines = Math.max(
+              const rawLine =
+                line?.translateToString(true) ??
+                "";
+              const cut =
+                rawLine.lastIndexOf(trimmed);
+              const prompt =
+                cut > 0
+                  ? rawLine.slice(0, cut)
+                  : "";
+              invoke("terminal_write", {
+                id: session.id,
+                data: "\x15",
+                command: null
+              }).catch(onError);
+              // 回显+标题也从远端 pts 注入（sleep 0.5 让 Ctrl+U 的
+              // 清行重绘先落地，否则会被 readline 重绘抹掉）；
+              // 本地写不进 ConPTY 缓冲，resize 后会丢
+              const ptsFind = `p=$(ps -u "$(whoami)" -o tty= --sort=start_time | grep pts | tail -1)`;
+              const execTarget = {
+                host: session.host,
+                port: session.port,
+                username: session.username,
+                password: session.password
+              };
+              aiRunCommand(
+                execTarget,
+                [
+                  ptsFind,
+                  `sleep 0.5`,
+                  `[ -n "$p" ] && cat > "/dev/$p" <<'AI_HEAD'`,
+                  trimmed,
+                  `\x1b[38;2;222;220;18m[AI正在分析: ${target}]\x1b[0m`,
+                  `AI_HEAD`
+                ].join("\n")
+              ).catch(reason =>
+                console.warn(
+                  "[explain] pts 回显失败",
+                  reason
+                )
+              );
+              let text = "";
+              void explainCommand(
+                target,
+                chunk => {
+                  text += chunk;
+                }
+              )
+                .catch(reason => {
+                  text += `\n[解释失败] ${String(
+                    reason
+                  )}`;
+                })
+                .finally(() => {
+                  const cols = terminal.cols;
+                  const lines = text
+                    .replace(/\r/g, "")
+                    .split("\n")
+                    .slice(
+                      0,
+                      Math.max(
                         1,
                         terminal.rows - 2
-                      );
-                      const lines = text
-                        .replace(/\r/g, "")
-                        .split("\n")
-                        .slice(0, maxLines)
-                        .map(
-                          l =>
-                            `\x1b[38;2;27;186;233m${sliceToWidth(l, cols - 1)}\x1b[0m`
-                        );
-                      const block = [
-                        `\x1b[38;2;222;220;18m[AI正在分析: ${target}]\x1b[0m`,
-                        ...lines
-                      ];
-                      const n = block.length;
-                      // 扣住该会话输出：空回车推出来的中间提示符不渲染，
-                      // 解释落画后按原序冲刷 —— 不依赖同步输出计时窗口
-                      const hold: string[] = [];
-                      outputHoldRef.current.set(
-                        session.id,
-                        hold
-                      );
-                      invoke("terminal_write", {
-                        id: session.id,
-                        data: "\r".repeat(n + 1),
-                        command: null
-                      }).catch(onError);
-                      untilIdle(250, 1500, () => {
-                        // 先冲刷提示符流，等 xterm 处理完（可能滚动）
-                        // 再按最新 baseY 重算行号落画：
-                        // 用旧坐标会在滚动后整体错位
-                        const paint = () => {
-                          // 冲刷流处理完后，光标恰好停在最后一个提示符
-                          // 之后（bash 自己留下的）—— 记下它，盖完解释
-                          // 再回去，不靠行数推算光标位
-                          const endRow =
-                            buffer.baseY +
-                            buffer.cursorY;
-                          const endCol =
-                            buffer.cursorX;
-                          const row = Math.max(
-                            1,
-                            homeRow -
-                              buffer.baseY +
-                              1
-                          );
-                          const out =
-                            `\x1b[${row};${homeCol + 1}H\x1b[K${trimmed}\r\n\x1b[K` +
-                            block.join(
-                              "\r\n\x1b[K"
-                            ) +
-                            `\x1b[${endRow - buffer.baseY + 1};${endCol + 1}H`;
-                          terminal.write(out);
-                          outputHoldRef.current.delete(
-                            session.id
-                          );
-                          explaining = false;
-                        };
-                        if (hold.length)
-                          terminal.write(
-                            hold.join(""),
-                            paint
-                          );
-                        else paint();
-                      });
+                      )
+                    )
+                    .map(
+                      l =>
+                        `\x1b[38;2;27;186;233m${sliceToWidth(l, cols - 1)}\x1b[0m`
+                    );
+                  // ponytail: 取该用户最新启动的 pts shell；同一用户
+                  // 并发多个交互会话时可能写错窗口，需比对
+                  // SSH_CLIENT 端口才能精确匹配
+                  const esc = prompt.replace(
+                    /'/g,
+                    `'\\''`
+                  );
+                  const script = [
+                    ptsFind,
+                    `if [ -n "$p" ]; then`,
+                    `cat > "/dev/$p" <<'AI_EXPLAIN'`,
+                    ...lines,
+                    `AI_EXPLAIN`,
+                    ...(prompt
+                      ? [
+                          `printf '%s' '${esc}' > "/dev/$p"`
+                        ]
+                      : []),
+                    `fi`
+                  ].join("\n");
+                  aiRunCommand(execTarget, script)
+                    .catch(reason =>
+                      console.warn(
+                        "[explain] pts 注入失败",
+                        reason
+                      )
+                    )
+                    .finally(() => {
+                      explaining = false;
                     });
-                };
-                // 第一段：Ctrl+U 清远端输入行，等清行重绘静默后回显+生成
-                invoke("terminal_write", {
-                  id: session.id,
-                  data: "\x15",
-                  command: null
-                }).catch(onError);
-                untilIdle(250, 1000, generate);
-              })();
+                });
             }
             return;
           }
@@ -1013,16 +956,6 @@ export function useTerminals(
                 ({ id }) => id === payload.id
               );
             if (!session) return;
-            // 解释落画期间扣住该会话输出（见 outputHoldRef）：
-            // 空回车推出来的中间提示符不进渲染，落画后统一冲刷
-            const hold =
-              outputHoldRef.current.get(
-                payload.id
-              );
-            if (hold) {
-              hold.push(payload.data);
-              return;
-            }
             session.terminal.write(payload.data);
           }
         ),
