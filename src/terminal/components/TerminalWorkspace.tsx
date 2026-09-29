@@ -1179,8 +1179,9 @@ export default function TerminalWorkspace({
             />
           ))}
 
-        {/* 本地 PowerShell 会话不显示底部状态栏：快捷宏与系统信息都面向 SSH 场景 */}
-        {active?.kind !== "local" && (
+        {/* 底部状态栏只在有活动的 SSH 会话时显示：本地会话用不到快捷宏与
+            系统信息，没有任何会话时更不该挂着一条空栏 */}
+        {active && active.kind !== "local" && (
           <div className="terminal-status">
             {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
             {statusMode === "info" ? (
