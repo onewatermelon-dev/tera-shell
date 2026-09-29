@@ -30,7 +30,11 @@ export default function Hint({
 }: Props) {
   return (
     <Tooltip delay={400}>
-      {children}
+      {/* 必须显式包 Tooltip.Trigger：RAC 的触发 props 走 FocusableContext，
+          没有 Trigger 层接收 hover/focus，气泡永远不会弹出 */}
+      <Tooltip.Trigger>
+        {children}
+      </Tooltip.Trigger>
       <Tooltip.Content
         className={className}
         placement={placement}

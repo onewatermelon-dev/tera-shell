@@ -72,6 +72,9 @@ button {
 // 左侧竖排卡片：与 .sidebar 同风格（底色/描边/圆角），不与标题栏相连。
 // 汉堡菜单挂顶部，会话栏开关与以后的功能入口图标排在下面
 .app-rail {
+  // DOM 里会话栏在竖条之后，会把伸出去的气泡盖住 —— 提层叠让气泡浮在上面
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   grid-area: rail;
@@ -82,7 +85,10 @@ button {
   // 右侧不留 margin：卡片间距统一由 .workspace 的 8px 内边距提供，
   // 避免 margin + padding 叠成 16px；上下内边距让按钮方块离卡片边也有距离
   margin: 8px 0 8px 8px;
-  overflow: hidden;
+
+  // 不能 overflow:hidden —— 汉堡的 CSS 悬停气泡要伸出卡片右侧；
+  // 按钮色块自带圆角，不会溢出卡片圆角
+  overflow: visible;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -124,6 +130,38 @@ button {
 
   svg {
     width: 16px;
+  }
+}
+
+// 汉堡按钮的 CSS 悬停气泡：HeroUI Tooltip 与 Dropdown.Trigger 不兼容
+// （包装层被 RAC press 判定为嵌套交互元素，吞掉点击、菜单打不开），
+// 手绘一份对齐 .tooltip 的外观（bg-overlay / 圆角 / 阴影 / text-xs）
+.rail-trigger--hint {
+  position: relative;
+
+  &::after {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 10px);
+    z-index: 30;
+    padding: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--foreground);
+    white-space: nowrap;
+    pointer-events: none;
+    content: attr(data-tip);
+    background: var(--overlay);
+    border-radius: 12px;
+    box-shadow: var(--shadow-overlay);
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 0.15s ease;
+  }
+
+  &:hover::after,
+  &:focus-visible::after {
+    opacity: 1;
   }
 }
 

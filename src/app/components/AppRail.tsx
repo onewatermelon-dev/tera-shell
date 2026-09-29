@@ -198,9 +198,13 @@ export default function AppRail({
     >
       <>
         <Dropdown.Root>
+          {/* 汉堡不能套 Hint：HeroUI Tooltip 的包装层会被 RAC press 判定为
+              嵌套交互元素而吞掉点击，菜单打不开（外包内包都试过）——
+              改用 CSS 悬停气泡（data-tip），外观对齐 Hint 的 .tooltip */}
           <Dropdown.Trigger
-            className="rail-trigger"
+            className="rail-trigger rail-trigger--hint"
             aria-label={t("app.menu.aria")}
+            data-tip={t("app.menu.aria")}
           >
             <MenuOutlined />
           </Dropdown.Trigger>
