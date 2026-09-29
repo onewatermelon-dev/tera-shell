@@ -49,27 +49,6 @@ const TERMINAL_THEME = {
     "rgb(41 103 206)"
 };
 
-/**
- * 按终端显示宽度截断：CJK 全角字符占两列，
- * 按字符数截断会让中文行折行、把整块解释推歪。
- */
-const WIDE_CHAR =
-  /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹯＀-｠￠-￦]/;
-function sliceToWidth(
-  text: string,
-  max: number
-): string {
-  let width = 0;
-  let out = "";
-  for (const ch of text) {
-    const w = WIDE_CHAR.test(ch) ? 2 : 1;
-    if (width + w > max) break;
-    width += w;
-    out += ch;
-  }
-  return out;
-}
-
 export function useTerminals(
   onError: (reason: unknown) => void,
   onSavePassword:
@@ -412,6 +391,8 @@ export function useTerminals(
               // 回显+标题也从远端 pts 注入（sleep 0.5 让 Ctrl+U 的
               // 清行重绘先落地，否则会被 readline 重绘抹掉）；
               // 本地写不进 ConPTY 缓冲，resize 后会丢
+              // ponytail: 取该用户最新启动的 pts shell；同一用户并发
+              // 多个交互会话时可能写错窗口，需比对 SSH_CLIENT 端口
               const ptsFind = `p=$(ps -u "$(whoami)" -o tty= --sort=start_time | grep pts | tail -1)`;
               const execTarget = {
                 host: session.host,
@@ -436,54 +417,97 @@ export function useTerminals(
                 )
               );
               let text = "";
+              // 流式增量写入：解释 chunk 节流批量写进 pts，终端上呈打字机
+              // 效果。写入经队列串行化，避免 exec 乱序导致文字错位；
+              // 不再做逐行着色与裁宽 —— 半行没法裁，长行交给终端自动换行
+              // ponytail: 若行宽错乱成为硬需求，需远端常驻进程按行回写
+              let pending = "";
+              let flushTimer: ReturnType<
+                typeof setTimeout
+              > | null = null;
+              let started = false;
+              // 队列只关心先后顺序，值丢弃，用 unknown 兜住 aiRunCommand 的返回
+              let queue: Promise<unknown> =
+                Promise.resolve();
+              const flushPending = () => {
+                flushTimer = null;
+                if (!pending) return;
+                const chunk = pending;
+                pending = "";
+                queue = queue.then(() =>
+                  aiRunCommand(
+                    execTarget,
+                    [
+                      ptsFind,
+                      `[ -n "$p" ] && printf '%s' '${chunk.replace(/'/g, `'\\''`)}' > "/dev/$p"`
+                    ].join("\n")
+                  ).catch(reason =>
+                    console.warn(
+                      "[explain] pts 流式写入失败",
+                      reason
+                    )
+                  )
+                );
+              };
+              const pushChunk = (
+                chunk: string
+              ) => {
+                // 首批先落正文颜色码，之后整段持续同色
+                pending += started
+                  ? chunk
+                  : `\x1b[38;2;27;186;233m${chunk}`;
+                started = true;
+                if (!flushTimer)
+                  flushTimer = setTimeout(
+                    flushPending,
+                    300
+                  );
+              };
+
               void explainCommand(
                 target,
                 chunk => {
                   text += chunk;
+                  pushChunk(chunk);
                 }
               )
                 .catch(reason => {
-                  text += `\n[解释失败] ${String(
-                    reason
-                  )}`;
+                  const message = `\n[解释失败] ${String(reason)}`;
+                  text += message;
+                  pushChunk(message);
                 })
                 .finally(() => {
-                  const cols = terminal.cols;
-                  const lines = text
-                    .replace(/\r/g, "")
-                    .split("\n")
-                    .slice(
-                      0,
-                      Math.max(
-                        1,
-                        terminal.rows - 2
-                      )
-                    )
-                    .map(
-                      l =>
-                        `\x1b[38;2;27;186;233m${sliceToWidth(l, cols - 1)}\x1b[0m`
-                    );
-                  // ponytail: 取该用户最新启动的 pts shell；同一用户
-                  // 并发多个交互会话时可能写错窗口，需比对
-                  // SSH_CLIENT 端口才能精确匹配
+                  // 停掉节流器，把余量冲出去，再在队列尾补收尾：
+                  // 颜色复位（+补行尾换行）与提示符回写
+                  if (flushTimer)
+                    clearTimeout(flushTimer);
+                  flushPending();
+                  const tail = text.endsWith("\n")
+                    ? "\x1b[0m"
+                    : "\x1b[0m\n";
                   const esc = prompt.replace(
                     /'/g,
                     `'\\''`
                   );
-                  const script = [
-                    ptsFind,
-                    `if [ -n "$p" ]; then`,
-                    `cat > "/dev/$p" <<'AI_EXPLAIN'`,
-                    ...lines,
-                    `AI_EXPLAIN`,
-                    ...(prompt
-                      ? [
-                          `printf '%s' '${esc}' > "/dev/$p"`
-                        ]
-                      : []),
-                    `fi`
-                  ].join("\n");
-                  aiRunCommand(execTarget, script)
+                  const escTail = tail.replace(
+                    /'/g,
+                    `'\\''`
+                  );
+                  queue = queue
+                    .then(() =>
+                      aiRunCommand(
+                        execTarget,
+                        [
+                          ptsFind,
+                          `[ -n "$p" ] && printf '%s' '${escTail}' > "/dev/$p"`,
+                          ...(prompt
+                            ? [
+                                `[ -n "$p" ] && printf '%s' '${esc}' > "/dev/$p"`
+                              ]
+                            : [])
+                        ].join("\n")
+                      )
+                    )
                     .catch(reason =>
                       console.warn(
                         "[explain] pts 注入失败",
