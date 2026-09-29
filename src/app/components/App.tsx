@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Alert } from "@heroui/react";
 import { useSessions } from "@/sessions/lib/useSessions";
 import { useTerminals } from "@/terminal/lib/useTerminals";
+import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
 import { useT } from "@/settings/lib/i18n";
 import type { SavedSession } from "@/sessions/lib/session";
 import AppHeader, {
@@ -300,12 +301,25 @@ export default function App() {
     openSettings: () => setSettingsOpen(true)
   };
 
+  // 终端配色方案的背景/前景下传给 CSS：.terminal-host 的余数缝隙要跟
+  // xterm 背景融为一体、划词覆盖层要用前景色做高亮 —— CSS 拿不到
+  // xterm 主题，走变量
+  const scheme = resolveColorScheme(
+    appSettings.settings.colorScheme
+  );
+
   return (
     <main
       className={
         settingsOpen
           ? "shell-app settings-open"
           : "shell-app"
+      }
+      style={
+        {
+          "--terminal-bg": scheme.background,
+          "--terminal-fg": scheme.foreground
+        } as Record<string, string>
       }
     >
       <AppHeader

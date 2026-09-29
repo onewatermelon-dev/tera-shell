@@ -379,9 +379,13 @@
 
 .terminal-host {
   min-height: 0;
-  padding: 0 10px 4px 14px;
+
+  // 终端撑满容器：原来四周留的 padding 缝隙会露出宿主底色（换配色方案
+  // 后尤其明显），现在直接贴边；xterm canvas 是行列整除的，边缘可能剩
+  // 几像素余数，背景仍跟配色方案走（变量由 App 注入，缺省旧黑底）
+  padding: 0;
   overflow: hidden;
-  background: #0b0e14; // 终端保持黑底，padding 缝隙与 xterm 背景融为一体
+  background: var(--terminal-bg, #0b0e14);
 }
 
 // 拆分状态：主栏与拆分栏并排，flex-basis 由拖动的比例内联控制。

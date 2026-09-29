@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 type SettingsRowProps = {
   title: string;
   description: string;
+  /** 标题后面追加的说明（如当前配色方案名），弱色显示 */
+  titleExtra?: ReactNode;
   /** 右上角控件：保存按钮、下拉框等 */
   control?: ReactNode;
   /** 卡片下方整宽内容：输入框等 */
@@ -18,6 +20,7 @@ type SettingsRowProps = {
 export default function SettingsRow({
   title,
   description,
+  titleExtra,
   control,
   children
 }: SettingsRowProps) {
@@ -27,6 +30,11 @@ export default function SettingsRow({
         <div className="settings-row-text">
           <p className="settings-row-title">
             {title}
+            {titleExtra && (
+              <span className="settings-row-title-extra">
+                {titleExtra}
+              </span>
+            )}
           </p>
           <p className="settings-row-desc">
             {description}

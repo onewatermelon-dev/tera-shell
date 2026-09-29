@@ -27,6 +27,8 @@ export type AppSettings = {
   fontFamily: string;
   /** 终端字号，单位 px。 */
   fontSize: number;
+  /** 终端配色方案名（见 terminal/lib/colorSchemes 的 COLOR_SCHEMES）。 */
+  colorScheme: string;
   theme: ThemeMode;
   locale: LanguageMode;
   /** 会话栏是否展开；收起后靠左缘细条上的按钮恢复。 */
@@ -56,6 +58,7 @@ export const DEFAULT_FONT_SIZE = 14;
 export const defaultSettings: AppSettings = {
   fontFamily: "",
   fontSize: DEFAULT_FONT_SIZE,
+  colorScheme: "Tera Shell",
   theme: "system",
   locale: "system",
   sidebarOpen: true,
@@ -101,6 +104,11 @@ export function loadSettings(): AppSettings {
           ? parsed.fontFamily
           : "",
       fontSize: clampFontSize(parsed.fontSize),
+      // 方案名找不到时会回退默认（resolveColorScheme），这里不做校验
+      colorScheme:
+        typeof parsed.colorScheme === "string"
+          ? parsed.colorScheme
+          : "Tera Shell",
       theme,
       locale,
       // 只有显式存过 false 才算收起，其余（含旧数据缺字段）一律展开

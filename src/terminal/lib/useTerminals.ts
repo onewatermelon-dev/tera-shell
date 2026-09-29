@@ -25,29 +25,14 @@ import {
   resolveFontFamily,
   type AppSettings
 } from "@/settings/lib/settings";
+import {
+  resolveColorScheme,
+  toXtermTheme
+} from "@/terminal/lib/colorSchemes";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
 
 // 会话类型定义在 terminalTypes，这里重新导出，外部仍从 useTerminals 引入
 export type { OpenSession } from "@/terminal/lib/terminalTypes";
-
-/**
- * 终端配色：主栏与拆分镜像必须共用同一份。
- *
- * 镜像若不传 theme，xterm 会退回内置的纯黑底（#000000），在 #0b0e14 的宿主
- * 背景上会露出一块明显不同的黑块，看起来像"拆分出去的会话没落在分隔线右边"。
- */
-const TERMINAL_THEME = {
-  background: "#0b0e14",
-  foreground: "#c9d1d9",
-  cursor: "rgb(41 103 206)",
-  selectionBackground: "#00000000",
-  selectionInactiveBackground: "#00000000",
-  scrollbarSliderBackground: "rgb(41 103 206)",
-  scrollbarSliderHoverBackground:
-    "rgb(41 103 206)",
-  scrollbarSliderActiveBackground:
-    "rgb(41 103 206)"
-};
 
 export function useTerminals(
   onError: (reason: unknown) => void,
@@ -57,10 +42,10 @@ export function useTerminals(
         encrypted: string
       ) => void)
     | undefined,
-  /** 终端外观设置：字体与字号随之变化，整批终端一起更新 */
+  /** 终端外观设置：字体、字号与配色随之变化，整批终端一起更新 */
   appearance: Pick<
     AppSettings,
-    "fontFamily" | "fontSize"
+    "fontFamily" | "fontSize" | "colorScheme"
   >
 ) {
   const [opened, setOpened] = useState<
@@ -235,6 +220,9 @@ export function useTerminals(
     const family = resolveFontFamily(
       appearance.fontFamily
     );
+    const theme = toXtermTheme(
+      resolveColorScheme(appearance.colorScheme)
+    );
     for (const session of openedRef.current) {
       // xterm 只暴露 options 这个可变对象，没有 setter —— 想改字体就只能
       // 就地赋值。react-hooks/immutability 约束的是 React 自身的数据，
@@ -244,12 +232,14 @@ export function useTerminals(
         family;
       session.terminal.options.fontSize =
         appearance.fontSize;
+      session.terminal.options.theme = theme;
       /* eslint-enable react-hooks/immutability */
     }
     resize();
   }, [
     appearance.fontFamily,
     appearance.fontSize,
+    appearance.colorScheme,
     resize
   ]);
 
@@ -317,7 +307,11 @@ export function useTerminals(
         fontSize: appearance.fontSize,
         lineHeight: 1.3,
         scrollback: 5000,
-        theme: TERMINAL_THEME
+        theme: toXtermTheme(
+          resolveColorScheme(
+            appearance.colorScheme
+          )
+        )
       });
       const element =
         document.createElement("div");

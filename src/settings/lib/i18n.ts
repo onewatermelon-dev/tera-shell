@@ -270,6 +270,7 @@ const zhCN = {
   "settings.nav.group": "基础设置",
   "settings.nav.general": "常规",
   "settings.nav.terminal": "终端",
+  "settings.nav.colorScheme": "配色方案",
   "settings.nav.models": "模型设置",
   "models.desc":
     "管理自定义模型供应商，配置后可在聊天时选择使用。",
@@ -361,6 +362,13 @@ const zhCN = {
   "settings.fontSize.title": "终端字号",
   "settings.fontSize.desc":
     "单位像素，可选 {min} 到 {max}。",
+  "settings.colorScheme.title": "配色方案",
+  "settings.colorScheme.desc":
+    "463 个内置方案，点击卡片立即应用到终端，当前方案见顶部预览。",
+  "settings.colorScheme.search": "搜索配色方案",
+  "settings.colorScheme.current": "当前",
+  "settings.colorScheme.dark": "夜间模式",
+  "settings.colorScheme.light": "亮色主题",
   "settings.welcome.title": "SSH 欢迎提示",
   "settings.welcome.desc":
     "新 SSH 会话打开时在终端顶部显示功能说明卡片，可随时手动关闭。",
@@ -634,6 +642,7 @@ const enUS: Record<MessageKey, string> = {
   "settings.nav.group": "Basics",
   "settings.nav.general": "General",
   "settings.nav.terminal": "Terminal",
+  "settings.nav.colorScheme": "Color scheme",
   "settings.nav.models": "Model providers",
   "models.desc":
     "Manage custom model providers; enabled models can be picked when chatting.",
@@ -727,6 +736,14 @@ const enUS: Record<MessageKey, string> = {
   "settings.fontSize.title": "Terminal font size",
   "settings.fontSize.desc":
     "In pixels, pick from {min} to {max}.",
+  "settings.colorScheme.title": "Color scheme",
+  "settings.colorScheme.desc":
+    "463 built-in schemes. Click a card to apply it to the terminal instantly; the current one is previewed on top.",
+  "settings.colorScheme.search":
+    "Search color schemes",
+  "settings.colorScheme.current": "Current",
+  "settings.colorScheme.dark": "Dark themes",
+  "settings.colorScheme.light": "Light themes",
   "settings.welcome.title": "SSH welcome tip",
   "settings.welcome.desc":
     "Show a feature overview card at the top of each new SSH session; dismiss it manually anytime.",

@@ -251,6 +251,10 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 		.filter(|value| !value.trim().is_empty())
 		.map_or_else(|| host.clone(), |username| format!("{username}@{host}"));
 	let mut command = CommandBuilder::new("ssh");
+	// ssh 向远端申请 PTY 时 TERM 取自本机环境变量，ConPTY 环境里没有
+	// 这个变量 → 远端拿到 dumb → ls --color、彩色提示符全部自动关闭，
+	// 终端里只剩白字。显式声明 256 色，前端 xterm 按配色方案渲染
+	command.env("TERM", "xterm-256color");
 	command.args([
 		"-tt",
 		"-o",

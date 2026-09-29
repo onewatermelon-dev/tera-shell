@@ -108,8 +108,14 @@ button:active {
 .terminal-selection-range {
   position: absolute;
 
-  // 鼠标框选：半透明主题蓝，保证黑底终端里被选文字仍然清晰可读。
-  background: rgb(41 103 206 / 45%);
+  // 鼠标框选：当前配色方案前景色 30% 透明（--terminal-fg 由 App 注入）。
+  // 同色叠加不会改变文字的明暗结构，任何主题下被选文字都清晰；
+  // 旧的固定主题蓝在亮色主题下会把文字糊掉
+  background: color-mix(
+    in srgb,
+    var(--terminal-fg, #c9d1d9) 30%,
+    transparent
+  );
 }
 
 .terminal-selection-range.search {

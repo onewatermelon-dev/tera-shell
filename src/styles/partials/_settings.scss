@@ -89,6 +89,14 @@
   padding: 28px 32px 32px;
   margin-inline: auto;
   overflow-y: auto;
+
+  // 滚动条藏掉、滚轮照常：设置页分区内容都是自绘卡片，原生滚动条
+  // 叠在圆角卡片上很突兀
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .settings-title {
@@ -132,6 +140,13 @@
   margin: 0;
   font-size: 13px;
   color: var(--foreground);
+}
+
+// 标题后追加的说明（如当前配色方案名）：主题色、稍小一号
+.settings-row-title-extra {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--accent);
 }
 
 .settings-row-desc {
@@ -289,4 +304,144 @@
   line-height: 1.6;
   color: var(--muted);
   word-break: break-all;
+}
+
+// ---- 配色方案 ----
+
+// 当前方案的大预览 + 卡片内的小预览：模拟 ls 输出，纯 HTML 着色
+.scheme-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  font-family:
+    Consolas, "Cascadia Code", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 8px;
+}
+
+.scheme-preview-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+}
+
+.scheme-preview-dim {
+  opacity: 0.75;
+}
+
+// 夜间/亮色分组 tab：当前项白字 + 主题色下划线，未激活灰字
+.scheme-tabs {
+  display: flex;
+  gap: 20px;
+  margin-top: 14px;
+}
+
+.scheme-tab {
+  padding: 0 2px 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}
+
+.scheme-tab.is-active {
+  color: var(--foreground);
+  border-bottom-color: var(--accent);
+}
+
+.scheme-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+
+  svg {
+    flex: none;
+    color: var(--muted);
+  }
+
+  .heroui--input,
+  input {
+    width: 100%;
+  }
+}
+
+.scheme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 520px;
+  overflow-y: auto;
+
+  // 滚动功能保留，滚动条藏掉（卡片本身够宽，滚动条太碍眼）
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.scheme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+}
+
+.scheme-card.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.scheme-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.scheme-card-check {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+// 16 色点：两行各 8 个
+.scheme-dots {
+  display: grid;
+  grid-template-columns: repeat(8, 12px);
+  gap: 4px;
+  justify-content: end;
+
+  i {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+}
+
+.scheme-more {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
 }

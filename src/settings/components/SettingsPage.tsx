@@ -10,6 +10,7 @@ import {
   BgColorsOutlined,
   CodeOutlined,
   DesktopOutlined,
+  FormatPainterOutlined,
   GlobalOutlined,
   MoonOutlined,
   SunOutlined,
@@ -18,6 +19,8 @@ import {
 import SettingsRow from "@/settings/components/SettingsRow";
 import Toggle from "@/shared/components/Toggle";
 import DataDirRow from "@/settings/components/DataDirRow";
+import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
+import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
 import SettingsSelect, {
   type SelectOption
@@ -36,8 +39,12 @@ import {
   type ThemeMode
 } from "@/settings/lib/settings";
 
-/** 左侧导航的三页。 */
-type Section = "general" | "terminal" | "models";
+/** 左侧导航的四页。 */
+type Section =
+  | "general"
+  | "terminal"
+  | "colorScheme"
+  | "models";
 
 /** 主题下拉的三项。 */
 const themeOptions = (
@@ -135,7 +142,9 @@ export default function SettingsPage({
 
   useEffect(() => {
     invoke<string[]>("list_fonts")
-      .then(setFonts)
+      // 后端异常时兜底空数组：invoke 链路若 resolve 了 null，
+      // 直接 setFonts 会让字体下拉的 map 崩掉整个设置页
+      .then(fonts => setFonts(fonts ?? []))
       .catch(() => {});
   }, []);
 
@@ -210,6 +219,20 @@ export default function SettingsPage({
         <button
           type="button"
           className={
+            section === "colorScheme"
+              ? "settings-nav-item is-active"
+              : "settings-nav-item"
+          }
+          onClick={() =>
+            setSection("colorScheme")
+          }
+        >
+          <FormatPainterOutlined />
+          {t("settings.nav.colorScheme")}
+        </button>
+        <button
+          type="button"
+          className={
             section === "models"
               ? "settings-nav-item is-active"
               : "settings-nav-item"
@@ -223,11 +246,18 @@ export default function SettingsPage({
 
       <section className="settings-content">
         <h1 className="settings-title">
-          {section === "general"
-            ? t("settings.nav.general")
-            : section === "terminal"
-              ? t("settings.nav.terminal")
-              : t("settings.nav.models")}
+          {
+            {
+              general: t("settings.nav.general"),
+              terminal: t(
+                "settings.nav.terminal"
+              ),
+              colorScheme: t(
+                "settings.nav.colorScheme"
+              ),
+              models: t("settings.nav.models")
+            }[section]
+          }
         </h1>
         {section !== "models" && (
           <p className="settings-subtitle">
@@ -343,6 +373,27 @@ export default function SettingsPage({
               }
             />
           </>
+        ) : section === "colorScheme" ? (
+          <SettingsRow
+            title={t(
+              "settings.colorScheme.title"
+            )}
+            titleExtra={
+              resolveColorScheme(
+                settings.colorScheme
+              ).name
+            }
+            description={t(
+              "settings.colorScheme.desc"
+            )}
+          >
+            <ColorSchemePicker
+              value={settings.colorScheme}
+              onChange={colorScheme =>
+                onChange({ colorScheme })
+              }
+            />
+          </SettingsRow>
         ) : (
           <ModelProvidersPage />
         )}
