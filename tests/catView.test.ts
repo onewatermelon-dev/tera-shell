@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseCatCommand,
-  parseVimCommand
+  isVimCommand,
+  parseCatCommand
 } from "../src/terminal/lib/catView";
 
 describe("parseCatCommand", () => {
@@ -36,32 +36,21 @@ describe("parseCatCommand", () => {
   });
 });
 
-describe("parseVimCommand", () => {
-  it("改写为带 syntax on 的命令", () => {
-    expect(parseVimCommand("vim app.py")).toBe(
-      "vim -c 'syntax on' app.py"
-    );
-    expect(parseVimCommand("vi main.c")).toBe(
-      "vi -c 'syntax on' main.c"
-    );
+describe("isVimCommand", () => {
+  it("带文件的 vim/vi/view 命中", () => {
+    expect(isVimCommand("vim app.py")).toBe(true);
+    expect(isVimCommand("vi main.c")).toBe(true);
     expect(
-      parseVimCommand("vim -R /etc/hosts")
-    ).toBe("vim -c 'syntax on' -R /etc/hosts");
+      isVimCommand("view -R /etc/hosts")
+    ).toBe(true);
+    expect(isVimCommand("  vim app.rs  ")).toBe(
+      true
+    );
   });
 
-  it("colorscheme 模式挂上 One Dark Pro", () => {
-    expect(
-      parseVimCommand("vim app.py", true)
-    ).toBe(
-      "vim -c 'syntax on' -c 'colorscheme OneDarkPro' app.py"
-    );
-    expect(
-      parseVimCommand("vim", true)
-    ).toBeNull();
-  });
-
-  it("无参数 vim 不改写", () => {
-    expect(parseVimCommand("vim")).toBeNull();
-    expect(parseVimCommand("ls")).toBeNull();
+  it("无参数 vim 与非 vim 命令不命中", () => {
+    expect(isVimCommand("vim")).toBe(false);
+    expect(isVimCommand("ls")).toBe(false);
+    expect(isVimCommand("vimdir a")).toBe(false);
   });
 });

@@ -19,8 +19,8 @@ import { explainCommand } from "@/terminal/lib/aiExplain";
 import { aiRunCommand } from "@/terminal/lib/aiExec";
 import {
   highlightToAnsi,
+  isVimCommand,
   parseCatCommand,
-  parseVimCommand,
   VIM_SCHEME_SETUP
 } from "@/terminal/lib/catView";
 import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
@@ -524,33 +524,27 @@ export function useTerminals(
             }
             return;
           }
-          // vim/vi 查看代码：远端 vim 默认 syntax off 是白字的根源 ——
-          // 改写成 `-c 'syntax on'` 放行，远端自己按 ANSI 渲染配色。
-          // 仅 SSH 会话（本地 PowerShell 的 vim 是另一个世界）
+          // vim/vi 查看代码：不改写用户的命令（命令行回显与远端 history
+          // 保持原样），只确保 One Dark Pro 配色已部署到远端
+          // ~/.vim/plugin 自动加载，然后原样放行回车。仅 SSH 会话
+          // （本地 PowerShell 的 vim 是另一个世界）
           if (session.kind === "ssh") {
-            const rewritten =
-              parseVimCommand(trimmed);
-            if (rewritten) {
-              // 先确保远端有 One Dark Pro colorscheme（只部署一次，
-              // 已存在则跳过），改写命令挂上它；部署失败退纯 syntax on
+            if (isVimCommand(trimmed)) {
               aiRunCommand(
                 execTarget,
                 VIM_SCHEME_SETUP
               )
-                .then(
-                  result => result.exitCode === 0
+                .catch(reason =>
+                  console.warn(
+                    "[vim-view] 配色部署失败，vim 以默认配色打开",
+                    reason
+                  )
                 )
-                .catch(() => false)
-                .then(schemeReady => {
-                  const cmd = parseVimCommand(
-                    trimmed,
-                    schemeReady
-                  );
+                .finally(() => {
                   invoke("terminal_write", {
                     id: session.id,
-                    // Ctrl+U 清掉原行再写改写命令，一次写入完成回车
-                    data: `\x15${cmd}\r`,
-                    command: cmd
+                    data: "\r",
+                    command: null
                   }).catch(onError);
                 });
               return;
@@ -560,21 +554,26 @@ export function useTerminals(
             // heredoc/base64 注入远端 bash stdin：交互 bash 的 readline 自
             // 管显示（raw 模式），stty -echo 拦不住，内容全被 readline 画
             // 出来搅成乱码 —— 本地注入是唯一干净的路径。代价：远端有输出
-            // 或 resize 重绘时内容会被覆盖（只在查看后改窗口大小才发生）
+            // 或 resize 重绘时内容会被覆盖（只在查看后改窗口大小才发生）。
+            // 开头不清行：用户敲的 `cat 文件` 留在屏上当回显，代码写到它
+            // 下面；写完补发 Ctrl+U + 回车 —— Ctrl+U 的退格擦除落在代码后
+            // 的空行上无害，只清掉缓冲区里没执行的命令；空回车让 bash 在
+            // 光标处重绘出彩色提示符，输入行就绪、且随远端输出流抗重绘。
             const catPath =
               parseCatCommand(trimmed);
             if (catPath) {
               viewing = true;
-              invoke("terminal_write", {
-                id: session.id,
-                data: "\x15",
-                command: null
-              }).catch(onError);
               const quoted = catPath.replace(
                 /'/g,
                 `'\\''`
               );
               const plain = `cat ${catPath}`;
+              const redrawPrompt = () =>
+                invoke("terminal_write", {
+                  id: session.id,
+                  data: "\x15\r",
+                  command: null
+                }).catch(onError);
               aiRunCommand(
                 execTarget,
                 `cat -- '${quoted}'`
@@ -584,10 +583,10 @@ export function useTerminals(
                     result.exitCode !== 0 ||
                     !result.stdout
                   ) {
-                    // 拉取失败：放行原命令，让远端给出真实报错
+                    // 拉取失败：清掉残留输入行，放行原命令让远端真实报错
                     invoke("terminal_write", {
                       id: session.id,
-                      data: `${plain}\r`,
+                      data: `\x15${plain}\r`,
                       command: plain
                     }).catch(onError);
                     return undefined;
@@ -595,26 +594,30 @@ export function useTerminals(
                   return highlightToAnsi(
                     result.stdout,
                     catPath
-                  ).then(code =>
-                    // 本地显示：写 xterm 屏幕（terminal.write），
-                    // 不是 invoke("terminal_write") —— 那是 PTY 输入，
-                    // 会把内容发给 bash 当命令执行。多行必须 \n → \r\n
-                    terminal.write(
-                      `${code
-                        .replace(/\r/g, "")
-                        .replace(
-                          /\n/g,
-                          "\r\n"
-                        )}\r\n`
+                  )
+                    .then(code =>
+                      // 本地显示：写 xterm 屏幕（terminal.write），
+                      // 不是 invoke("terminal_write") —— 那是 PTY 输入，
+                      // 会把内容发给 bash 当命令执行。多行必须 \n → \r\n；
+                      // 开头的 \r\n 把代码挪到命令行下面一行起画
+                      terminal.write(
+                        `\r\n${code
+                          .replace(/\r/g, "")
+                          .replace(
+                            /\n/g,
+                            "\r\n"
+                          )}\r\n`
+                      )
                     )
-                  );
+                    .then(redrawPrompt);
                 })
-                .catch(reason =>
+                .catch(reason => {
                   console.warn(
                     "[cat-view] 拦截失败，回退原始命令",
                     reason
-                  )
-                )
+                  );
+                  redrawPrompt();
+                })
                 .finally(() => {
                   viewing = false;
                 });

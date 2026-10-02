@@ -3,8 +3,8 @@
  * cli-highlight（Highlight.js 内核）转成 ANSI 码后写回终端 —— 颜色由当前
  * 配色方案的 ANSI 色渲染，换主题跟着变。
  *
- * vim 不在这里：vim 是交互 TUI，语法开关由远端 vim 自己渲染（调用方把
- * `vim 文件` 改写成 `vim -c 'syntax on' 文件` 放行即可）。
+ * vim 不在这里：vim 是交互 TUI，配色通过部署远端 ~/.vim/plugin 自动加载
+ * 脚本生效，用户的 `vim 文件` 命令原样放行。
  */
 import chalk, { type Chalk } from "chalk";
 
@@ -30,31 +30,25 @@ export function parseCatCommand(
   return path;
 }
 
-/** 匹配 `vim/vi <文件>`，返回改写后的命令；不匹配返回 null。
- *  withColorscheme 时额外挂上 One Dark Pro（前提是远端已部署好
- *  colorscheme 文件，见 VIM_SCHEME_SETUP）。 */
-export function parseVimCommand(
-  line: string,
-  withColorscheme = false
-): string | null {
-  const match = /^(vim?|view)\s+(\S.*)$/.exec(
-    line.trim()
-  );
-  if (!match) return null;
-  const extra = withColorscheme
-    ? " -c 'colorscheme OneDarkPro'"
-    : "";
-  return `${match[1]} -c 'syntax on'${extra} ${match[2]}`;
+/** 匹配 `vim/vi/view <文件>`：仅用于识别，不改写命令 —— 配色由部署到
+ *  ~/.vim/plugin 的自动加载脚本生效（见 VIM_SCHEME_SETUP），用户敲什么
+ *  就执行什么，命令行与远端 history 保持原样。 */
+export function isVimCommand(
+  line: string
+): boolean {
+  return /^(vim?|view)\s+\S/.test(line.trim());
 }
 
 /**
- * One Dark Pro 的 vim colorscheme：首次使用时部署到远端
- * ~/.vim/colors/OneDarkPro.vim（已存在则跳过，不动用户自己的配置）。
+ * One Dark Pro 的 vim 配色部署：首次使用时写入远端
+ * ~/.vim/colors/OneDarkPro.vim + ~/.vim/plugin/terashell-onedark.vim
+ * （已存在则跳过，不动用户自己的配置）。plugin 文件让所有 vim 会话
+ * 自动应用该配色，无需改写用户的命令行。
  * termguicolors 可用时走真彩，否则退 256 色近似。
  */
 export const VIM_SCHEME_SETUP = [
-  `[ -f "$HOME/.vim/colors/OneDarkPro.vim" ] && exit 0`,
-  `mkdir -p "$HOME/.vim/colors"`,
+  `[ -f "$HOME/.vim/plugin/terashell-onedark.vim" ] && exit 0`,
+  `mkdir -p "$HOME/.vim/colors" "$HOME/.vim/plugin"`,
   `cat > "$HOME/.vim/colors/OneDarkPro.vim" <<'VIMRC'`,
   `" One Dark Pro —— 由 Tera Shell 部署（覆盖常用高亮组）`,
   `if has('termguicolors') | set termguicolors | endif`,
@@ -109,7 +103,15 @@ export const VIM_SCHEME_SETUP = [
   `hi Folded ctermfg=243 guifg=#5c6370 ctermbg=236 guibg=#2c313a`,
   `hi Pmenu ctermfg=249 guifg=#abb2bf ctermbg=236 guibg=#2c313a`,
   `hi PmenuSel ctermfg=28 guifg=#282c34 ctermbg=74 guibg=#61afef`,
-  `VIMRC`
+  `VIMRC`,
+  // vim 启动时自动 source ~/.vim/plugin/*.vim，配色由此生效
+  `cat > "$HOME/.vim/plugin/terashell-onedark.vim" <<'VIMPLUGIN'`,
+  `" Tera Shell 部署：vim 自动应用 One Dark Pro 高亮`,
+  `if filereadable(expand('~/.vim/colors/OneDarkPro.vim'))`,
+  `  syntax on`,
+  `  colorscheme OneDarkPro`,
+  `endif`,
+  `VIMPLUGIN`
 ].join("\n");
 
 /** 扩展名 → Highlight.js 语言名（覆盖常见的就够，其余靠自动探测） */
