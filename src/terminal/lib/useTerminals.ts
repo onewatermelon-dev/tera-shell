@@ -550,15 +550,14 @@ export function useTerminals(
               return;
             }
             // cat 查看代码：拦截单文件 cat，exec 拉内容 → cli-highlight 转
-            // One Dark Pro ANSI → 直接写进 xterm（换行转 \r\n）。曾经尝试
-            // heredoc/base64 注入远端 bash stdin：交互 bash 的 readline 自
-            // 管显示（raw 模式），stty -echo 拦不住，内容全被 readline 画
-            // 出来搅成乱码 —— 本地注入是唯一干净的路径。代价：远端有输出
-            // 或 resize 重绘时内容会被覆盖（只在查看后改窗口大小才发生）。
-            // 开头不清行：用户敲的 `cat 文件` 留在屏上当回显，代码写到它
-            // 下面；写完补发 Ctrl+U + 回车 —— Ctrl+U 的退格擦除落在代码后
-            // 的空行上无害，只清掉缓冲区里没执行的命令；空回车让 bash 在
-            // 光标处重绘出彩色提示符，输入行就绪、且随远端输出流抗重绘。
+            // One Dark Pro ANSI → 本地 terminal.write 直画（一次往返即出图，
+            // 命令行保持用户敲的原文）。本地画的内容不在 ConPTY 缓冲里，
+            // 抗不住整屏重绘 —— 对策是不让重绘发生：AI 面板与抽屉一样在
+            // 宽度变化期间暂停向 PTY 同步尺寸（同尺寸后端直接跳过），
+            // xterm 本地 rewrap 保住内容；窗口真变尺寸时仍会被抹（已知代价）。
+            // 开头不清行：`cat 文件` 留在屏上当回显，代码写到它下面；写完补发
+            // Ctrl+U + 回车 —— 退格擦除落在代码后的空行无害，只清掉缓冲区里
+            // 没执行的命令；空回车让 bash 在光标处重绘彩色提示符。
             const catPath =
               parseCatCommand(trimmed);
             if (catPath) {
@@ -596,10 +595,10 @@ export function useTerminals(
                     catPath
                   )
                     .then(code =>
-                      // 本地显示：写 xterm 屏幕（terminal.write），
-                      // 不是 invoke("terminal_write") —— 那是 PTY 输入，
-                      // 会把内容发给 bash 当命令执行。多行必须 \n → \r\n；
-                      // 开头的 \r\n 把代码挪到命令行下面一行起画
+                      // 本地显示：写 xterm 屏幕（terminal.write），不是
+                      // invoke("terminal_write")（那是 PTY 输入，会被 bash
+                      // 当命令执行）。多行必须 \n → \r\n；开头的 \r\n 把
+                      // 代码挪到命令行下面一行起画
                       terminal.write(
                         `\r\n${code
                           .replace(/\r/g, "")
