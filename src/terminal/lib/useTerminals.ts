@@ -550,14 +550,13 @@ export function useTerminals(
               return;
             }
             // cat 查看代码：拦截单文件 cat，exec 拉内容 → cli-highlight 转
-            // One Dark Pro ANSI → 本地 terminal.write 直画（一次往返即出图，
-            // 命令行保持用户敲的原文）。本地画的内容不在 ConPTY 缓冲里，
-            // 抗不住整屏重绘 —— 对策是不让重绘发生：AI 面板与抽屉一样在
-            // 宽度变化期间暂停向 PTY 同步尺寸（同尺寸后端直接跳过），
-            // xterm 本地 rewrap 保住内容；窗口真变尺寸时仍会被抹（已知代价）。
-            // 开头不清行：`cat 文件` 留在屏上当回显，代码写到它下面；写完补发
-            // Ctrl+U + 回车 —— 退格擦除落在代码后的空行无害，只清掉缓冲区里
-            // 没执行的命令；空回车让 bash 在光标处重绘彩色提示符。
+            // One Dark Pro ANSI → 经 exec 通道 stdin 写进本会话 pts
+            // （`cat > /dev/$p`，与 /? 解释同一套回环）。写 pts 从动端是
+            // 终端「输出」注入：回显行、代码、提示符全部进 ConPTY 缓冲，
+            // 扛得住 vim 进出 / 面板切换 / resize 的整屏重绘；stdin 走数据
+            // 流分包，不受命令串 ~16KB channel request 上限，一次往返出图。
+            // 开头 Ctrl+U 清掉未执行的输入行（fetch 的往返时间正好让它的
+            // readline 重绘先落地，无需 sleep），注入内容首行补回显 `cat 文件`。
             const catPath =
               parseCatCommand(trimmed);
             if (catPath) {
@@ -567,11 +566,16 @@ export function useTerminals(
                 `'\\''`
               );
               const plain = `cat ${catPath}`;
-              const redrawPrompt = () =>
+              invoke("terminal_write", {
+                id: session.id,
+                data: "\x15",
+                command: null
+              }).catch(onError);
+              const fallback = () =>
                 invoke("terminal_write", {
                   id: session.id,
-                  data: "\x15\r",
-                  command: null
+                  data: `${plain}\r`,
+                  command: plain
                 }).catch(onError);
               aiRunCommand(
                 execTarget,
@@ -582,40 +586,37 @@ export function useTerminals(
                     result.exitCode !== 0 ||
                     !result.stdout
                   ) {
-                    // 拉取失败：清掉残留输入行，放行原命令让远端真实报错
-                    invoke("terminal_write", {
-                      id: session.id,
-                      data: `\x15${plain}\r`,
-                      command: plain
-                    }).catch(onError);
+                    // 拉取失败：放行原命令让远端给出真实报错
+                    fallback();
                     return undefined;
                   }
                   return highlightToAnsi(
                     result.stdout,
                     catPath
-                  )
-                    .then(code =>
-                      // 本地显示：写 xterm 屏幕（terminal.write），不是
-                      // invoke("terminal_write")（那是 PTY 输入，会被 bash
-                      // 当命令执行）。多行必须 \n → \r\n；开头的 \r\n 把
-                      // 代码挪到命令行下面一行起画
-                      terminal.write(
-                        `\r\n${code
-                          .replace(/\r/g, "")
-                          .replace(
-                            /\n/g,
-                            "\r\n"
-                          )}\r\n`
-                      )
+                  ).then(code => {
+                    const body = code.endsWith(
+                      "\n"
                     )
-                    .then(redrawPrompt);
+                      ? code
+                      : `${code}\n`;
+                    return aiRunCommand(
+                      execTarget,
+                      [
+                        ptsFind,
+                        `[ -n "$p" ] && cat > "/dev/$p"`
+                      ].join("\n"),
+                      // 回显行 + 高亮代码 + 复位 + 提示符（readline 的
+                      // 输入行已被 Ctrl+U 清空，提示符靠注入文本补画）
+                      `${plain}\n${body}\x1b[0m\n${prompt}`
+                    );
+                  });
                 })
                 .catch(reason => {
                   console.warn(
                     "[cat-view] 拦截失败，回退原始命令",
                     reason
                   );
-                  redrawPrompt();
+                  fallback();
                 })
                 .finally(() => {
                   viewing = false;

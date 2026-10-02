@@ -560,26 +560,15 @@ export default function TerminalWorkspace({
   const [aiCollapsed, setAiCollapsed] =
     useState(false);
 
-  // 抽屉开合、AI 面板收起/展开都只缩/放本地视口，期间暂停向 PTY 同步尺寸：
-  // ConPTY 在 PTY 尺寸变化时会整屏重绘，本地直画的内容（cat 高亮块）不在
-  // ConPTY 缓冲里会被抹掉；不通知 PTY 就没有重绘，xterm 本地 rewrap 保住
-  // 内容。恢复要等布局稳定（面板挂载瞬间 fit 到的是中间态宽度，直接同步
-  // 会触发一次真 resize → 重绘）；稳定后尺寸回到原值，后端同尺寸直接跳过。
+  // 抽屉开合只缩/放本地视口，期间暂停向 PTY 同步行高：ConPTY 在 PTY
+  // 尺寸变化时会整屏重绘，若把 PTY 缩到十几行再放大，重绘内容只剩那
+  // 十几行，会把本地已恢复的历史打回空白（「先恢复、一闪又缩回去」）。
+  // 本地视口的重新 fit 由 ResizeObserver 链路完成（暂停只挡后端同步）。
+  // AI 面板收起/展开不在此列：cat 高亮块经 pts 输出注入，本就在 ConPTY
+  // 缓冲里，正常同步尺寸即可。
   useEffect(() => {
-    if (drawerOpen || aiCollapsed) {
-      setPtyResizePaused(true);
-      return;
-    }
-    const settle = setTimeout(
-      () => setPtyResizePaused(false),
-      350
-    );
-    return () => clearTimeout(settle);
-  }, [
-    drawerOpen,
-    aiCollapsed,
-    setPtyResizePaused
-  ]);
+    setPtyResizePaused(drawerOpen);
+  }, [drawerOpen, setPtyResizePaused]);
   const [aiWidth, setAiWidth] = useState<number>(
     () => {
       try {

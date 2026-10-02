@@ -47,6 +47,10 @@ pub struct ExecTarget {
 	password: Option<String>,
 	/// 要执行的命令，在远端登录 shell 下运行（等价 `shell -c "命令"`）。
 	command: String,
+	/// 可选：喂给命令 stdin 的内容（exec 通道数据流，不受 channel request
+	/// 的 ~16KB 包上限约束）。用于把大段文本（如 cat 高亮结果）注入
+	/// `cat > /dev/pts/N`，不占用命令字符串。
+	stdin: Option<String>,
 }
 
 /// 一次命令执行的产物。
@@ -114,7 +118,7 @@ fn execute(
 		&username,
 		password.as_deref(),
 	)?;
-	match run_once(&session, &command) {
+	match run_once(&session, &command, target.stdin.as_deref()) {
 		Ok(outcome) => {
 			info!(key = %key, exit = outcome.exit_code, "AI 命令执行完成");
 			Ok(outcome)
@@ -133,7 +137,7 @@ fn execute(
 				&username,
 				password.as_deref(),
 			)?;
-			run_once(&session, &command)
+			run_once(&session, &command, target.stdin.as_deref())
 		}
 	}
 }
@@ -174,6 +178,7 @@ fn obtain(
 fn run_once(
 	session: &Arc<Mutex<Session>>,
 	command: &str,
+	stdin: Option<&str>,
 ) -> Result<ExecOutcome, String> {
 	let session = session
 		.lock()
@@ -185,6 +190,16 @@ fn run_once(
 	channel
 		.exec(command)
 		.map_err(|error| format!("下发命令失败：{error}"))?;
+	// stdin 内容随数据流分包发送，写完即 EOF（否则命令会挂等输入）
+	if let Some(text) = stdin {
+		use std::io::Write;
+		channel
+			.write_all(text.as_bytes())
+			.map_err(|error| format!("写入 stdin 失败：{error}"))?;
+		channel
+			.send_eof()
+			.map_err(|error| format!("关闭 stdin 失败：{error}"))?;
+	}
 
 	// stdout 读到 EOF；stderr 是独立流，在其后读取
 	let mut stdout = Vec::new();

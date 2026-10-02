@@ -22,9 +22,15 @@ export function aiRunCommand(
     username?: string;
     password?: string;
   },
-  command: string
+  command: string,
+  /** 喂给命令 stdin 的内容（走数据流分包，不受命令串 ~16KB 包上限约束） */
+  stdin?: string
 ): Promise<AiExecResult> {
   return invoke("ai_run_command", {
-    target: { ...target, command }
+    target: {
+      ...target,
+      command,
+      stdin: stdin ?? null
+    }
   });
 }
