@@ -1399,9 +1399,10 @@ export default function TerminalWorkspace({
           onPointerUp={endAiResize}
         />
       )}
-      {active?.kind === "ssh" && !aiCollapsed && (
+      {active?.kind === "ssh" && (
         // AI 助手面板：对话 + run_command 执行卡片（只读自动执行、读写等确认）
         <AiPanel
+          collapsed={aiCollapsed}
           session={active}
           onAddMacroCommand={onAddMacroCommand}
           onCollapse={() => setAiCollapsed(true)}

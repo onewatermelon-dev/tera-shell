@@ -40,6 +40,8 @@ import AiBlacklistDialog from "@/terminal/components/AiBlacklistDialog";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
 
 type AiPanelProps = {
+  /** 收起时保留当前对话状态。 */
+  collapsed: boolean;
   /** 当前激活的 SSH 会话（命令执行目标与上下文来源）。 */
   session: OpenSession;
   /** 把卡片命令存为快捷宏：名称用命令下方的说明文字，留空由宏层兜底用命令。 */
@@ -320,6 +322,7 @@ function AutoExecuteRiskDialog({
  * 「自动执行」「自动应用」开关控制，关闭时等用户确认。
  */
 export default function AiPanel({
+  collapsed,
   session,
   onAddMacroCommand,
   onCollapse
@@ -498,7 +501,12 @@ export default function AiPanel({
   }
 
   return (
-    <aside className="ai-panel">
+    <aside
+      className="ai-panel"
+      style={{
+        display: collapsed ? "none" : undefined
+      }}
+    >
       <div className="ai-panel-head">
         <span>{t("ai.title")}</span>
         <div className="ai-panel-head-actions">
