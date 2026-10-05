@@ -8,6 +8,7 @@ import {
   CopyOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
+  FullscreenOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   SearchOutlined,
@@ -42,6 +43,7 @@ export function createTerminalMenu({
 }: TerminalMenuOptions) {
   let menu: HTMLDivElement | undefined;
   let copyItem: HTMLDivElement | undefined;
+  let fullscreenItem: HTMLDivElement | undefined;
   let target: Terminal | undefined;
   let targetId = "";
   let logStatus: LogStatus = {
@@ -295,6 +297,20 @@ export function createTerminalMenu({
       target?.focus();
     });
 
+    const fullscreen = makeItem(
+      "全屏",
+      "",
+      FullscreenOutlined
+    );
+    fullscreenItem = fullscreen;
+    fullscreen.addEventListener("click", () => {
+      hide();
+      document.body.classList.toggle(
+        "terminal-focus"
+      );
+      target?.focus();
+    });
+
     element.append(
       log,
       separator,
@@ -303,7 +319,9 @@ export function createTerminalMenu({
       separator.cloneNode(),
       find,
       separator.cloneNode(),
-      clear
+      clear,
+      separator.cloneNode(),
+      fullscreen
     );
     element.addEventListener(
       "mouseover",
@@ -377,6 +395,15 @@ export function createTerminalMenu({
       })
       .catch(onError);
     const element = ensure();
+    const fullscreenLabel =
+      fullscreenItem?.children.item(1);
+    if (fullscreenLabel)
+      fullscreenLabel.textContent =
+        document.body.classList.contains(
+          "terminal-focus"
+        )
+          ? "退出全屏"
+          : "全屏";
     // 没有选中内容时"复制"置灰
     copyItem?.classList.toggle(
       "disabled",

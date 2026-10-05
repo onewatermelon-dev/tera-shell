@@ -124,6 +124,25 @@
   }
 }
 
+// 终端专注模式：只将现有终端卡片铺满应用，不卸载会话或触发系统窗口全屏。
+.terminal-focus .terminal-pane {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  grid-template-rows: minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+.terminal-focus .tabs-bar,
+.terminal-focus .terminal-status,
+.terminal-focus .sys-drawer,
+.terminal-focus .find-box,
+.terminal-focus .term-welcome {
+  display: none;
+}
+
 // 终端卡片与 AI 面板的横向容器：本地会话单列；SSH 会话右侧并排 AI 聊天面板
 .terminal-with-ai {
   display: grid;
