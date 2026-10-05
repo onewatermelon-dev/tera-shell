@@ -55,7 +55,7 @@ button:active {
   display: none;
   min-width: 160px;
   padding: 4px;
-  overflow: clip;
+  overflow: visible;
   background: var(--overlay);
   border-radius: min(32px, var(--radius-3xl));
   box-shadow: var(--shadow-overlay);
@@ -94,6 +94,25 @@ button:active {
       opacity: 0.5;
     }
   }
+
+  .menu-icon {
+    display: inline-flex;
+    flex: 0 0 16px;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--muted);
+  }
+}
+
+.terminal-log-submenu {
+  min-width: 190px;
+}
+
+.terminal-context-menu .menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--separator, var(--default));
 }
 
 // xterm 的原生跨行选区会填满中间行；该覆盖层按每行实际文字宽度重新绘制高亮。

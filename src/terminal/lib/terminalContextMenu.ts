@@ -1,4 +1,26 @@
 import type { Terminal } from "@xterm/xterm";
+import { invoke } from "@tauri-apps/api/core";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import {
+  ClearOutlined,
+  CodeOutlined,
+  CopyOutlined,
+  FileTextOutlined,
+  FolderOpenOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  SearchOutlined,
+  SnippetsOutlined,
+  StopOutlined
+} from "@ant-design/icons";
+
+type LogStatus = {
+  recording: boolean;
+  paused: boolean;
+  path: string | null;
+  includeCodes: boolean;
+};
 
 type TerminalMenuOptions = {
   /** 剪贴板操作失败时的上报出口 */
@@ -21,23 +43,156 @@ export function createTerminalMenu({
   let menu: HTMLDivElement | undefined;
   let copyItem: HTMLDivElement | undefined;
   let target: Terminal | undefined;
+  let targetId = "";
+  let logStatus: LogStatus = {
+    recording: false,
+    paused: false,
+    path: null,
+    includeCodes: false
+  };
+  let submenu: HTMLDivElement | undefined;
+  let logPending = false;
 
   function hide() {
     if (menu) menu.style.display = "none";
+    if (submenu) submenu.style.display = "none";
+  }
+
+  /** 执行日志操作并刷新菜单状态。 */
+  async function runLog(action: string) {
+    if (logPending) return;
+    logPending = true;
+    hide();
+    try {
+      if (action === "start")
+        await invoke("terminal_log_start", {
+          id: targetId
+        });
+      else if (
+        action === "file" ||
+        action === "folder"
+      ) {
+        if (!logStatus.path) return;
+        const path =
+          action === "folder"
+            ? logStatus.path.replace(
+                /[\\/][^\\/]+$/,
+                ""
+              )
+            : logStatus.path;
+        await invoke("fs_open_path", { path });
+      } else
+        await invoke("terminal_log_action", {
+          id: targetId,
+          action
+        });
+      logStatus = await invoke<LogStatus>(
+        "terminal_log_status",
+        { id: targetId }
+      );
+    } catch (error) {
+      onError(error);
+    } finally {
+      logPending = false;
+      target?.focus();
+    }
+  }
+
+  /** 按会话状态构建日志子菜单。 */
+  function refreshLogMenu() {
+    if (!submenu) return;
+    submenu.replaceChildren();
+    const add = (
+      label: string,
+      action: string,
+      enabled: boolean,
+      icon: typeof FileTextOutlined,
+      checked = false
+    ) => {
+      const item = makeItem(
+        label,
+        checked ? "✓" : "",
+        icon
+      );
+      item.classList.toggle("disabled", !enabled);
+      item.addEventListener("click", event => {
+        event.stopPropagation();
+        if (enabled) void runLog(action);
+      });
+      submenu?.append(item);
+    };
+    const divider = () => {
+      const line = document.createElement("div");
+      line.className = "menu-separator";
+      submenu?.append(line);
+    };
+    add(
+      "开始记录...",
+      "start",
+      !logStatus.recording && !logPending,
+      PlayCircleOutlined
+    );
+    add(
+      "停止记录",
+      "stop",
+      logStatus.recording,
+      StopOutlined
+    );
+    divider();
+    add(
+      "暂停",
+      "pause",
+      logStatus.recording && !logStatus.paused,
+      PauseCircleOutlined
+    );
+    add(
+      "继续",
+      "resume",
+      logStatus.recording && logStatus.paused,
+      PlayCircleOutlined
+    );
+    divider();
+    add(
+      "打开日志文件",
+      "file",
+      !!logStatus.path,
+      FileTextOutlined
+    );
+    add(
+      "打开日志文件夹",
+      "folder",
+      !!logStatus.path,
+      FolderOpenOutlined
+    );
+    divider();
+    add(
+      "包括终端代码",
+      "codes",
+      true,
+      CodeOutlined,
+      logStatus.includeCodes
+    );
   }
 
   function makeItem(
     label: string,
-    shortcut: string
+    shortcut: string,
+    icon: typeof FileTextOutlined
   ) {
     const item = document.createElement("div");
     item.className = "menu-item";
+    const iconElement =
+      document.createElement("span");
+    iconElement.className = "menu-icon";
+    iconElement.innerHTML = renderToStaticMarkup(
+      createElement(icon)
+    );
     const name = document.createElement("span");
     name.textContent = label;
     const key = document.createElement("kbd");
     key.className = "menu-key";
     key.textContent = shortcut;
-    item.append(name, key);
+    item.append(iconElement, name, key);
     return item;
   }
 
@@ -47,7 +202,51 @@ export function createTerminalMenu({
     const element = document.createElement("div");
     element.className = "terminal-context-menu";
 
-    const copy = makeItem("复制", "Ctrl+C");
+    const log = makeItem(
+      "日志",
+      "›",
+      FileTextOutlined
+    );
+    log.addEventListener("mouseenter", () => {
+      if (!submenu) return;
+      refreshLogMenu();
+      const rect = log.getBoundingClientRect();
+      submenu.style.visibility = "hidden";
+      submenu.style.display = "block";
+      submenu.style.left = `${rect.right + submenu.offsetWidth > window.innerWidth ? rect.left - submenu.offsetWidth : rect.right}px`;
+      submenu.style.top = `${Math.min(rect.top, window.innerHeight - submenu.offsetHeight - 4)}px`;
+      submenu.style.visibility = "visible";
+    });
+    submenu = document.createElement("div");
+    submenu.className =
+      "terminal-context-menu terminal-log-submenu";
+    /** 只在离开主菜单与子菜单的整体范围时关闭。 */
+    function hideOnLeave(event: MouseEvent) {
+      const next = event.relatedTarget;
+      if (
+        !(next instanceof Node) ||
+        (!element.contains(next) &&
+          !submenu?.contains(next))
+      )
+        hide();
+    }
+    element.addEventListener(
+      "mouseleave",
+      hideOnLeave
+    );
+    submenu.addEventListener(
+      "mouseleave",
+      hideOnLeave
+    );
+    const separator =
+      document.createElement("div");
+    separator.className = "menu-separator";
+
+    const copy = makeItem(
+      "复制",
+      "Ctrl+C",
+      CopyOutlined
+    );
     copy.addEventListener("click", () => {
       if (!copy.classList.contains("disabled")) {
         navigator.clipboard
@@ -59,7 +258,11 @@ export function createTerminalMenu({
     });
     copyItem = copy;
 
-    const paste = makeItem("粘贴", "Ctrl+V");
+    const paste = makeItem(
+      "粘贴",
+      "Ctrl+V",
+      SnippetsOutlined
+    );
     paste.addEventListener("click", () => {
       navigator.clipboard
         .readText()
@@ -71,21 +274,58 @@ export function createTerminalMenu({
       target?.focus();
     });
 
-    const find = makeItem("查找", "Ctrl+F");
+    const find = makeItem(
+      "查找",
+      "Ctrl+F",
+      SearchOutlined
+    );
     find.addEventListener("click", () => {
       hide();
       onFind();
     });
 
-    element.append(copy, paste, find);
-    document.body.append(element);
+    const clear = makeItem(
+      "清屏",
+      "",
+      ClearOutlined
+    );
+    clear.addEventListener("click", () => {
+      target?.clear();
+      hide();
+      target?.focus();
+    });
+
+    element.append(
+      log,
+      separator,
+      copy,
+      paste,
+      separator.cloneNode(),
+      find,
+      separator.cloneNode(),
+      clear
+    );
+    element.addEventListener(
+      "mouseover",
+      event => {
+        if (
+          !log.contains(event.target as Node) &&
+          submenu
+        )
+          submenu.style.display = "none";
+      }
+    );
+    document.body.append(element, submenu);
 
     // 点击菜单外 / 按 Esc 关闭
     window.addEventListener(
       "mousedown",
       event => {
         if (
-          !element.contains(event.target as Node)
+          !element.contains(
+            event.target as Node
+          ) &&
+          !submenu?.contains(event.target as Node)
         ) {
           hide();
         }
@@ -112,11 +352,30 @@ export function createTerminalMenu({
   /** 在鼠标位置弹出菜单；贴到窗口边缘时向回收。 */
   function show(
     event: MouseEvent,
-    terminal: Terminal
+    terminal: Terminal,
+    id: string
   ) {
     event.preventDefault();
     event.stopPropagation();
     target = terminal;
+    targetId = id;
+    logStatus = {
+      recording: false,
+      paused: false,
+      path: null,
+      includeCodes: false
+    };
+    void invoke<LogStatus>(
+      "terminal_log_status",
+      { id }
+    )
+      .then(status => {
+        if (targetId === id) {
+          logStatus = status;
+          refreshLogMenu();
+        }
+      })
+      .catch(onError);
     const element = ensure();
     // 没有选中内容时"复制"置灰
     copyItem?.classList.toggle(

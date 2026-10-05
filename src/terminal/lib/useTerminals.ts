@@ -667,7 +667,8 @@ export function useTerminals(
             });
           terminalMenu.current.show(
             event,
-            terminal
+            terminal,
+            session.id
           );
         }
       );

@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
 	io::Write,
+	fs::{File, OpenOptions},
+	path::PathBuf,
 	sync::{
 		Arc, Mutex,
 		atomic::{AtomicBool, Ordering},
@@ -11,9 +13,11 @@ use std::{
 	time::Duration,
 };
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_dialog::DialogExt;
 use tracing::{debug, error, info, warn};
 
 struct Session {
+	log: Arc<Mutex<Log>>,
 	writer: Arc<Mutex<Box<dyn Write + Send>>>,
 	master: Box<dyn MasterPty + Send>,
 	/// 受 Mutex 保护：读取线程用 try_wait 轮询，close 用 kill/wait，二者不会同时持锁
@@ -29,6 +33,221 @@ struct Session {
 	/// 当前 PTY 尺寸：resize 收到同尺寸直接跳过 —— ConPTY 对 resize（哪怕
 	/// 等尺寸）可能整屏重绘，会抹掉前端画的欢迎横幅。
 	size: Mutex<(u16, u16)>,
+}
+
+#[derive(Default)]
+struct Log {
+	file: Option<File>,
+	path: Option<PathBuf>,
+	paused: bool,
+	include_codes: bool,
+	escape: u8,
+	csi_params: String,
+	utf8_tail: Vec<u8>,
+	line: Vec<char>,
+	cursor: usize,
+	alt_screen: bool,
+	replaying: bool,
+}
+
+/// 按 UTF-8 字符边界解码 PTY 数据，未收齐的字节留给下一块。
+fn decode_log_chunk(chunk: &[u8], tail: &mut Vec<u8>) -> String {
+	tail.extend_from_slice(chunk);
+	let mut text = String::new();
+	loop {
+		match std::str::from_utf8(tail) {
+			Ok(valid) => { text.push_str(valid); tail.clear(); break; },
+			Err(error) => {
+				let end = error.valid_up_to();
+				text.push_str(std::str::from_utf8(&tail[..end]).unwrap_or_default());
+				if let Some(len) = error.error_len() {
+					text.push('�');
+					tail.drain(..end + len);
+				} else { tail.drain(..end); break; }
+			}
+		}
+	}
+	text
+}
+
+/// 按终端光标位置生成纯文本行，避免回车重绘把命令追加两遍。
+fn log_text(chunk: &str, log: &mut Log) -> String {
+	let mut text = String::new();
+	for ch in chunk.chars() {
+		match log.escape {
+			0 if ch == '\u{1b}' => log.escape = 1,
+			0 if log.alt_screen => {},
+			0 if ch == '\u{8}' || ch == '\u{7f}' => log.cursor = log.cursor.saturating_sub(1),
+			0 if ch == '\r' => log.cursor = 0,
+			0 if ch == '\n' => {
+				if log.replaying { log.line.clear(); }
+				else {
+					text.extend(log.line.iter().collect::<String>().trim_end_matches(' ').chars());
+					text.push('\n');
+					log.line.clear();
+				}
+				log.cursor = 0;
+			},
+			0 if !ch.is_control() || ch == '\t' => {
+				if log.cursor >= log.line.len() { log.line.resize(log.cursor + 1, ' '); }
+				log.line[log.cursor] = ch;
+				log.cursor += 1;
+			},
+			1 => {
+				log.escape = if ch == '[' { 2 } else if ch == ']' { 3 } else { 0 };
+				if log.escape == 2 { log.csi_params.clear(); }
+			},
+			2 if ('@'..='~').contains(&ch) => {
+				if matches!(log.csi_params.as_str(), "?47" | "?1047" | "?1049") && matches!(ch, 'h' | 'l') {
+					if ch == 'h' && !log.line.is_empty() {
+						text.extend(log.line.drain(..));
+						text.push('\n');
+					}
+					log.alt_screen = ch == 'h';
+					if ch == 'l' { log.replaying = true; }
+					log.line.clear();
+					log.cursor = 0;
+					log.escape = 0;
+					continue;
+				}
+				if log.alt_screen { log.escape = 0; continue; }
+				let count = log.csi_params.parse::<usize>().unwrap_or(1).min(1000);
+				match ch {
+					'C' => log.cursor = (log.cursor + count).min(10000),
+					'D' => log.cursor = log.cursor.saturating_sub(count),
+					'G' => log.cursor = count.saturating_sub(1),
+					'P' => {
+						let start = log.cursor.min(log.line.len());
+						log.line.drain(start..(start + count).min(log.line.len()));
+					},
+					'@' => {
+						let start = log.cursor.min(log.line.len());
+						log.line.splice(start..start, std::iter::repeat_n(' ', count));
+					},
+					'H' | 'f' => {
+						// CSI 行;列 H 用于回到命令起点重绘；日志只需取列坐标。
+						let column = log.csi_params.split(';').nth(1).and_then(|value| value.parse::<usize>().ok()).unwrap_or(1);
+						log.cursor = column.saturating_sub(1).min(10000);
+					},
+					'K' if log.csi_params == "2" => { log.line.clear(); log.cursor = 0; },
+					'K' => log.line.truncate(log.cursor),
+					'X' => {
+						for index in log.cursor..(log.cursor + count).min(log.line.len()) { log.line[index] = ' '; }
+					},
+					_ => {},
+				}
+				log.escape = 0;
+			},
+			2 => { if log.csi_params.len() < 16 { log.csi_params.push(ch); } },
+			3 if ch == '\u{7}' => log.escape = 0,
+			3 if ch == '\u{1b}' => log.escape = 4,
+			4 => log.escape = if ch == '\\' { 0 } else { 3 },
+			_ => {},
+		}
+	}
+	text
+}
+
+#[cfg(test)]
+mod log_tests {
+	use super::{decode_log_chunk, log_text, Log};
+
+	#[test]
+	fn strips_split_ansi_sequences() {
+		let mut log = Log::default();
+		assert_eq!(log_text("hello\u{1b}[31", &mut log), "");
+		assert_eq!(log_text("m世界\u{1b}[0m\r\n", &mut log), "hello世界\n");
+		assert_eq!(log_text("NF\u{1b}[16", &mut log), "");
+		assert_eq!(log_text("C ntfsinfo\n", &mut log), "NF                 ntfsinfo\n");
+		assert_eq!(log_text("root# cat app.rs\rroot# cat app.rs\n", &mut log), "root# cat app.rs\n");
+		assert_eq!(log_text("root#\u{1b}[K\u{1b}[1Ccat app.rs \u{1b}[35;7H\u{1b}[Kcat app.rs\n", &mut log), "root# cat app.rs\n");
+		assert_eq!(log_text("root# cd /abc/bin\u{1b}[7D\u{1b}[4P\n", &mut log), "root# cd /bin\n");
+		assert_eq!(log_text("root# cd /abc\u{8} \u{8}\u{8} \u{8}\u{8} \u{8}\n", &mut log), "root# cd /\n");
+		assert_eq!(log_text("root# vim app.rs\u{1b}[?1049h\u{1b}[1;1HVim screen\n", &mut log), "root# vim app.rs\n");
+		assert_eq!(log_text("more Vim\u{1b}[?1049lWelcome back\r\nroot# ", &mut log), "");
+		assert!(log.replaying);
+		log.replaying = false;
+		assert_eq!(log_text("ls\r\n", &mut log), "root# ls\n");
+	}
+
+	#[test]
+	fn decodes_split_chinese_character() {
+		let mut tail = Vec::new();
+		assert_eq!(decode_log_chunk(&[0xe5, 0x8f], &mut tail), "");
+		assert_eq!(decode_log_chunk(&[0x91], &mut tail), "发");
+	}
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogStatus {
+	recording: bool,
+	paused: bool,
+	path: Option<String>,
+	include_codes: bool,
+}
+
+/// 读取指定终端的日志状态，供右键菜单决定可用项。
+#[tauri::command(rename = "terminal_log_status")]
+pub fn log_status(id: String, terminals: State<Terminals>) -> Result<LogStatus, String> {
+	let sessions = terminals.0.lock().map_err(|_| "终端状态不可用")?;
+	let session = sessions.get(&id).ok_or("终端会话不存在")?;
+	let log = session.log.lock().map_err(|_| "日志状态不可用")?;
+	Ok(LogStatus {
+		recording: log.file.is_some(),
+		paused: log.paused,
+		path: log.path.as_ref().map(|p| p.to_string_lossy().into_owned()),
+		include_codes: log.include_codes,
+	})
+}
+
+/// 选择保存位置并开始记录；取消对话框时保持原状态。
+#[tauri::command(rename = "terminal_log_start")]
+pub async fn log_start(app: AppHandle, id: String, terminals: State<'_, Terminals>) -> Result<(), String> {
+	let picked = tauri::async_runtime::spawn_blocking(move || {
+		app.dialog().file().set_file_name("terminal.log").blocking_save_file()
+	}).await.map_err(|e| e.to_string())?;
+	let Some(picked) = picked else { return Ok(()); };
+	let path = PathBuf::from(picked.to_string());
+	let mut file = OpenOptions::new().create(true).append(true).open(&path).map_err(|e| e.to_string())?;
+	// Windows 记事本等查看器需要 BOM 才能稳定地按 UTF-8 显示中文。
+	if file.metadata().map_err(|e| e.to_string())?.len() == 0 {
+		file.write_all(b"\xef\xbb\xbf").map_err(|e| e.to_string())?;
+	}
+	let sessions = terminals.0.lock().map_err(|_| "终端状态不可用")?;
+	let session = sessions.get(&id).ok_or("终端会话不存在")?;
+	let mut log = session.log.lock().map_err(|_| "日志状态不可用")?;
+	log.file = Some(file);
+	log.path = Some(path);
+	log.paused = false;
+	log.escape = 0;
+	log.csi_params.clear();
+	log.line.clear();
+	log.cursor = 0;
+	log.alt_screen = false;
+	log.replaying = false;
+	log.utf8_tail.clear();
+	Ok(())
+}
+
+/// 停止、暂停、继续或切换终端控制码记录。
+#[tauri::command(rename = "terminal_log_action")]
+pub fn log_action(id: String, action: String, terminals: State<Terminals>) -> Result<(), String> {
+	let sessions = terminals.0.lock().map_err(|_| "终端状态不可用")?;
+	let session = sessions.get(&id).ok_or("终端会话不存在")?;
+	let mut log = session.log.lock().map_err(|_| "日志状态不可用")?;
+	match action.as_str() {
+		"stop" => {
+			let pending: String = if log.replaying { log.line.clear(); String::new() } else { log.line.drain(..).collect() };
+			if let Some(file) = log.file.as_mut() { file.write_all(pending.as_bytes()).map_err(|e| e.to_string())?; }
+			log.file = None; log.paused = false; log.cursor = 0;
+		},
+		"pause" if log.file.is_some() => log.paused = true,
+		"resume" if log.file.is_some() => log.paused = false,
+		"codes" => { log.include_codes = !log.include_codes; log.utf8_tail.clear(); log.escape = 0; log.csi_params.clear(); log.line.clear(); log.cursor = 0; log.alt_screen = false; log.replaying = false; },
+		_ => return Err("日志操作不可用".into()),
+	}
+	Ok(())
 }
 
 #[derive(Default)]
@@ -109,6 +328,7 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 	let input_buf = Arc::new(Mutex::new(Vec::new()));
 	let expecting_password = Arc::new(AtomicBool::new(false));
 	let exited = Arc::new(AtomicBool::new(false));
+	let log = Arc::new(Mutex::new(Log::default()));
 	// 同 id 重复 start 时 HashMap.insert 会静默覆盖旧 Session：旧 master 一被
 	// drop，旧 ConPTY 关闭、旧子进程退出，旧读取线程随即 EOF 并发出
 	// terminal-exit —— 前端把这次退出算到刚建立的新会话头上，表现为
@@ -121,6 +341,7 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 		.insert(
 			id.clone(),
 			Session {
+				log: log.clone(),
 				writer: writer.clone(),
 				master: pty.master,
 				child: child.clone(),
@@ -171,6 +392,22 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 				break;
 			}
 			let chunk = &buffer[..size];
+			if let Ok(mut state) = log.lock() {
+				if !state.paused {
+					let output = if state.include_codes {
+						chunk.to_vec()
+					} else {
+						let data = decode_log_chunk(chunk, &mut state.utf8_tail);
+						log_text(&data, &mut state).into_bytes()
+					};
+					if let Some(file) = state.file.as_mut() {
+						if let Err(error) = file.write_all(&output) {
+							error!(session = %id, "终端日志写入失败：{error}");
+							state.file = None;
+						}
+					}
+				}
+			}
 			if !answered {
 				let lossy = String::from_utf8_lossy(chunk).to_lowercase();
 				answer_buf.push_str(&lossy);
@@ -275,6 +512,10 @@ pub fn write(
 ) -> Result<(), String> {
 	let mut sessions = terminals.0.lock().map_err(|_| "终端状态不可用")?;
 	let session = sessions.get_mut(&id).ok_or("终端会话不存在")?;
+	if let Ok(mut log) = session.log.lock() {
+		// ponytail: 以首次用户输入作为重绘结束边界；若输入与迟到的重绘同一时刻交错，需改为完整屏幕状态追踪。
+		if log.replaying && !log.alt_screen { log.replaying = false; }
+	}
 	record_input(&id, session, &data, command.as_deref());
 	let mut writer = session.writer.lock().map_err(|_| "终端写入通道不可用")?;
 	writer
