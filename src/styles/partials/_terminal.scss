@@ -459,6 +459,12 @@ body.tab-dragging {
   height: fit-content;
 }
 
+// 专注模式保持原列宽，但滚动视口要铺满卡片，滚动条才会贴右边缘。
+.terminal-focus .xterm {
+  width: 100%;
+  height: 100%;
+}
+
 // xterm 6 的滚动条是自绘 DOM（VS Code ScrollableElement），
 // ::-webkit-scrollbar 对它无效；滑块颜色走 theme.scrollbarSlider*（useTerminals.ts）。
 // 宽度由 JS 以内联样式写入，CSS 覆盖必须 !important。

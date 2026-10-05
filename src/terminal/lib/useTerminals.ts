@@ -183,6 +183,23 @@ export function useTerminals(
           session &&
           !disconnectedRef.current[session.id]
         ) {
+          if (
+            document.body.classList.contains(
+              "terminal-focus"
+            )
+          ) {
+            // 专注模式只扩高本地视口，列数和 PTY 尺寸保持原样；
+            // 否则退出宽屏时 ls 等按列排版的历史输出会被重新折行。
+            const dimensions =
+              session.fit.proposeDimensions();
+            if (dimensions)
+              session.terminal.resize(
+                session.terminal.cols,
+                dimensions.rows
+              );
+            session.terminal.scrollToBottom();
+            continue;
+          }
           session.fit.fit();
           session.terminal.scrollToBottom();
           // 抽屉打开期间暂停向 PTY 同步行高：ConPTY 收缩会丢掉屏幕
