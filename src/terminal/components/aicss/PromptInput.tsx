@@ -45,6 +45,8 @@ type PromptInputProps = {
   /** 文件更改（读写命令）自动应用（关闭则需手动点击执行） */
   autoApply: boolean;
   onAutoApplyChange: (value: boolean) => void;
+  /** 打开自动执行黑名单配置弹窗 */
+  onOpenBlacklist: () => void;
   /** 待发送的图片（data URL），由父级持有；发送后由父级清空 */
   images: string[];
   /** 选图完成：读出 data URL 列表交给父级 */
@@ -180,6 +182,7 @@ export function PromptInput({
   onAutoExecuteChange,
   autoApply,
   onAutoApplyChange,
+  onOpenBlacklist,
   images,
   onAddImages,
   onRemoveImage,
@@ -551,6 +554,30 @@ export function PromptInput({
                       </svg>
                     </span>
                   )}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  title={t(
+                    "ai.menu.blacklistHint"
+                  )}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenBlacklist();
+                  }}
+                >
+                  <span
+                    className={
+                      styles.menuIconSpacer
+                    }
+                    aria-hidden="true"
+                  />
+                  <span
+                    className={styles.menuName}
+                  >
+                    {t("ai.menu.blacklist")}
+                  </span>
                 </button>
                 <div className={styles.menuLabel}>
                   {t("ai.menu.model")}

@@ -655,6 +655,116 @@
   cursor: pointer;
 }
 
+// ---- 命令黑名单弹窗 ----
+
+.ai-blacklist-dialog {
+  // 弹窗内容区统一留白，与列表卡片的圆角呼应
+  .heroui--modal-body,
+  [data-slot="body"] {
+    padding-top: 4px;
+  }
+}
+
+.ai-blacklist-icon {
+  color: #ff4d4f;
+}
+
+.ai-blacklist-lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+// 输入行：输入框占满 + 右侧圆形添加钮
+.ai-blacklist-input {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+
+  input {
+    flex: 1;
+    min-width: 0;
+    height: 38px;
+    font-size: 13px;
+  }
+}
+
+.ai-blacklist-add {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--muted);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+    border-color: var(--accent);
+  }
+}
+
+.ai-blacklist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: var(--surface-hover);
+    }
+  }
+}
+
+.ai-blacklist-name {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.ai-blacklist-remove {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+
+  &:hover {
+    color: #ff4d4f;
+    background: rgb(255 77 79 / 10%);
+  }
+}
+
 // AI 面板收起后的浮窗按钮：贴窗口右缘垂直居中，点击向左拉回面板。
 // 用 top/bottom + margin auto 居中而非 transform：fixed 元素带 transform 时，
 // 面板展开引发重绘的那一帧 WebView2 合成层会先按未位移位置画一次（视觉上「先向下跳」）

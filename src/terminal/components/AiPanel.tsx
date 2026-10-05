@@ -27,13 +27,16 @@ import { useT } from "@/settings/lib/i18n";
 import { PROVIDERS_CHANGED_EVENT } from "@/settings/lib/modelProviders";
 import {
   listOpenAiModels,
+  loadBlacklist,
   loadRunFlag,
   loadSelectedModel,
+  saveBlacklist,
   saveRunFlag,
   saveSelectedModel,
   useAiChat
 } from "@/terminal/lib/aiChat";
 import type { AiToolCall } from "@/terminal/lib/aiChat";
+import AiBlacklistDialog from "@/terminal/components/AiBlacklistDialog";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
 
 type AiPanelProps = {
@@ -355,6 +358,17 @@ export default function AiPanel({
   const [autoApply, setAutoApply] = useState(() =>
     loadRunFlag("autoApply")
   );
+  // 自动执行命令黑名单：命中即不出执行卡自动跑，回落为人工确认
+  const [blacklist, setBlacklist] = useState(
+    loadBlacklist
+  );
+  const [blacklistOpen, setBlacklistOpen] =
+    useState(false);
+  /** 增删黑名单条目并持久化。 */
+  function updateBlacklist(list: string[]) {
+    setBlacklist(list);
+    saveBlacklist(list);
+  }
   // 上次选中的模型可能已被删掉：找不到就退回第一个可选项
   const selected =
     options.find(
@@ -378,7 +392,8 @@ export default function AiPanel({
     renameCurrent
   } = useAiChat(session, {
     autoExecute,
-    autoApply
+    autoApply,
+    blacklist
   });
   const bodyRef = useRef<HTMLDivElement>(null);
   // 「历史任务」下拉：只列当前服务器的历史，点开可恢复续聊
@@ -774,6 +789,9 @@ export default function AiPanel({
           onAutoExecuteChange={toggleAutoExecute}
           autoApply={autoApply}
           onAutoApplyChange={toggleAutoApply}
+          onOpenBlacklist={() =>
+            setBlacklistOpen(true)
+          }
           images={attachments}
           onAddImages={urls =>
             setAttachments(list => [
@@ -802,6 +820,13 @@ export default function AiPanel({
         <AutoExecuteRiskDialog
           onConfirm={confirmAutoExecute}
           onClose={() => setRiskOpen(false)}
+        />
+      )}
+      {blacklistOpen && (
+        <AiBlacklistDialog
+          blacklist={blacklist}
+          onChange={updateBlacklist}
+          onClose={() => setBlacklistOpen(false)}
         />
       )}
     </aside>

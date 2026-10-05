@@ -208,6 +208,78 @@ export function saveRunFlag(
   }
 }
 
+const BLACKLIST_KEY = "ai-cmd-blacklist";
+
+/** 读取自动执行命令黑名单（命令名数组，如 ["rm", "kill"]）。 */
+export function loadBlacklist(): string[] {
+  try {
+    const raw = localStorage.getItem(
+      BLACKLIST_KEY
+    );
+    const list = raw
+      ? (JSON.parse(raw) as unknown[])
+      : [];
+    return Array.isArray(list)
+      ? list.filter(
+          (item): item is string =>
+            typeof item === "string"
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 保存自动执行命令黑名单。 */
+export function saveBlacklist(
+  list: string[]
+): void {
+  try {
+    localStorage.setItem(
+      BLACKLIST_KEY,
+      JSON.stringify(list)
+    );
+  } catch {
+    /* 忽略：次要功能 */
+  }
+}
+
+/**
+ * 命令是否命中黑名单：扫描命令里**每一个**词的 basename（含 && ; | 管道
+ * 拆出的后续命令与 sudo/env 前缀后的真命令）比对黑名单——复合命令
+ * （`cd /root && rm -rf x`、`sh -c "rm ..."`）只看首词必然漏检。
+ */
+export function isBlacklisted(
+  command: string,
+  blacklist: string[]
+): boolean {
+  if (blacklist.length === 0) return false;
+  const SKIP = new Set([
+    "sudo",
+    "doas",
+    "env",
+    "sh",
+    "bash",
+    "nohup",
+    "xargs",
+    "timeout"
+  ]);
+  for (const token of command
+    .trim()
+    .split(/[\s;&|]+/)) {
+    const name = token
+      .replace(/["']/g, "")
+      .replace(/\\/g, "/")
+      .split("/")
+      .pop()
+      ?.toLowerCase();
+    if (!name) continue;
+    if (SKIP.has(name)) continue;
+    if (blacklist.includes(name)) return true;
+  }
+  return false;
+}
+
 /** 工具结果回填给模型的上限：超长保留尾部（诊断价值在尾部）。 */
 const TOOL_RESULT_LIMIT = 10000;
 
@@ -216,6 +288,7 @@ const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行在用�
 - command：要执行的命令，在用户主目录下以登录 shell 运行；每个命令独立，需要操作其他目录请用绝对路径或 cd xxx && 组合。
 - question：一句话向用户解释这条命令做什么。
 - is_read_only：纯读取类命令（查看、搜索、统计）设为 true；任何会修改服务器状态的命令（写文件、安装、重启、删除等）必须设为 false。
+- 命令必须是**非交互**的：exec 通道的 stdin 是关闭的，任何等待键盘输入的命令（rm -i、apt/yum 不带 -y、passwd、交互式向导等）都会挂起直到超时。删除用 rm -f、安装用 apt-get install -y，需要确认的命令一律改用非交互参数。
 除非用户明确要求，不要执行破坏性或高风险命令。回答用简体中文，简洁、结论先行。`;
 
 /** 拼一条用户消息末尾的上下文块（对齐 WisdomSSH 的 workspace 注入）。 */
@@ -1126,10 +1199,11 @@ export function parseToolArguments(raw: string): {
 /** 面板内一轮对话的状态与动作。 */
 export function useAiChat(
   session: OpenSession | undefined,
-  /** 执行策略：autoExecute = 只读命令自动执行；autoApply = 读写命令自动应用 */
+  /** 执行策略：autoExecute = 只读命令自动执行；autoApply = 读写命令自动应用；blacklist = 命中即禁止自动执行 */
   runOptions: {
     autoExecute: boolean;
     autoApply: boolean;
+    blacklist: string[];
   }
 ) {
   // ref 透传：切换开关即时生效且不必重建 runLoop 及其依赖链
@@ -1415,8 +1489,11 @@ export function useAiChat(
             ...list,
             { kind: "tool", call: card }
           ]);
-          const { autoExecute, autoApply } =
-            runOptionsRef.current;
+          const {
+            autoExecute,
+            autoApply,
+            blacklist
+          } = runOptionsRef.current;
           // 关键决策日志：排查「没弹确认卡就执行了」时看模型给的只读
           // 标记与生效开关（is_read_only 由模型自报，可能标错）
           console.info(
@@ -1429,10 +1506,21 @@ export function useAiChat(
             "autoApply:",
             autoApply
           );
+          // 黑名单命令永不自动执行：即使模型标了只读、开关全开，
+          // 也回落为确认卡片，等用户手动放行
+          const blacklisted = isBlacklisted(
+            card.command,
+            blacklist
+          );
+          if (blacklisted)
+            console.info(
+              "[ai-exec] 黑名单命令，转人工确认"
+            );
           if (
-            card.isReadOnly
+            !blacklisted &&
+            (card.isReadOnly
               ? autoExecute
-              : autoApply
+              : autoApply)
           ) {
             await executeCard(card, toolCallId);
             continue;
@@ -1447,6 +1535,23 @@ export function useAiChat(
           break;
         }
         if (yielded) {
+          // 协议完整性：assistant 消息的每条 tool_call 都必须有配对的
+          // tool 消息，否则下一轮请求供应商直接 400。挂起前把本条之后
+          // 未处理的 calls 回填「排队中」占位，确认后由模型自行续发
+          const yieldedIndex = calls.findIndex(
+            call =>
+              pendingRef.current.has(call.id)
+          );
+          for (const call of calls.slice(
+            yieldedIndex + 1
+          )) {
+            messagesRef.current.push({
+              role: "tool",
+              content:
+                "[上一条命令等待用户确认，本条未执行；确认后请重新发起]",
+              tool_call_id: call.id
+            });
+          }
           // 挂起：等确认 / 跳过后由 confirm / skip 里新一轮
           // runLoop 接管剩余循环，这里直接收尾。
           // 关键：runLoop 挂起时 send 的 await 还没返回，busy 仍是 true，

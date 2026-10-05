@@ -185,6 +185,18 @@ const zhCN = {
   "ai.menu.autoApply": "自动应用",
   "ai.menu.autoApplyHint":
     "开启后文件更改自动应用，无需手动点击执行",
+  "ai.menu.blacklist": "自动执行黑名单",
+  "ai.menu.blacklistHint":
+    "黑名单中的命令不会被自动执行，一律弹出确认卡片",
+  "ai.blacklist.title": "命令黑名单",
+  "ai.blacklist.lead":
+    "黑名单中的命令不会被自动执行",
+  "ai.blacklist.placeholder":
+    "输入命令名称（如：rm）",
+  "ai.blacklist.add": "添加",
+  "ai.blacklist.clear": "清空黑名单",
+  "ai.blacklist.close": "关闭",
+  "ai.blacklist.remove": "移除",
   "ai.menu.model": "模型",
   "ai.card.ro": "RO",
   "ai.card.rw": "RW",
@@ -554,6 +566,18 @@ const enUS: Record<MessageKey, string> = {
   "ai.menu.autoApply": "Auto-apply",
   "ai.menu.autoApplyHint":
     "File changes are applied automatically without clicking Execute",
+  "ai.menu.blacklist": "Execution blacklist",
+  "ai.menu.blacklistHint":
+    "Blacklisted commands are never auto-executed; they always wait for confirmation",
+  "ai.blacklist.title": "Command blacklist",
+  "ai.blacklist.lead":
+    "Blacklisted commands are never auto-executed",
+  "ai.blacklist.placeholder":
+    "Enter a command name (e.g. rm)",
+  "ai.blacklist.add": "Add",
+  "ai.blacklist.clear": "Clear blacklist",
+  "ai.blacklist.close": "Close",
+  "ai.blacklist.remove": "Remove",
   "ai.menu.model": "Models",
   "ai.card.ro": "RO",
   "ai.card.rw": "RW",

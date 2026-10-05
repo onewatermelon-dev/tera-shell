@@ -196,10 +196,13 @@ fn run_once(
 		channel
 			.write_all(text.as_bytes())
 			.map_err(|error| format!("写入 stdin 失败：{error}"))?;
-		channel
-			.send_eof()
-			.map_err(|error| format!("关闭 stdin 失败：{error}"))?;
 	}
+	// 无论是否喂了 stdin 都要发 EOF：否则 stdin 永远开着，等待输入的
+	// 交互式命令（rm -i 的 y/n 确认、apt 安装确认等）会一直挂到超时，
+	// 卡片长时间停在「执行中」。EOF 让它们立即读到输入结束并退出
+	channel
+		.send_eof()
+		.map_err(|error| format!("关闭 stdin 失败：{error}"))?;
 
 	// stdout 读到 EOF；stderr 是独立流，在其后读取
 	let mut stdout = Vec::new();
