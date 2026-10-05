@@ -398,6 +398,19 @@
   }
 }
 
+.ai-user-message {
+  align-self: flex-end;
+  max-width: 90%;
+}
+
+.ai-user-message .ai-entry {
+  max-width: 100%;
+}
+
+.ai-assistant-message {
+  align-self: stretch;
+}
+
 // 执行卡片：一条 run_command 的完整生命周期
 .ai-card {
   align-self: stretch;

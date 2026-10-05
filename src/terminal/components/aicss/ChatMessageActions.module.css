@@ -1,0 +1,201 @@
+.root {
+  --ma-fg: #1d1d1d;
+  --ma-muted: #aeaeae;
+  --ma-hover: rgb(0 0 0 / 5%);
+  --ma-good: #1f9d55;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  height: 20px;
+  margin-top: 6px;
+  font-family: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:global([data-theme="dark"]) .root {
+  --ma-fg: #f4f4f5;
+  --ma-muted: #5a5a5a;
+  --ma-hover: #2e2e2e;
+}
+
+:global(.ai-user-message:hover) .root,
+:global(.ai-user-message:focus-within) .root,
+:global(.ai-assistant-message:hover) .root,
+:global(.ai-assistant-message:focus-within) .root,
+.root:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.root[data-align="start"] {
+  justify-content: flex-start;
+}
+
+.copy {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ma-muted);
+  cursor: pointer;
+}
+
+.copy:hover,
+.copy:focus-visible {
+  background: var(--ma-hover);
+  color: var(--ma-fg);
+}
+
+.glyph,
+.glyph :is(path, rect) {
+  vector-effect: non-scaling-stroke;
+}
+
+.glyph {
+  display: block;
+  width: 12px;
+  height: 12px;
+  transform-origin: 50% 82%;
+}
+
+.copySwap {
+  display: grid;
+}
+
+.copySwap .glyph {
+  grid-area: 1 / 1;
+}
+
+.copyMark {
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.copySwap[data-on="true"] .copyMark {
+  opacity: 0;
+  transition: none;
+}
+
+.check {
+  color: var(--ma-good);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.copySwap[data-on="true"] .check {
+  opacity: 1;
+  transition: none;
+}
+
+.check path {
+  stroke-dasharray: 28;
+  stroke-dashoffset: 0;
+}
+
+.copySwap[data-on="true"] .check path {
+  animation: drawCheck 420ms
+    cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.time {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  margin-left: 4px;
+  color: var(--ma-muted);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.tip {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 4px 5px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgb(29 29 29 / 60%);
+  color: rgb(255 255 255 / 90%);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -100%)
+    translateY(1px);
+  filter: blur(2px);
+  backdrop-filter: blur(6px);
+  transition:
+    opacity 50ms ease,
+    transform 50ms ease,
+    filter 50ms ease;
+}
+
+.tipGauge {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tip[data-theme="dark"] {
+  background: rgb(255 255 255 / 12%);
+}
+
+.tip[data-up="true"] {
+  opacity: 1;
+  transform: translate(-50%, -100%);
+  filter: none;
+  transition:
+    opacity 150ms ease 80ms,
+    transform 150ms ease 80ms,
+    filter 150ms ease 80ms;
+}
+
+@keyframes drawCheck {
+  from {
+    stroke-dashoffset: 28;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copyMark,
+  .check {
+    transition: none;
+  }
+
+  .check path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
+  .tip {
+    transition: none;
+  }
+}

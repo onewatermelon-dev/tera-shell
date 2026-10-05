@@ -24,6 +24,7 @@ import { ReasoningBlock } from "@/terminal/components/aicss/ReasoningBlock";
 import { PromptInput } from "@/terminal/components/aicss/PromptInput";
 import type { ExecCardMode } from "@/terminal/lib/aiChat";
 import { useT } from "@/settings/lib/i18n";
+import { ChatMessageActions } from "@/terminal/components/aicss/ChatMessageActions";
 import { PROVIDERS_CHANGED_EVENT } from "@/settings/lib/modelProviders";
 import {
   listOpenAiModels,
@@ -712,44 +713,62 @@ export default function AiPanel({
             // 助手回复是 markdown（表格 / 代码块），交给 Streamdown 渲染
             return (
               <div
-                key={index}
-                className="ai-entry is-assistant"
+                key={`${index}-${entry.sentAt}`}
+                className="ai-assistant-message"
               >
-                {entry.reasoning && (
-                  <ReasoningBlock
-                    reasoning={entry.reasoning}
-                    elapsedSeconds={
-                      entry.elapsedSeconds ?? 1
-                    }
-                  />
-                )}
-                {entry.text && (
-                  <Streamdown>
-                    {entry.text}
-                  </Streamdown>
-                )}
+                <div className="ai-entry is-assistant">
+                  {entry.reasoning && (
+                    <ReasoningBlock
+                      reasoning={entry.reasoning}
+                      elapsedSeconds={
+                        entry.elapsedSeconds ?? 1
+                      }
+                    />
+                  )}
+                  {entry.text && (
+                    <Streamdown>
+                      {entry.text}
+                    </Streamdown>
+                  )}
+                </div>
+                <ChatMessageActions
+                  text={
+                    entry.text ||
+                    entry.reasoning ||
+                    ""
+                  }
+                  sentAt={entry.sentAt}
+                  align="start"
+                />
               </div>
             );
           }
-          // user / error 条目：用户消息可能带图片，缩略图排在文本上方
+          // 用户消息的操作栏只在鼠标悬停或键盘聚焦时显示
           return (
             <div
-              key={index}
-              className={`ai-entry is-${entry.kind}`}
+              key={`${index}-${entry.sentAt}`}
+              className="ai-user-message"
             >
-              {entry.kind === "user" &&
-              entry.images?.length ? (
-                <span className="ai-entry-images">
-                  {entry.images.map((url, i) => (
-                    <img
-                      key={i}
-                      src={url}
-                      alt=""
-                    />
-                  ))}
-                </span>
-              ) : null}
-              {entry.text}
+              <div className="ai-entry is-user">
+                {entry.images?.length ? (
+                  <span className="ai-entry-images">
+                    {entry.images.map(
+                      (url, i) => (
+                        <img
+                          key={i}
+                          src={url}
+                          alt=""
+                        />
+                      )
+                    )}
+                  </span>
+                ) : null}
+                {entry.text}
+              </div>
+              <ChatMessageActions
+                text={entry.text}
+                sentAt={entry.sentAt}
+              />
             </div>
           );
         })}

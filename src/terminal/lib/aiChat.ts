@@ -62,12 +62,16 @@ export type AiChatEntry =
   | {
       kind: "user";
       text: string;
+      /** 用户发送时间（毫秒时间戳）。 */
+      sentAt?: number;
       /** 用户上传的图片（data URL），仅展示用 */
       images?: string[];
     }
   | {
       kind: "assistant";
       text: string;
+      /** 助手回复完成时间（毫秒时间戳）。 */
+      sentAt?: number;
       /** 思考内容（有才显示 ReasoningBlock） */
       reasoning?: string;
       /** 思考耗时（秒） */
@@ -1383,7 +1387,17 @@ export function useAiChat(
       messagesRef.current =
         history.messages as ProtocolMessage[];
       setEntries(
-        history.entries as AiChatEntry[]
+        (history.entries as AiChatEntry[]).map(
+          entry =>
+            entry.kind !== "tool"
+              ? {
+                  ...entry,
+                  sentAt:
+                    entry.sentAt ??
+                    history.updatedAt
+                }
+              : entry
+        )
       );
       setPendingCardId(null);
       setError("");
@@ -1553,6 +1567,7 @@ export function useAiChat(
             {
               kind: "assistant",
               text: message.content ?? "",
+              sentAt: Date.now(),
               ...(message.reasoning
                 ? {
                     reasoning: message.reasoning,
@@ -1699,6 +1714,7 @@ export function useAiChat(
         {
           kind: "user",
           text: trimmed,
+          sentAt: Date.now(),
           ...(images.length ? { images } : {})
         }
       ]);

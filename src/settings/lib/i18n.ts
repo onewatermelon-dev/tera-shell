@@ -172,6 +172,9 @@ const zhCN = {
   "ai.history.empty": "暂无历史任务",
   "ai.history.rename": "重命名",
   "ai.history.delete": "删除",
+  "ai.message.copy": "复制",
+  "ai.message.copied": "已复制",
+  "ai.message.time": "发送时间",
   "ai.send": "发送",
   "ai.menu.attach": "附件",
   "ai.menu.uploadImage": "上传图片",
@@ -553,6 +556,9 @@ const enUS: Record<MessageKey, string> = {
   "ai.history.empty": "No history yet",
   "ai.history.rename": "Rename",
   "ai.history.delete": "Delete",
+  "ai.message.copy": "Copy",
+  "ai.message.copied": "Copied",
+  "ai.message.time": "Sent at",
   "ai.send": "Send",
   "ai.menu.attach": "Attachments",
   "ai.menu.uploadImage": "Upload image",
@@ -868,5 +874,13 @@ export function useT(): Translator {
   return useMemo(
     () => createTranslator(locale),
     [locale]
+  );
+}
+
+/** 读取当前界面语言；语言切换时同步重渲染。 */
+export function useLocale(): Locale {
+  return useSyncExternalStore(
+    subscribe,
+    getSnapshot
   );
 }
