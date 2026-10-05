@@ -832,6 +832,11 @@ export default function AiPanel({
             )
           }
           busy={busy}
+          history={entries.flatMap(entry =>
+            entry.kind === "user" && entry.text
+              ? [entry.text]
+              : []
+          )}
           placeholder={t("ai.input")}
           onSend={text => {
             void send(

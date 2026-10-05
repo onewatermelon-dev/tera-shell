@@ -54,6 +54,8 @@ type PromptInputProps = {
   onRemoveImage: (index: number) => void;
   /** 引擎忙时禁止发送 */
   busy: boolean;
+  /** 当前对话中已发送的文字问题，按发送顺序排列。 */
+  history: string[];
   placeholder: string;
   /** 用户按下发送（Enter 或点击箭头），参数为编辑器纯文本 */
   onSend: (value: string) => void;
@@ -143,6 +145,25 @@ function CheckIcon() {
 /** 单张图上限：base64 进请求体，超大图直接拒收。 */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+/** 在已发送问题间移动，并在越过最新一条时恢复未发送草稿。 */
+export function stepPromptHistory(
+  history: string[],
+  current: number | null,
+  draft: string,
+  direction: "up" | "down"
+): { index: number | null; value: string } {
+  const next =
+    direction === "up"
+      ? Math.max(
+          0,
+          (current ?? history.length) - 1
+        )
+      : (current ?? history.length - 1) + 1;
+  return next >= history.length
+    ? { index: null, value: draft }
+    : { index: next, value: history[next] ?? "" };
+}
+
 /** 文件 → data URL；非图片或超限返回 null。 */
 async function fileToDataUrl(
   file: File
@@ -187,6 +208,7 @@ export function PromptInput({
   onAddImages,
   onRemoveImage,
   busy,
+  history,
   placeholder,
   onSend
 }: PromptInputProps) {
@@ -194,10 +216,29 @@ export function PromptInput({
   const [value, setValue] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
+  const historyIndexRef = useRef<number | null>(
+    null
+  );
+  const draftRef = useRef("");
+  const previousHistoryRef = useRef(history);
   const plusWrapRef =
     useRef<HTMLDivElement>(null);
   const fileInputRef =
     useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const previous = previousHistoryRef.current;
+    if (
+      previous.length !== history.length ||
+      previous.some(
+        (text, index) => text !== history[index]
+      )
+    ) {
+      historyIndexRef.current = null;
+      draftRef.current = "";
+    }
+    previousHistoryRef.current = history;
+  }, [history]);
 
   const pickImages = async (
     event: ReactChangeEvent<HTMLInputElement>
@@ -322,8 +363,67 @@ export function PromptInput({
     event: ReactKeyboardEvent<HTMLDivElement>
   ) => {
     if (
+      (event.key === "ArrowUp" ||
+        event.key === "ArrowDown") &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing &&
+      history.length > 0
+    ) {
+      const editor = editorRef.current;
+      const selection = window.getSelection();
+      if (
+        !editor ||
+        !selection?.isCollapsed ||
+        !selection.anchorNode
+      )
+        return;
+      const current = historyIndexRef.current;
+      if (
+        event.key === "ArrowDown" &&
+        current === null
+      )
+        return;
+      if (
+        event.key === "ArrowUp" &&
+        current === null &&
+        (value.includes("\n") ||
+          editor.querySelector("br, div"))
+      ) {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.setEnd(
+          selection.anchorNode,
+          selection.anchorOffset
+        );
+        if (!range.collapsed) return;
+      }
+      event.preventDefault();
+      if (current === null)
+        draftRef.current = value;
+      const recalled = stepPromptHistory(
+        history,
+        current,
+        draftRef.current,
+        event.key === "ArrowUp" ? "up" : "down"
+      );
+      historyIndexRef.current = recalled.index;
+      const nextValue = recalled.value;
+      editor.textContent = nextValue;
+      setValue(nextValue);
+      const caret = document.createRange();
+      caret.selectNodeContents(editor);
+      caret.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(caret);
+      return;
+    }
+    if (
       event.key === "Enter" &&
-      !event.shiftKey
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
     ) {
       // Shift+Enter 换行；Enter 直接发送
       event.preventDefault();
@@ -334,6 +434,8 @@ export function PromptInput({
   const send = () => {
     if (!sendActive) return;
     const text = value;
+    historyIndexRef.current = null;
+    draftRef.current = "";
     if (editorRef.current) {
       editorRef.current.innerHTML = "";
     }
