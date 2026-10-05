@@ -109,6 +109,61 @@ export type ProtocolMessage = {
   images?: string[];
 };
 
+/**
+ * 修复工具调用的协议完整性：assistant 带 tool_calls 的消息，其后必须有
+ * 每条 tool_call_id 的配对 tool 消息，缺一条供应商就返回 400。
+ *
+ * 断裂来源：挂起等确认时用户直接发新消息、历史恢复、异常中断等。
+ * 缺失的按序补占位 tool 消息（告知模型该命令未获得结果）；id 配不上
+ * 任何 tool_calls 的孤儿 tool 消息丢弃。纯函数不改入参。
+ */
+export function repairToolMessages(
+  messages: ProtocolMessage[]
+): ProtocolMessage[] {
+  const out: ProtocolMessage[] = [];
+  let pendingIds: string[] = [];
+  const flush = () => {
+    for (const id of pendingIds)
+      out.push({
+        role: "tool",
+        content: "[该命令未获得执行结果，已跳过]",
+        tool_call_id: id
+      });
+    pendingIds = [];
+  };
+  for (const msg of messages) {
+    if (
+      msg.role === "assistant" &&
+      msg.tool_calls?.length
+    ) {
+      out.push(msg);
+      pendingIds.push(
+        ...msg.tool_calls.map(call => call.id)
+      );
+      continue;
+    }
+    if (msg.role === "tool") {
+      // 孤儿 tool 消息（前面没有未配对的 tool_calls）直接丢弃
+      if (
+        !pendingIds.includes(
+          msg.tool_call_id ?? ""
+        )
+      )
+        continue;
+      pendingIds = pendingIds.filter(
+        id => id !== msg.tool_call_id
+      );
+      out.push(msg);
+      continue;
+    }
+    // user / 无 tool_calls 的 assistant：新的一轮开始，先补齐欠账
+    flush();
+    out.push(msg);
+  }
+  flush();
+  return out;
+}
+
 /** 可选中的模型：供应商 × 模型。 */
 export type AiModelOption = {
   providerId: string;
@@ -1423,7 +1478,11 @@ export function useAiChat(
         const message =
           await streamChatCompletion(
             option,
-            messagesRef.current,
+            // 请求前自愈协议流：挂起期间发新消息 / 异常中断都可能留下
+            // 缺 tool 回复的 assistant 消息，不修则每轮请求都 400
+            repairToolMessages(
+              messagesRef.current
+            ),
             chunk => {
               setStream(prev =>
                 prev
