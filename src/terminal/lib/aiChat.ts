@@ -340,7 +340,7 @@ const TOOL_RESULT_LIMIT = 10000;
 
 const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行在用户的 SSH 服务器环境中。
 你可以通过 run_command 工具在当前服务器上执行命令（客户端按设置自动执行或等用户确认）：
-- command：要执行的命令，在用户主目录下以登录 shell 运行；每个命令独立，需要操作其他目录请用绝对路径或 cd xxx && 组合。
+- command：要执行的命令；后台执行会先切换到当前终端所在目录，每个命令独立。
 - question：一句话向用户解释这条命令做什么。
 - is_read_only：纯读取类命令（查看、搜索、统计）设为 true；任何会修改服务器状态的命令（写文件、安装、重启、删除等）必须设为 false。
 - 命令必须是**非交互**的：exec 通道的 stdin 是关闭的，任何等待键盘输入的命令（rm -i、apt/yum 不带 -y、passwd、交互式向导等）都会挂起直到超时。删除用 rm -f、安装用 apt-get install -y，需要确认的命令一律改用非交互参数。
@@ -1222,6 +1222,40 @@ function parseWrappedOutput(stdout: string): {
   };
 }
 
+/** 从当前终端提示符读取目录；没有可识别的提示符时返回 null。 */
+export function directoryFromPrompt(
+  terminal: Terminal | undefined
+): string | null {
+  if (!terminal) return null;
+  const buffer = terminal.buffer.active;
+  const line = buffer.getLine(
+    buffer.baseY + buffer.cursorY
+  );
+  const text =
+    line?.translateToString(true) ?? "";
+  return (
+    text.match(
+      /(?:^|\s)[^\s@]+@[^\s:]+:(~(?:\/[^\s#$]*)?|\/[^\s#$]*)[#$](?:\s|$)/
+    )?.[1] ?? null
+  );
+}
+
+/** 安全地把提示符目录拼进独立 SSH 命令。 */
+export function commandInDirectory(
+  directory: string,
+  command: string
+): string {
+  const quote = (value: string) =>
+    `'${value.replace(/'/g, `'\\''`)}'`;
+  const path =
+    directory === "~"
+      ? '"$HOME"'
+      : directory.startsWith("~/")
+        ? `"$HOME"/${quote(directory.slice(2))}`
+        : quote(directory);
+  return `cd -- ${path} || exit 1\n${command}`;
+}
+
 /** 解析模型的 tool_call 参数；参数不合法时给出可读错误。 */
 export function parseToolArguments(raw: string): {
   command: string;
@@ -1418,6 +1452,13 @@ export function useAiChat(
         call.state = "running";
         setEntries(list => [...list]);
         try {
+          const directory = directoryFromPrompt(
+            session?.terminal
+          );
+          if (!directory)
+            throw new Error(
+              "无法识别当前终端目录，请在终端提示符就绪后重试或选择终端执行"
+            );
           // 包装命令：先取主机名与当前目录，用于合成终端风格的提示符行，
           // 让执行结果与终端里看到的形态一致（含 `user@host:cwd# 命令`）
           const result = await aiRunCommand(
@@ -1427,7 +1468,10 @@ export function useAiChat(
               username: session?.username,
               password: session?.password
             },
-            `hostname; pwd; echo ---; ${call.command}`
+            commandInDirectory(
+              directory,
+              `hostname; pwd; echo ---; ${call.command}`
+            )
           );
           // 通道执行完成即为 done：退出码非 0 是命令的正常输出
           // （如验证文件已删除的 ls、无匹配的 grep），由模型自行解读
