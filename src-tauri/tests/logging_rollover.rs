@@ -1,7 +1,7 @@
 use std::io::Write as _;
 use std::fs;
 use tracing_subscriber::fmt::MakeWriter as _;
-use tera_shell_lib::logging::{today, RotatingWriter};
+use tera_shell_lib::infra::logging::{today, RotatingWriter};
 
 #[test]
 fn rolls_over_when_file_full() {

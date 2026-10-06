@@ -11,6 +11,7 @@ import {
   FullscreenOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
+  ReloadOutlined,
   SearchOutlined,
   SnippetsOutlined,
   StopOutlined
@@ -28,6 +29,8 @@ type TerminalMenuOptions = {
   onError: (reason: unknown) => void;
   /** 点击"查找"时打开搜索框 */
   onFind: () => void;
+  /** 点击"重新连接"时重连该会话（断线后自动重连放弃时的兜底入口） */
+  onReconnect: (id: string) => void;
 };
 
 /**
@@ -39,7 +42,8 @@ type TerminalMenuOptions = {
  */
 export function createTerminalMenu({
   onError,
-  onFind
+  onFind,
+  onReconnect
 }: TerminalMenuOptions) {
   let menu: HTMLDivElement | undefined;
   let copyItem: HTMLDivElement | undefined;
@@ -286,6 +290,18 @@ export function createTerminalMenu({
       onFind();
     });
 
+    // 断线后自动重连放弃时的兜底入口：未断线时点了也只是重新连一次
+    const reconnect = makeItem(
+      "重新连接",
+      "",
+      ReloadOutlined
+    );
+    reconnect.addEventListener("click", () => {
+      hide();
+      onReconnect(targetId);
+      target?.focus();
+    });
+
     const clear = makeItem(
       "清屏",
       "",
@@ -319,6 +335,7 @@ export function createTerminalMenu({
       separator.cloneNode(),
       find,
       separator.cloneNode(),
+      reconnect,
       clear,
       separator.cloneNode(),
       fullscreen

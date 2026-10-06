@@ -29,6 +29,7 @@ import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { attachFontZoom } from "@/terminal/lib/fontZoom";
 import { useTerminalSearch } from "@/terminal/lib/useTerminalSearch";
+import { useTerminalReconnect } from "@/terminal/lib/useTerminalReconnect";
 import {
   DEFAULT_FONT_SIZE,
   resolveFontFamily,
@@ -43,6 +44,54 @@ import type { OpenSession } from "@/terminal/lib/terminalTypes";
 
 // 会话类型定义在 terminalTypes，这里重新导出，外部仍从 useTerminals 引入
 export type { OpenSession } from "@/terminal/lib/terminalTypes";
+
+/**
+ * PTY 尺寸同步的防抖时长（毫秒）：尺寸连续变化期间只在停下来之后通知一次。
+ *
+ * 取值要盖过一次「连续滚轮缩放」或「拖拽窗口」的节奏（手速快时相邻两次
+ * 变化间隔约 150~300ms），否则每一次变化都会让 ConPTY 重绘一遍、远端
+ * shell 重画一遍提示符，屏幕很快就花了。
+ */
+const PTY_RESIZE_DEBOUNCE = 400;
+
+/** 连续多少帧尺寸不变才算「稳定」，见 waitForStableSize。 */
+const STABLE_FRAMES = 3;
+
+/**
+ * 等终端容器尺寸稳定再让 PTY 出生。
+ *
+ * ConPTY 在尺寸变化时会整屏重绘，重绘很容易把屏幕弄乱（重复提示符、
+ * 丢历史）。连接那一瞬间容器高度往往还在变（字体加载、欢迎卡片、AI 面板
+ * 与侧栏渲染），只 rAF 两帧等不住 —— PTY 于是「生错了尺寸」，紧接着的
+ * 第一次 resize 就触发重绘。这里等「连续几帧尺寸不变」，最多等 600ms。
+ */
+function waitForStableSize(
+  element: HTMLElement,
+  timeout = 600
+): Promise<void> {
+  return new Promise(resolve => {
+    const started = performance.now();
+    let previous = "";
+    let stableFrames = 0;
+    const check = () => {
+      const size = `${element.clientWidth}x${element.clientHeight}`;
+      if (size === previous) stableFrames += 1;
+      else {
+        previous = size;
+        stableFrames = 0;
+      }
+      if (
+        stableFrames >= STABLE_FRAMES ||
+        performance.now() - started > timeout
+      ) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+}
 
 export function useTerminals(
   onError: (reason: unknown) => void,
@@ -101,6 +150,21 @@ export function useTerminals(
     disconnectedRef.current = disconnected;
   }, [disconnected]);
 
+  // 断线自动重连：SSH 会话被 ssh 以 255 结束（网络断开、远端重启）时
+  // 退避重试若干次，失败后由右键菜单手动接管（见 useTerminalReconnect）
+  const {
+    handleDisconnect,
+    reconnect: reconnectSession,
+    cancelReconnect,
+    cancelAllReconnects
+  } = useTerminalReconnect({
+    openedRef,
+    disconnectedRef,
+    setDisconnected,
+    cursorBlink: appearance.cursorBlink,
+    onError
+  });
+
   // 查找能力（搜索框开关、高亮与结果计数），内部自带状态
   const search = useTerminalSearch(
     openedRef,
@@ -117,10 +181,15 @@ export function useTerminals(
   const terminalHostRef =
     useRef<HTMLElement | null>(null);
   // 终端右键菜单（命令式 DOM，逻辑见 terminalContextMenu）：
-  // 首次用到时才创建，那时 openSearch 已经定义好
+  // 首次用到时才创建，那时 openSearch 已经定义好。
+  // 菜单只建一次，重连入口经 ref 转发，避免闭包锁死旧设置
   const terminalMenu = useRef<ReturnType<
     typeof createTerminalMenu
   > | null>(null);
+  const reconnectRef = useRef(reconnectSession);
+  useEffect(() => {
+    reconnectRef.current = reconnectSession;
+  }, [reconnectSession]);
 
   const setTerminalHost = useCallback(
     (el: HTMLElement | null) => {
@@ -183,6 +252,110 @@ export function useTerminals(
   // ---- 1. Tab management ----
   /** PTY 行高同步暂停标记（系统信息抽屉打开时为真） */
   const ptyPausedRef = useRef(false);
+  /** 待发送的 PTY 尺寸（按会话 id），见 schedulePtyResize 的说明 */
+  const ptyResizeTimers = useRef(
+    new Map<
+      string,
+      ReturnType<typeof setTimeout>
+    >()
+  );
+  /** 已经同步给 PTY 的尺寸（按会话 id）：只有真的变了才再打扰一次 PTY */
+  const syncedSizes = useRef(
+    new Map<string, string>()
+  );
+  /**
+   * 把尺寸变化延后到稳定后再通知 PTY。
+   *
+   * 拖窗口、面板动画、Ctrl+滚轮缩放字号都会在几百毫秒内产生**十几次**
+   * 尺寸变化。每变一次就发一次 terminal_resize，远端 shell 就要重绘一次
+   * 提示符 —— ConPTY 重绘与远端 readline 一错位，旧提示符擦不干净，
+   * 屏幕上就堆出一串重复的 `user@host:~#`。本地 fit 照旧每帧执行
+   * （显示始终正确），只是把「稳定后」的最终尺寸发过去。
+   */
+  const schedulePtyResize = useCallback(
+    (session: OpenSession) => {
+      const pending = ptyResizeTimers.current.get(
+        session.id
+      );
+      if (pending) clearTimeout(pending);
+      ptyResizeTimers.current.set(
+        session.id,
+        setTimeout(() => {
+          ptyResizeTimers.current.delete(
+            session.id
+          );
+          // 期间可能已经断开或被关闭：再发 resize 只会收到错误
+          if (
+            disconnectedRef.current[session.id] ||
+            !openedRef.current.includes(session)
+          ) {
+            return;
+          }
+          const sizeKey = `${session.terminal.rows}x${session.terminal.cols}`;
+          if (
+            syncedSizes.current.get(
+              session.id
+            ) === sizeKey
+          )
+            return;
+          syncedSizes.current.set(
+            session.id,
+            sizeKey
+          );
+          console.debug(
+            `[terminal] 同步 PTY 尺寸 ${session.id} ${sizeKey}`
+          );
+          invoke("terminal_resize", {
+            id: session.id,
+            rows: session.terminal.rows,
+            cols: session.terminal.cols
+          })
+            .then(() => {
+              // 尺寸一变，ConPTY 会把屏幕重放一遍、远端 shell 也会重画
+              // 提示符，两边错位就会在屏上留下重复/缩进错乱的提示符。
+              // 让远端自己清屏重画一次（Ctrl+L）最干净，历史输出仍在
+              // 滚动缓冲里；备用屏（vim/top 等全屏应用）不动，免得打断。
+              if (
+                session.terminal.buffer.active
+                  .type === "alternate"
+              ) {
+                return;
+              }
+              invoke("terminal_write", {
+                id: session.id,
+                data: "\u000c",
+                command: null
+              }).catch(reason =>
+                console.debug(
+                  `[terminal] resize 后重画失败 ${session.id}`,
+                  reason
+                )
+              );
+            })
+            .catch(reason => {
+              // PTY 还没建立（start 未完成）时会走到这里。以前静默吞掉，
+              // 同步就此丢失、PTY 与本地尺寸永久脱节 —— 至少留个痕
+              console.debug(
+                `[terminal] PTY 尺寸同步被拒 ${session.id}`,
+                reason
+              );
+            });
+        }, PTY_RESIZE_DEBOUNCE)
+      );
+    },
+    []
+  );
+  /** 取消某个会话待发送的尺寸同步（关闭标签时调用）。 */
+  const cancelPtyResize = useCallback(
+    (id: string) => {
+      const pending =
+        ptyResizeTimers.current.get(id);
+      if (pending) clearTimeout(pending);
+      ptyResizeTimers.current.delete(id);
+      syncedSizes.current.delete(id);
+    },
+    []
+  );
   const resize = useCallback(
     (current?: OpenSession) => {
       // 显式指定就只动它；否则两栏各自跟一次 —— ResizeObserver 拖分隔线 /
@@ -228,15 +401,12 @@ export function useTerminals(
           // 上方内容，恢复时整屏重绘把历史打回空白；只缩本地视口即可，
           // 远端布局保持不变（见 setPtyResizePaused）
           if (ptyPausedRef.current) continue;
-          invoke("terminal_resize", {
-            id: session.id,
-            rows: session.terminal.rows,
-            cols: session.terminal.cols
-          }).catch(() => {});
+          // 尺寸连续变化时合并，只在稳定后同步一次（见 schedulePtyResize）
+          schedulePtyResize(session);
         }
       }
     },
-    []
+    [schedulePtyResize]
   );
 
   /**
@@ -783,7 +953,9 @@ export function useTerminals(
           terminalMenu.current ??=
             createTerminalMenu({
               onError,
-              onFind: search.openSearch
+              onFind: search.openSearch,
+              onReconnect: id =>
+                reconnectRef.current(id)
             });
           terminalMenu.current.show(
             event,
@@ -849,13 +1021,13 @@ export function useTerminals(
         return next;
       });
       if (activate) setActiveId(session.id);
-      // 先挂载再启动 PTY：等两帧让 open+fit 落定，PTY 直接按最终尺寸出生。
-      // 这样首帧不再有 resize，ConPTY 的整屏重绘（会抹掉欢迎横幅）根本不会发生
-      await new Promise<void>(resolve =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => resolve())
-        )
-      );
+      // 先挂载、等尺寸稳定，再启动 PTY：PTY 直接按最终尺寸出生，首帧不再有
+      // resize。ConPTY 的整屏重绘（会抹掉欢迎横幅、堆出重复提示符）因此
+      // 根本不会发生
+      await waitForStableSize(current.element);
+      // 稳定后再 fit 一次：下面交给后端的行列数必须是最终值，
+      // 否则 PTY 一生下来就与实际不符，紧接着的 resize 又要重绘
+      current.fit.fit();
       try {
         await invoke("terminal_start", {
           config: {
@@ -864,6 +1036,15 @@ export function useTerminals(
             cols: current.terminal.cols
           }
         });
+        // PTY 就是按这个尺寸出生的，先记上：随后若布局没变就不必再同步
+        syncedSizes.current.set(
+          current.id,
+          `${current.terminal.rows}x${current.terminal.cols}`
+        );
+        // PTY 建好后按当前尺寸再校一次：从挂载到这一刻之间布局可能已经变了
+        // （AI 面板、侧栏、字体度量），而挂载时那次 resize 会因为「会话还没
+        // 建立」被后端拒掉 —— 不补这一下，PTY 就一直停在旧宽度上
+        schedulePtyResize(current);
       } catch (reason) {
         setOpened(prev => {
           const next = prev.filter(
@@ -877,7 +1058,7 @@ export function useTerminals(
       }
       return true;
     },
-    [createTerminal, onError]
+    [createTerminal, onError, schedulePtyResize]
   );
 
   const open = useCallback(
@@ -1147,6 +1328,10 @@ export function useTerminals(
         session => session.id === id
       );
       if (index < 0) return;
+      // 关掉标签就别再重连它：清掉等待中的退避定时器
+      cancelReconnect(id);
+      // 待发送的尺寸同步也没必要了
+      cancelPtyResize(id);
       // 关闭的是组内会话：移出一个标签；若它正可见，可见位交给
       // 剩下的第一只（组空了就是 ""，右侧窗格整体消失）
       if (splitIdsRef.current.includes(id)) {
@@ -1183,7 +1368,13 @@ export function useTerminals(
         );
       }
     },
-    [onError, setSplitIds, setSplitVisible]
+    [
+      onError,
+      setSplitIds,
+      setSplitVisible,
+      cancelReconnect,
+      cancelPtyResize
+    ]
   );
 
   /**
@@ -1199,9 +1390,40 @@ export function useTerminals(
   );
 
   // ---- 7. Global listeners ----
+  // 全局监听只随挂载注册一次。effect 依赖里的 search/resize/重连判定
+  // 每渲染都可能变，走 ref 取最新值 —— 旧写法把 search 放进依赖，启动
+  // 爆发期的连续重渲染会让 effect 反复重跑，而 cleanup 跑在 await listen
+  // 完成之前（此时列表还是空的），旧监听器成了孤儿：每个输出块被重复
+  // 写进终端多次，表现为回显、提示符成双成对
+  const searchRef = useRef(search);
+  const resizeRef = useRef(resize);
+  const handleDisconnectRef = useRef(
+    handleDisconnect
+  );
+  const tRef = useRef(t);
+  // ref 镜像的同步 effect 要声明在监听 effect **之前**：同一提交里
+  // effect 按声明顺序执行，先同步 ref、监听 effect 才拿得到最新值
   useEffect(() => {
+    searchRef.current = search;
+    resizeRef.current = resize;
+    handleDisconnectRef.current =
+      handleDisconnect;
+    tRef.current = t;
+  }, [search, resize, handleDisconnect, t]);
+  useEffect(() => {
+    // cleanup 可能在不同的提交里执行，先把要清理的 ref 取值固定下来
+    const ptyTimers = ptyResizeTimers.current;
+    // ResizeObserver 必须**同步**建好：挂载用的 layout effect 会立刻 observe
+    // 宿主，如果这里还排在 await 后面，那一次 observe 就打在 undefined 上，
+    // 之后宿主尺寸变化再也没人触发 resize —— 本地与 PTY 尺寸永久脱节，
+    // 表现就是远端按旧宽度换行、屏幕内容错位、提示符挤成一堆
+    const observer = new ResizeObserver(() =>
+      resizeRef.current()
+    );
+    resizeObserver.current = observer;
+    let disposed = false;
     const setup = async () => {
-      unlisteners.current = await Promise.all([
+      const listeners = await Promise.all([
         listen<{ id: string; data: string }>(
           "terminal-output",
           ({ payload }) => {
@@ -1218,33 +1440,43 @@ export function useTerminals(
             session.terminal.write(payload.data);
           }
         ),
-        listen<string>(
-          "terminal-exit",
-          ({ payload }) => {
-            setDisconnected(prev => {
-              const next = {
-                ...prev,
-                [payload]: true
-              };
-              disconnectedRef.current = next;
-              return next;
-            });
-            const session =
-              openedRef.current.find(
-                ({ id }) => id === payload
-              );
-            if (session) {
-              session.terminal.options.cursorBlink = false;
-              session.terminal.write(
-                "\r\n\x1b[38;5;244m[会话已结束]\x1b[0m\r\n"
-              );
-            }
+        listen<{
+          id: string;
+          code: number | null;
+        }>("terminal-exit", ({ payload }) => {
+          const { id, code } = payload;
+          setDisconnected(prev => {
+            const next = {
+              ...prev,
+              [id]: true
+            };
+            disconnectedRef.current = next;
+            return next;
+          });
+          const session = openedRef.current.find(
+            item => item.id === id
+          );
+          if (session) {
+            session.terminal.options.cursorBlink = false;
+            session.terminal.write(
+              `\r\n\x1b[38;5;244m${tRef.current("terminal.exited")}\x1b[0m\r\n`
+            );
           }
-        )
+          // 只有 ssh 的连接错误（退出码 255）才自动重连：本地会话退出、
+          // ssh 正常 exit 都是用户意图，就此收工
+          handleDisconnectRef.current(
+            session,
+            code
+          );
+        })
       ]);
-      resizeObserver.current = new ResizeObserver(
-        () => resize()
-      );
+      // 挂载期的连续重渲染可能在 listen 完成前就跑过 cleanup：迟到的
+      // 注册必须立刻注销，否则就是孤儿监听（输出被重复写入）
+      if (disposed) {
+        listeners.forEach(u => u());
+        return;
+      }
+      unlisteners.current = listeners;
       documentShortcutHandler.current = (
         event: KeyboardEvent
       ) => {
@@ -1253,7 +1485,7 @@ export function useTerminals(
           event.ctrlKey || event.metaKey;
         if (ctrl && key === "f") {
           event.preventDefault();
-          search.openSearch();
+          searchRef.current.openSearch();
           return;
         }
         if (
@@ -1272,8 +1504,17 @@ export function useTerminals(
     };
     setup();
     return () => {
+      disposed = true;
       unlisteners.current.forEach(u => u());
-      resizeObserver.current?.disconnect();
+      unlisteners.current = [];
+      observer.disconnect();
+      // 待执行的重连定时器一并清掉：组件没了就不该再拉起 PTY
+      cancelAllReconnects();
+      // 待发送的 PTY 尺寸同步同样作废
+      ptyTimers.forEach(timer =>
+        clearTimeout(timer)
+      );
+      ptyTimers.clear();
       if (documentShortcutHandler.current)
         window.removeEventListener(
           "keydown",
@@ -1281,7 +1522,8 @@ export function useTerminals(
           true
         );
     };
-  }, [resize, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只随挂载注册一次，回调经 ref 取最新值（见上）
+  }, []);
 
   return {
     opened,
@@ -1289,6 +1531,8 @@ export function useTerminals(
     active,
     setTerminalHost,
     disconnected,
+    /** 手动重连（断线后右键终端里的「重新连接」） */
+    reconnect: reconnectSession,
     open,
     duplicate,
     activate,

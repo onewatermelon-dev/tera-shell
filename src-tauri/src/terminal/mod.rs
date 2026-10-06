@@ -275,12 +275,28 @@ struct Output {
 	data: String,
 }
 
+/// 会话结束事件。除了 id 还要带退出码。
+#[derive(Clone, Serialize)]
+struct Exit {
+	id: String,
+	/// 子进程退出码；进程状态取不到时为 None。
+	///
+	/// 前端靠它区分「用户敲了 exit」（远端 shell 的退出码，通常 0）与
+	/// 「连接断开」（ssh 出错固定以 255 退出）—— 只有后者才自动重连。
+	code: Option<u32>,
+}
+
 /// 密码提示检测缓冲区保留的尾部字节数：够覆盖 "xxx@host's password:" 这类提示即可。
 const PASSWORD_HINT_TAIL: usize = 256;
 
 #[tauri::command(rename = "terminal_start")]
 pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Result<(), String> {
+	let rows = config.rows.unwrap_or(30);
+	let cols = config.cols.unwrap_or(100);
 	// 只记录连接目标，密码和终端输入内容一律不进日志。
+	// 尺寸也记上：它与随后的「终端尺寸变化」一对照，就能看出 PTY 是否
+	// 「生错了尺寸」——出生尺寸与实际不符时 ConPTY 会整屏重绘，
+	// 屏幕上就会堆出重复的提示符。
 	if config.kind == "ssh" {
 		info!(
             session = %config.id,
@@ -290,13 +306,13 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
                 .filter(|v| !v.trim().is_empty())
                 .map_or_else(|| config.host.clone().unwrap_or_default(), |u| format!("{u}@{}", config.host.as_deref().unwrap_or_default())),
             port = config.port.unwrap_or(22),
+            rows,
+            cols,
             "SSH 会话启动"
         );
 	} else {
-		info!(session = %config.id, "本地会话启动");
+		info!(session = %config.id, rows, cols, "本地会话启动");
 	}
-	let rows = config.rows.unwrap_or(30);
-	let cols = config.cols.unwrap_or(100);
 	let pty = native_pty_system()
 		.openpty(PtySize {
 			rows,
@@ -374,12 +390,14 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 			child.try_wait().unwrap_or(None).is_some()
 		};
 		if finished {
-			finalize_session(&watch_app, &watch_id, &watch_exited);
+			finalize_session(&watch_app, &watch_id, &watch_exited, &watch_child);
 			break;
 		} 
 		thread::sleep(Duration::from_millis(200));
 	});
 	let read_exited = exited.clone();
+	// 读取线程收尾时也要能问到退出码（进程可能已经死透）
+	let read_child = child.clone();
 	thread::spawn(move || {
 		let mut buffer = [0_u8; 8192];
 		// 保存的密码自动应答：累积输出尾部，识别 ssh 登录提示后一次性写入密码。
@@ -450,19 +468,40 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 			}
 		}
 		debug!(session = %id, "终端输出线程退出");
-		finalize_session(&app,&id,&read_exited)
+		finalize_session(&app,&id,&read_exited,&read_child)
 	});
 	Ok(())
 }
 
 /// 会话断开收尾：打印日志并通知前端（红点、停止光标闪烁、[会话已结束] 提示
 /// 读取线程 EOF 与子进程退出检查线程都可能触发，用 exited 标记保证只处理一次
-fn finalize_session(app: &AppHandle, id: &str, exited: &AtomicBool) {
+fn finalize_session(
+	app: &AppHandle,
+	id: &str,
+	exited: &AtomicBool,
+	child: &Arc<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
+) {
 	if exited.swap(true, Ordering::Relaxed) {
 		return;
 	}
-	info!(session = %id,"会话连接断开");
-	if let Err(error) = app.emit("terminal-exit", id) {
+	// 退出码必须带上：ssh 用它表达「连接出错」（255），前端据此决定是
+	// 自动重连还是就此收工。try_wait 的结果由 child 自己缓存，
+	// watch 线程先问过一次也不影响这里取值（读线程 EOF 路径可能拿不到）。
+	let code = {
+		let mut child = child.lock().unwrap_or_else(|e| e.into_inner());
+		child
+			.try_wait()
+			.unwrap_or(None)
+			.map(|status| status.exit_code())
+	};
+	info!(session = %id, code = ?code, "会话连接断开");
+	if let Err(error) = app.emit(
+		"terminal-exit",
+		Exit {
+			id: id.to_string(),
+			code,
+		},
+	) {
 		error!(session = %id,"终端退出事件发送失败：{error}");
 	}
 }
@@ -496,6 +535,13 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 		"-tt",
 		"-o",
 		"StrictHostKeyChecking=accept-new",
+		// 心跳：拔网线、VPN 掉线这类「静默断开」下，ssh 会一直等 TCP 超时，
+		// 几分钟都不退出，前端也就等不到 terminal-exit、无从触发自动重连。
+		// 每 15 秒探活、连续 3 次无响应即判定断开 ⇒ 最迟约 45 秒退出（255）。
+		"-o",
+		"ServerAliveInterval=15",
+		"-o",
+		"ServerAliveCountMax=3",
 		"-p",
 		&config.port.unwrap_or(22).to_string(),
 		&target,
@@ -581,7 +627,6 @@ fn record_input(id: &str, session: &mut Session, data: &str, command: Option<&st
 
 #[tauri::command(rename = "terminal_resize")]
 pub fn resize(id: String, rows: u16, cols: u16, terminals: State<Terminals>) -> Result<(), String> {
-	debug!(session = %id, rows, cols, "终端缩放");
 	let mut terminals = terminals
 		.0
 		.lock()
@@ -591,9 +636,21 @@ pub fn resize(id: String, rows: u16, cols: u16, terminals: State<Terminals>) -> 
 		.ok_or("终端会话不存在")?;
 	// 同尺寸直接跳过：ConPTY 对 resize（哪怕等尺寸）可能整屏重绘，
 	// 会抹掉前端画的欢迎横幅
-	if *session.size.lock().map_err(|_| "尺寸状态不可用")? == (rows, cols) {
+	let previous = *session.size.lock().map_err(|_| "尺寸状态不可用")?;
+	if previous == (rows, cols) {
 		return Ok(());
 	}
+	// 每次尺寸变化都会让 ConPTY 整屏重绘、远端 shell 重画一遍提示符。
+	// 屏幕上出现「一串重复提示符」时，先看这里记的次数和尺寸序列：
+	// 次数多＝前端在连续抖动，出生尺寸与首个 to_* 不同＝PTY 生错了尺寸。
+	info!(
+		session = %id,
+		from_rows = previous.0,
+		from_cols = previous.1,
+		to_rows = rows,
+		to_cols = cols,
+		"终端尺寸变化"
+	);
 	session.master.resize(PtySize {
 		rows,
 		cols,
@@ -615,6 +672,10 @@ pub fn close(id: String, terminals: State<Terminals>) -> Result<(), String> {
 		.remove(&id)
 	{
 		Some(session) => {
+			// 用户主动关闭：先置位 exited，让读取线程/watch 线程静默收尾，
+			// 不再补发 terminal-exit —— 前端此刻已把标签移走，
+			// 这条迟到的事件只会干扰自动重连的判断。
+			session.exited.store(true, Ordering::Relaxed);
 			let mut child = session
 				.child
 				.lock()

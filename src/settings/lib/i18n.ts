@@ -266,6 +266,12 @@ const zhCN = {
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
   "terminal.fontSizeHint": "字号 {size} px",
+  "terminal.reconnect.pending":
+    "连接断开，{delay} 秒后自动重连（第 {attempt}/{max} 次）",
+  "terminal.reconnect.trying":
+    "正在重连…（第 {attempt}/{max} 次）",
+  "terminal.reconnect.giveUp":
+    "自动重连已放弃，可在终端右键菜单里手动重新连接",
   "terminal.confirmClose": "确定关闭这个会话吗？",
   "terminal.needSession": "请先打开一个会话",
 
@@ -669,6 +675,12 @@ const enUS: Record<MessageKey, string> = {
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",
   "terminal.fontSizeHint": "Font size {size} px",
+  "terminal.reconnect.pending":
+    "Connection lost, reconnecting in {delay}s (attempt {attempt}/{max})",
+  "terminal.reconnect.trying":
+    "Reconnecting… (attempt {attempt}/{max})",
+  "terminal.reconnect.giveUp":
+    "Auto-reconnect gave up. Use the terminal context menu to reconnect manually",
   "terminal.confirmClose": "Close this session?",
   "terminal.needSession": "Open a session first",
 
