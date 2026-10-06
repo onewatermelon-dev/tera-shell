@@ -496,7 +496,9 @@ export function parseNetInfo(
     const proc = /\("(.+?)"[^)]*?pid=(\d+)/.exec(
       rest ?? ""
     );
-    const key = `${proto}|${local}`;
+    // 键用 协议+端口：IPv6 监听 [::]:8885 与 v4-mapped 连接
+    // [::ffff:x.x.x.x]:8885 是同一个服务，必须合并到一行（见函数注释）
+    const key = `${proto}|${port}`;
     let group = groups.get(key);
     if (!group) {
       group = {
@@ -512,12 +514,14 @@ export function parseNetInfo(
       };
       groups.set(key, group);
     }
-    group.recv += Number(recvq) || 0;
-    group.send += Number(sendq) || 0;
     if (
       state !== "LISTEN" &&
       state !== "UNCONN"
     ) {
+      // 队列只统计连接行：监听 socket 的 sendq/recvq 是 accept
+      // backlog（如 0/128），加进来只会污染速率与队列展示
+      group.recv += Number(recvq) || 0;
+      group.send += Number(sendq) || 0;
       group.conns += 1;
       const peerIp = splitAddr(peer ?? "").ip;
       if (peerIp && peerIp !== "*")

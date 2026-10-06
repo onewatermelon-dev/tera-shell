@@ -38,3 +38,5 @@ AGENTS.md
 *.tsbuildinfo
 .zcode/
 .workbuddy
+.zcodeignore
+.mcp.json

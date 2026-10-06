@@ -27,7 +27,7 @@ const tool = (id: string): ProtocolMessage => ({
 
 describe("repairToolMessages", () => {
   it("完整流原样通过", () => {
-    const msgs = [
+    const msgs: ProtocolMessage[] = [
       { role: "user", content: "hi" },
       assistantCalls("a"),
       tool("a")
@@ -44,9 +44,15 @@ describe("repairToolMessages", () => {
       tool("b")
     ]);
     expect(out).toHaveLength(4);
+    // 占位补在已有回复之后（协议按 tool_call_id 配对，不依赖顺序）
     expect(out[2]).toMatchObject({
       role: "tool",
-      tool_call_id: "a"
+      tool_call_id: "b"
+    });
+    expect(out[3]).toMatchObject({
+      role: "tool",
+      tool_call_id: "a",
+      content: "[该命令未获得执行结果，已跳过]"
     });
   });
 
@@ -57,7 +63,7 @@ describe("repairToolMessages", () => {
       { role: "user", content: "继续" }
     ]);
     expect(out).toHaveLength(4);
-    expect(out[2].tool_call_id).toBe("a");
+    expect(out[2]!.tool_call_id).toBe("a");
     expect(out[3]).toMatchObject({
       role: "user",
       content: "继续"
@@ -69,7 +75,7 @@ describe("repairToolMessages", () => {
       assistantCalls("a")
     ]);
     expect(out).toHaveLength(2);
-    expect(out[1].tool_call_id).toBe("a");
+    expect(out[1]!.tool_call_id).toBe("a");
   });
 
   it("孤儿 tool 消息丢弃", () => {
@@ -78,7 +84,7 @@ describe("repairToolMessages", () => {
       tool("ghost")
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0].role).toBe("user");
+    expect(out[0]!.role).toBe("user");
   });
 
   it("连续两轮 tool_calls 都补齐", () => {
@@ -89,6 +95,11 @@ describe("repairToolMessages", () => {
       tool("c")
     ]);
     expect(out).toHaveLength(5);
-    expect(out[3].tool_call_id).toBe("b");
+    // 第二轮欠的 b 在流末尾 flush 时补占位
+    expect(out[3]!.tool_call_id).toBe("c");
+    expect(out[4]).toMatchObject({
+      role: "tool",
+      tool_call_id: "b"
+    });
   });
 });
