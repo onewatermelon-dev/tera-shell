@@ -447,7 +447,31 @@ body.tab-dragging {
 }
 
 .terminal-instance {
+  position: relative;
   height: 100%;
+}
+
+// Ctrl + 滚轮缩放字号时的悬浮提示（节点由 terminal/lib/fontZoom.ts 建）。
+// 绝对定位相对 .terminal-instance，不参与 xterm 的尺寸测量；
+// pointer-events 关掉，免得盖住终端右下角的点击。
+.terminal-zoom-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--foreground);
+  pointer-events: none;
+  background: var(--segment);
+  border-radius: 9999px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.terminal-zoom-hint.is-visible {
+  opacity: 0.92;
 }
 
 // .xterm 收缩到网格实际大小：网格右侧/下方的空白区域归 .terminal-instance（普通

@@ -265,6 +265,7 @@ const zhCN = {
   "terminal.passwordHint":
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
+  "terminal.fontSizeHint": "字号 {size} px",
   "terminal.confirmClose": "确定关闭这个会话吗？",
   "terminal.needSession": "请先打开一个会话",
 
@@ -667,6 +668,7 @@ const enUS: Record<MessageKey, string> = {
   "terminal.passwordHint":
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",
+  "terminal.fontSizeHint": "Font size {size} px",
   "terminal.confirmClose": "Close this session?",
   "terminal.needSession": "Open a session first",
 

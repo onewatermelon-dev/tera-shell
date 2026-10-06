@@ -102,6 +102,16 @@ export default function App() {
     refocusAfterAction(refocusActive);
   }
 
+  /**
+   * Ctrl + 滚轮缩放字号后的落地：写回设置。
+   *
+   * 写盘即「记忆」—— 下次启动仍是这个字号；同时外观 effect 会把
+   * 新字号推给所有已打开的终端（含拆分窗格）。
+   */
+  function setTerminalFontSize(fontSize: number) {
+    appSettings.update({ fontSize });
+  }
+
   const terminals = useTerminals(
     // 已关闭/已断开的会话上迟到的 write/resize 只会得到这个错误，
     // 对用户毫无价值 —— 静默丢弃，其它错误照常展示
@@ -120,7 +130,8 @@ export default function App() {
           password: encrypted
         });
     },
-    appSettings.settings
+    appSettings.settings,
+    setTerminalFontSize
   );
 
   /** 把键盘焦点还给活动终端（竖条按钮动作 / 菜单关闭后的焦点回还）。 */

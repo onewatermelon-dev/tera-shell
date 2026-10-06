@@ -27,11 +27,14 @@ import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
+import { attachFontZoom } from "@/terminal/lib/fontZoom";
 import { useTerminalSearch } from "@/terminal/lib/useTerminalSearch";
 import {
+  DEFAULT_FONT_SIZE,
   resolveFontFamily,
   type AppSettings
 } from "@/settings/lib/settings";
+import { useT } from "@/settings/lib/i18n";
 import {
   resolveColorScheme,
   toXtermTheme
@@ -63,8 +66,16 @@ export function useTerminals(
     | "cursorStyle"
     | "cursorBlink"
     | "scrollback"
-  >
+  >,
+  /**
+   * Ctrl + 滚轮缩放字号后的落地：把新字号写回设置。
+   *
+   * 写回设置是「带记忆」的关键 —— 字号存在设置文件里，重启后照旧；
+   * 同时外观 effect 会把新字号推给所有已打开的终端。
+   */
+  onFontSizeChange: (fontSize: number) => void
 ) {
+  const t = useT();
   const [opened, setOpened] = useState<
     OpenSession[]
   >([]);
@@ -755,6 +766,17 @@ export function useTerminals(
           return true;
         }
       );
+      // Ctrl + 滚轮缩放字号：手势解析与提示都在 fontZoom，这里只提供
+      // 「当前字号」（读实例，闭包不会读到过期设置）与写回设置的出口
+      attachFontZoom({
+        host: element,
+        getFontSize: () =>
+          terminal.options.fontSize ??
+          DEFAULT_FONT_SIZE,
+        applyFontSize: onFontSizeChange,
+        formatHint: size =>
+          t("terminal.fontSizeHint", { size })
+      });
       element.addEventListener(
         "contextmenu",
         event => {
@@ -788,7 +810,13 @@ export function useTerminals(
         sourceSessionId
       };
     },
-    [onError, search, appearance]
+    [
+      onError,
+      search,
+      appearance,
+      onFontSizeChange,
+      t
+    ]
   );
 
   // ---- 6. Core session management ----
