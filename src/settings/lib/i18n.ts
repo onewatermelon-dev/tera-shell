@@ -387,6 +387,9 @@ const zhCN = {
   "settings.welcome.title": "SSH 欢迎提示",
   "settings.welcome.desc":
     "新 SSH 会话打开时在终端顶部显示功能说明卡片，可随时手动关闭。",
+  "settings.completion.title": "命令补全",
+  "settings.completion.desc":
+    "输入时在光标后以灰色提示历史与常用命令：按 → 整句接受，Ctrl+→ 按词接受。",
   "settings.dataDir.title": "数据存储路径",
   "settings.dataDir.desc":
     "会话、设置与快捷宏的导出目录（默认为用户主目录）。保存后会把现有数据复制到新位置；路径后缀 .tera-shell 不可更改。",
@@ -777,6 +780,10 @@ const enUS: Record<MessageKey, string> = {
   "settings.welcome.title": "SSH welcome tip",
   "settings.welcome.desc":
     "Show a feature overview card at the top of each new SSH session; dismiss it manually anytime.",
+  "settings.completion.title":
+    "Command completion",
+  "settings.completion.desc":
+    "Suggest history and common commands as gray ghost text while typing. Press → to accept the whole suggestion, Ctrl+→ for one word.",
   "settings.dataDir.title": "Data location",
   "settings.dataDir.desc":
     "Where sessions, settings and macros are exported (defaults to your home directory). Saving copies the current data to the new location; the .tera-shell suffix is fixed.",

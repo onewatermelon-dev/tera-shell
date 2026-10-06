@@ -25,6 +25,7 @@ import {
 } from "@/terminal/lib/catView";
 import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
+import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { useTerminalSearch } from "@/terminal/lib/useTerminalSearch";
 import {
@@ -48,10 +49,16 @@ export function useTerminals(
         encrypted: string
       ) => void)
     | undefined,
-  /** 终端外观设置：字体、字号与配色随之变化，整批终端一起更新 */
+  /**
+   * 终端外观与行为设置：字体、字号与配色随之变化，整批终端一起更新；
+   * 命令补全开关同样实时同步（新建会话取初值，已有会话由 effect 推送）。
+   */
   appearance: Pick<
     AppSettings,
-    "fontFamily" | "fontSize" | "colorScheme"
+    | "fontFamily"
+    | "fontSize"
+    | "colorScheme"
+    | "commandCompletion"
   >
 ) {
   const [opened, setOpened] = useState<
@@ -257,12 +264,17 @@ export function useTerminals(
         appearance.fontSize;
       session.terminal.options.theme = theme;
       /* eslint-enable react-hooks/immutability */
+      // 命令补全开关实时同步：关掉立即收起已显示的 ghost text
+      session.completion.setEnabled(
+        appearance.commandCompletion
+      );
     }
     resize();
   }, [
     appearance.fontFamily,
     appearance.fontSize,
     appearance.colorScheme,
+    appearance.commandCompletion,
     resize
   ]);
 
@@ -356,6 +368,25 @@ export function useTerminals(
       let explaining = false;
       // cat 拦截查看进行中同样吞输入（exec 拉文件 + 高亮 + pts 注入期间）
       let viewing = false;
+      // 命令补全（PSReadLine 内联预测风格）：ghost text 挂光标处，
+      // → 整句接受、Ctrl+→ 按词接受；建议刷新由输出回显驱动
+      const completion = attachCommandCompletion(
+        terminal,
+        {
+          writeToPty: data => {
+            invoke("terminal_write", {
+              id: session.id,
+              data,
+              command: null
+            }).catch(onError);
+          },
+          isInputBlocked: () =>
+            disconnectedRef.current[session.id] ||
+            explaining ||
+            viewing,
+          enabled: appearance.commandCompletion
+        }
+      );
       // pts 注入与 exec 共用：SSH 会话的 exec 目标 + 找该用户最新 pts 的
       // 脚本（cat 高亮、/? 解释、vim 改写都用这套回环）
       const ptsFind = `p=$(ps -u "$(whoami)" -o tty= --sort=start_time | grep pts | tail -1)`;
@@ -401,6 +432,13 @@ export function useTerminals(
             rawLine.lastIndexOf(trimmed);
           const prompt =
             cut > 0 ? rawLine.slice(0, cut) : "";
+          // 记录命令历史供补全建议（/? 解释不是要执行的命令，不入历史）
+          if (
+            command &&
+            !trimmed.endsWith("/?")
+          ) {
+            completion.pushHistory(command);
+          }
           if (
             session.kind === "ssh" &&
             trimmed.endsWith("/?")
@@ -650,6 +688,15 @@ export function useTerminals(
       });
       terminal.attachCustomKeyEventHandler(
         event => {
+          // 补全接管（ghost 显示中 →/Ctrl+→）：放在 ctrl 分支前面，
+          // Ctrl+→ 才不会被当普通按键放行
+          if (
+            event.type === "keydown" &&
+            completion.consumeKeydown(event)
+          ) {
+            event.preventDefault();
+            return false;
+          }
           if (
             event.type !== "keydown" ||
             !event.ctrlKey
@@ -701,6 +748,7 @@ export function useTerminals(
         terminal,
         fit,
         search: searchAddon,
+        completion,
         element,
         mounted: false,
         sourceSessionId
@@ -1101,6 +1149,10 @@ export function useTerminals(
                 ({ id }) => id === payload.id
               );
             if (!session) return;
+            // 先让补全识别备用屏切换（vim/top 等全屏应用期间不弹建议）
+            session.completion.observeOutput(
+              payload.data
+            );
             session.terminal.write(payload.data);
           }
         ),

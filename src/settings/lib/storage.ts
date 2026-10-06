@@ -18,7 +18,8 @@ export const DataName = {
   settings: "settings",
   macros: "macros",
   models: "models",
-  aiHistory: "ai_history"
+  aiHistory: "ai_history",
+  commandHistory: "command_history"
 } as const;
 
 /**

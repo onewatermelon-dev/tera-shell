@@ -37,6 +37,8 @@ export type AppSettings = {
   statusMode: StatusMode;
   /** SSH 会话欢迎卡片浮层是否展示（设置-终端里开关）。 */
   welcomeCard: boolean;
+  /** 终端命令补全（ghost text 内联建议）是否开启（设置-终端里开关）。 */
+  commandCompletion: boolean;
   /**
    * 数据存储目录。空字符串表示用默认位置（用户主目录）。
    *
@@ -64,6 +66,7 @@ export const defaultSettings: AppSettings = {
   sidebarOpen: true,
   statusMode: "macros",
   welcomeCard: true,
+  commandCompletion: true,
   dataDir: ""
 };
 
@@ -119,6 +122,8 @@ export function loadSettings(): AppSettings {
           : "macros",
       // 默认开：只有显式存过 false 才关（旧数据缺字段视为开）
       welcomeCard: parsed.welcomeCard !== false,
+      commandCompletion:
+        parsed.commandCompletion !== false,
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir

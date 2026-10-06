@@ -372,6 +372,30 @@ export default function SettingsPage({
                 />
               }
             />
+
+            <SettingsRow
+              title={t(
+                "settings.completion.title"
+              )}
+              description={t(
+                "settings.completion.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.completion.title"
+                  )}
+                  isSelected={
+                    settings.commandCompletion
+                  }
+                  onChange={commandCompletion =>
+                    onChange({
+                      commandCompletion
+                    })
+                  }
+                />
+              }
+            />
           </>
         ) : section === "colorScheme" ? (
           <SettingsRow

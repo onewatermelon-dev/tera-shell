@@ -1000,3 +1000,12 @@ body.tab-dragging {
     color: var(--foreground);
   }
 }
+
+// 命令补全 ghost text（PSReadLine 内联预测风格）：xterm 装饰层元素
+// 锚在光标单元格上，文字用半透明前景色 —— 跟着主题变色，不需逐主题配色
+.command-ghost {
+  color: currentcolor;
+  white-space: pre;
+  pointer-events: none;
+  opacity: 0.45;
+}
