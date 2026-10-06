@@ -17,7 +17,9 @@ test-results/
 .env.*
 !.env.example
 *.log
-docs/
+# docs 下是本地笔记（如从零搭建指南），只放行 README 引用的截图目录
+docs/*
+!docs/img
 
 # Windows 系统文件
 Thumbs.db

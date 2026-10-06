@@ -6,6 +6,8 @@
 
 基于 Tauri 2 · React 19 · xterm.js 6 · Rust
 
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+
 </div>
 
 ---
@@ -151,4 +153,4 @@ tests/            # vitest 单元测试
 
 ## 📄 开源协议
 
-发布前请补充 `LICENSE` 文件（推荐 MIT）。
+本项目基于 [MIT License](./LICENSE) 开源。
