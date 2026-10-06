@@ -18,6 +18,17 @@ import {
 import { aiRunCommand } from "@/terminal/lib/aiExec";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
 
+// 面板偏好（选中模型/执行开关/黑名单）落在数据目录的 ai_prefs.json，
+// 这里原样转发，AiPanel 等调用方保持原导入路径不变
+export {
+  loadSelectedModel,
+  saveSelectedModel,
+  loadRunFlag,
+  saveRunFlag,
+  loadBlacklist,
+  saveBlacklist
+} from "@/terminal/lib/aiPrefs";
+
 /** 执行卡片上命令的执行方式：terminal = 写入活动会话终端；background = 独立 exec 通道。 */
 export type ExecCardMode =
   "terminal" | "background";
@@ -193,114 +204,6 @@ export function listOpenAiModels(): AiModelOption[] {
           model
         }))
     );
-}
-
-const MODEL_STORAGE_KEY = "ai-selected-model";
-
-/** 上次选中的模型（providerId::modelId），跨启动记住。 */
-export function loadSelectedModel():
-  string | null {
-  try {
-    return localStorage.getItem(
-      MODEL_STORAGE_KEY
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** 上次选中的模型（providerId::modelId），跨启动记住。 */
-export function saveSelectedModel(
-  value: string
-): void {
-  try {
-    localStorage.setItem(
-      MODEL_STORAGE_KEY,
-      value
-    );
-  } catch {
-    /* 忽略：只是记住偏好的次要功能 */
-  }
-}
-
-/**
- * 执行策略开关的存储键（值为 "1"/"0"）。
- *
- * v2：首版「自动执行」默认开，旧键可能残留用户当时保存的开启值；
- * 换键让所有人回到「默认都关」的起点。
- */
-export const RUN_FLAG_KEYS = {
-  autoExecute: "ai-auto-execute-v2",
-  autoApply: "ai-auto-apply-v2"
-} as const;
-
-/**
- * 读取执行策略开关，跨启动记住。两个开关默认都关：
- * 只读命令与文件更改都需要用户手动确认。
- */
-export function loadRunFlag(
-  name: keyof typeof RUN_FLAG_KEYS
-): boolean {
-  try {
-    return (
-      localStorage.getItem(
-        RUN_FLAG_KEYS[name]
-      ) === "1"
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** 保存执行策略开关，跨启动记住。 */
-export function saveRunFlag(
-  name: keyof typeof RUN_FLAG_KEYS,
-  value: boolean
-): void {
-  try {
-    localStorage.setItem(
-      RUN_FLAG_KEYS[name],
-      value ? "1" : "0"
-    );
-  } catch {
-    /* 忽略：只是记住偏好的次要功能 */
-  }
-}
-
-const BLACKLIST_KEY = "ai-cmd-blacklist";
-
-/** 读取自动执行命令黑名单（命令名数组，如 ["rm", "kill"]）。 */
-export function loadBlacklist(): string[] {
-  try {
-    const raw = localStorage.getItem(
-      BLACKLIST_KEY
-    );
-    const list = raw
-      ? (JSON.parse(raw) as unknown[])
-      : [];
-    return Array.isArray(list)
-      ? list.filter(
-          (item): item is string =>
-            typeof item === "string"
-        )
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-/** 保存自动执行命令黑名单。 */
-export function saveBlacklist(
-  list: string[]
-): void {
-  try {
-    localStorage.setItem(
-      BLACKLIST_KEY,
-      JSON.stringify(list)
-    );
-  } catch {
-    /* 忽略：次要功能 */
-  }
 }
 
 /**

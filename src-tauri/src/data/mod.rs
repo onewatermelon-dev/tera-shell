@@ -9,7 +9,8 @@
 //!   ├── macros.json
 //!   ├── models.json
 //!   ├── ai_history.json
-//!   └── command_history.json
+//!   ├── command_history.json
+//!   └── ai_prefs.json
 //! ```
 //!
 //! 根目录本身记在 `<用户主目录>/.tera-shell/location.json` —— 配置不能和
@@ -30,13 +31,14 @@ const SUBDIR: &str = ".tera-shell";
 const LOCATION_FILE: &str = "location.json";
 
 /// 允许被读写的逻辑数据名。限定白名单，避免前端传任意文件名。
-const ALLOWED: [&str; 6] = [
+const ALLOWED: [&str; 7] = [
 	"sessions",
 	"settings",
 	"macros",
 	"models",
 	"ai_history",
 	"command_history",
+	"ai_prefs",
 ];
 
 fn ensure_name(name: &str) -> Result<(), String> {
@@ -54,9 +56,18 @@ fn home_dir(app: &AppHandle) -> PathBuf {
 		.unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// 应用自有的家目录据点：`<主目录>/.tera-shell`。
+///
+/// location.json 固定在这里（数据目录可以搬走，「数据在哪」的指针不能跟着
+/// 搬）；日志与 SFTP 编辑临时文件也锚在这里 —— 它们是本机运行产物，
+/// 刻意不跟着可迁移的数据目录走。
+pub(crate) fn home_anchor(app: &AppHandle) -> PathBuf {
+	home_dir(app).join(SUBDIR)
+}
+
 /// 配置文件的完整路径：`<主目录>/.tera-shell/location.json`。
 fn location_path(app: &AppHandle) -> PathBuf {
-	home_dir(app).join(SUBDIR).join(LOCATION_FILE)
+	home_anchor(app).join(LOCATION_FILE)
 }
 
 /// 读配置里的数据根目录；没有配置或解析失败时返回 `None`（表示用主目录）。

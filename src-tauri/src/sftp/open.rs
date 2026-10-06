@@ -1,7 +1,7 @@
 //! 远程文件的本地编辑与自动回传。
 //!
 //! 远程文件本地程序够不着，所以"编辑"是三步：
-//!   1. 把它拉到系统临时目录下的 `tera-shell/`；
+//!   1. 把它拉到 `<主目录>/.tera-shell/tmp/`；
 //!   2. 把本地路径交给前端，走 `fs_open_path` / `fs_open_notepad` 打开；
 //!   3. 后台盯着这个临时文件，一旦被保存（mtime 变化）就自动写回远端。
 //!
@@ -105,6 +105,7 @@ fn upload_back(
 /// 避免一个文件对应多个线程。
 #[tauri::command(rename = "sftp_edit_remote")]
 pub async fn edit_remote(
+	app: tauri::AppHandle,
 	pool: State<'_, SftpPool>,
 	watchers: State<'_, EditWatchers>,
 	job: TransferJob,
@@ -124,15 +125,35 @@ pub async fn edit_remote(
 			password.as_deref(),
 		)?;
 
-		// 1. 落到临时目录
+		// 1. 落到应用家目录据点的 tmp/：与日志同为本机运行产物，锚在
+		//    ~/.tera-shell 下（副本含远端文件内容，不该散落在系统 TEMP）
 		let name = Path::new(&remote)
 			.file_name()
 			.map(|value| value.to_string_lossy().into_owned())
 			.unwrap_or_else(|| "remote-file".to_string());
-		let directory = std::env::temp_dir().join("tera-shell");
+		let directory = crate::data::home_anchor(&app).join("tmp");
 		std::fs::create_dir_all(&directory).map_err(|error| {
 			format!("创建临时目录失败：{error}")
 		})?;
+		// 顺手清一周前的旧编辑副本：目录进了家目录后系统不会再帮着清，
+		// 越攒越多还留存着远端文件内容；正被外部程序占用的删不掉就随它去
+		if let Ok(entries) = std::fs::read_dir(&directory) {
+			for entry in entries.flatten() {
+				let stale = entry
+					.metadata()
+					.ok()
+					.and_then(|meta| meta.modified().ok())
+					.and_then(|modified| {
+						std::time::SystemTime::now()
+							.duration_since(modified)
+							.ok()
+					})
+					.is_some_and(|age| age.as_secs() > 7 * 24 * 3600);
+				if stale {
+					let _ = std::fs::remove_file(entry.path());
+				}
+			}
+		}
 		let local = directory.join(name);
 		download_to(
 			&connection,

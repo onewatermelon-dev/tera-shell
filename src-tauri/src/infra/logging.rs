@@ -13,7 +13,6 @@ use std::{
 };
 
 use chrono::Local;
-use tauri::Manager;
 use tracing_subscriber::{
     EnvFilter,
     fmt::MakeWriter,
@@ -52,11 +51,10 @@ pub fn init(app: &tauri::App) {
     tracing::info!("日志初始化完成：{}", dir.display());
 }
 
-/// 日志根目录：优先应用日志目录，取不到时退回系统临时目录。
+/// 日志根目录：固定在 `<主目录>/.tera-shell/logs`（本机运行产物，不跟
+/// 可迁移的数据目录走）；目录本身由 init 里的 create_dir_all 创建。
 fn log_dir(app: &tauri::App) -> PathBuf {
-    app.path()
-        .app_log_dir()
-        .unwrap_or_else(|_| std::env::temp_dir())
+    crate::data::home_anchor(app.handle()).join("logs")
 }
 
 /// 按天归档、限量滚动的日志写入器。

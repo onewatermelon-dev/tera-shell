@@ -33,6 +33,10 @@ import { useT } from "@/settings/lib/i18n";
 import type { StatusMode } from "@/settings/lib/settings";
 import type { TerminalMacro } from "@/terminal/lib/terminalMacros";
 import {
+  loadPanelWidth,
+  savePanelWidth
+} from "@/terminal/lib/aiPrefs";
+import {
   PlusOutlined,
   DownOutlined,
   DesktopOutlined,
@@ -571,17 +575,11 @@ export default function TerminalWorkspace({
   }, [drawerOpen, setPtyResizePaused]);
   const [aiWidth, setAiWidth] = useState<number>(
     () => {
-      try {
-        // 最小宽度 390：旧存档里更小的值一并抬回来
-        return Math.max(
-          390,
-          Number(
-            localStorage.getItem("ai-panel-width")
-          ) || 390
-        );
-      } catch {
-        return 390;
-      }
+      // 最小宽度 390：旧存档里更小的值一并抬回来
+      return Math.max(
+        390,
+        loadPanelWidth() ?? 390
+      );
     }
   );
   const aiHostRef = useRef<HTMLDivElement>(null);
@@ -617,14 +615,7 @@ export default function TerminalWorkspace({
 
   function endAiResize() {
     aiDragRef.current = null;
-    try {
-      localStorage.setItem(
-        "ai-panel-width",
-        String(aiWidth)
-      );
-    } catch {
-      /* 记住宽度是次要功能，写失败忽略 */
-    }
+    savePanelWidth(aiWidth);
   }
 
   return (
