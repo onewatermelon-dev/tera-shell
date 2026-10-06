@@ -150,12 +150,8 @@ export function buildMenus(
           id: "devtools",
           label: t("app.action.devtools"),
           shortcut: "F12"
-        },
-        {
-          id: "settings",
-          label: t("app.action.settings"),
-          disabled: true
         }
+        // 设置入口固定在竖条底部的齿轮按钮，不在菜单里重复
       ]
     }
   ];
