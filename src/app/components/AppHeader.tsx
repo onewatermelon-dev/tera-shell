@@ -16,6 +16,7 @@ import AppRail, {
   type MenuState
 } from "@/app/components/AppRail";
 import { useT } from "@/settings/lib/i18n";
+import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import type { StatusMode } from "@/settings/lib/settings";
 import {
   MinusOutlined,
@@ -45,6 +46,8 @@ export type HeaderActions = {
   openSftp: () => void;
   /** 打开设置页。 */
   openSettings: () => void;
+  /** 竖条菜单收起后的焦点回还（菜单动作多为终端操作）。 */
+  refocusTerminal: () => void;
 };
 
 type Props = {
@@ -59,6 +62,8 @@ type Props = {
   onToggleStatus: () => void;
   /** 打开设置页时隐藏菜单入口 —— 那里的动作对设置页没有意义。 */
   hideMenus?: boolean;
+  /** 菜单收起（动作执行或直接关闭）后的焦点回还回调。 */
+  onMenuClosed: () => void;
 };
 
 // 无框窗口：原生标题栏被移除，最小化/最大化/关闭由这里接管。
@@ -69,7 +74,8 @@ export default function AppHeader({
   onToggleSidebar,
   statusMode,
   onToggleStatus,
-  hideMenus = false
+  hideMenus = false,
+  onMenuClosed
 }: Props) {
   const t = useT();
   const appWindow = useRef(getCurrentWindow());
@@ -126,6 +132,9 @@ export default function AppHeader({
     const handler = handlers[id];
     if (handler) {
       handler();
+      // 菜单动作几乎都是针对终端的：收起后若焦点还留在竖条按钮上
+      // 就还给终端（已导向搜索框/对话框/设置页则不打扰）
+      refocusAfterAction(actions.refocusTerminal);
       return;
     }
     // 菜单项与动作未对齐时不再静默失败，控制台直接点名，避免"点了没反应"难排查
@@ -142,6 +151,7 @@ export default function AppHeader({
         <AppRail
           menus={menus}
           onAction={runAction}
+          onMenuClosed={onMenuClosed}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={onToggleSidebar}
           onOpenSettings={actions.openSettings}

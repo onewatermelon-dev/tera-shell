@@ -251,6 +251,36 @@ export default function TerminalWorkspace({
       ? active?.id
       : splitVisibleId;
 
+  // 焦点回还：窗口重新抢回系统焦点、或点击终端区空白处时，只要用户
+  // 没有明确在别处打字（AI 输入框 / 搜索框等文本控件），且设置页没开，
+  // 就把键盘焦点交还给正对着的终端 —— 光标常亮闪烁，不用每次先点一下。
+  const refocusTerminal = useCallback(() => {
+    if (document.querySelector(".settings-page"))
+      return;
+    const el = document.activeElement;
+    if (
+      el instanceof HTMLElement &&
+      (el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.isContentEditable)
+    )
+      return;
+    if (macroTargetId)
+      onFocusTerminal(macroTargetId);
+  }, [macroTargetId, onFocusTerminal]);
+
+  useEffect(() => {
+    window.addEventListener(
+      "focus",
+      refocusTerminal
+    );
+    return () =>
+      window.removeEventListener(
+        "focus",
+        refocusTerminal
+      );
+  }, [refocusTerminal]);
+
   /** 左栏标签条真正滚动的元素：HeroUI Tabs.List 内部的 ScrollShadow
    *  （overflow-x: auto）。外层 .tabs 不溢出、scrollLeft 恒为 0，拿它算
    *  溢出只会看到右侧被藏起来的标签。按"内容宽 > 可视宽"从后代里找，
@@ -1019,9 +1049,11 @@ export default function TerminalWorkspace({
                 ref={onTerminalHost}
                 className="terminal-host"
                 // 点进左栏终端就把活动栏收回左栏，胶囊跟着回到对应会话标签
-                onMouseDown={() =>
-                  setFocusedPane("main")
-                }
+                onMouseDown={() => {
+                  setFocusedPane("main");
+                  if (active)
+                    onFocusTerminal(active.id);
+                }}
                 style={{
                   // grow 权重分配「剩余空间」（已扣除 4px 分隔条）：
                   // 50% 时分割线恰在正中；若用固定 basis，
@@ -1037,9 +1069,10 @@ export default function TerminalWorkspace({
                 ref={onSplitHost}
                 className="terminal-host terminal-host--split"
                 // 点进拆分窗格就把活动栏切过去
-                onMouseDown={() =>
-                  setFocusedPane("split")
-                }
+                onMouseDown={() => {
+                  setFocusedPane("split");
+                  onFocusTerminal(splitVisibleId);
+                }}
                 style={{
                   flex: `${1 - splitRatio} 1 0%`
                 }}
@@ -1053,6 +1086,10 @@ export default function TerminalWorkspace({
               key="host"
               ref={onTerminalHost}
               className="terminal-host"
+              onMouseDown={() => {
+                if (active)
+                  onFocusTerminal(active.id);
+              }}
             ></div>
           )
         ) : (

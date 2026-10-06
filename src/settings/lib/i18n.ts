@@ -390,6 +390,14 @@ const zhCN = {
   "settings.completion.title": "命令补全",
   "settings.completion.desc":
     "输入时在光标后以灰色提示历史与常用命令：按 → 整句接受，Ctrl+→ 按词接受。",
+  "settings.cursor.title": "光标样式",
+  "settings.cursor.desc": "终端光标的形状。",
+  "settings.cursor.block": "方块",
+  "settings.cursor.underline": "下划线",
+  "settings.cursor.bar": "竖线",
+  "settings.cursorBlink.title": "光标闪烁",
+  "settings.cursorBlink.desc":
+    "终端光标是否闪烁。",
   "settings.dataDir.title": "数据存储路径",
   "settings.dataDir.desc":
     "会话、设置与快捷宏的导出目录（默认为用户主目录）。保存后会把现有数据复制到新位置；路径后缀 .tera-shell 不可更改。",
@@ -784,6 +792,15 @@ const enUS: Record<MessageKey, string> = {
     "Command completion",
   "settings.completion.desc":
     "Suggest history and common commands as gray ghost text while typing. Press → to accept the whole suggestion, Ctrl+→ for one word.",
+  "settings.cursor.title": "Cursor style",
+  "settings.cursor.desc":
+    "The shape of the terminal cursor.",
+  "settings.cursor.block": "Block",
+  "settings.cursor.underline": "Underline",
+  "settings.cursor.bar": "Bar",
+  "settings.cursorBlink.title": "Cursor blink",
+  "settings.cursorBlink.desc":
+    "Whether the terminal cursor blinks.",
   "settings.dataDir.title": "Data location",
   "settings.dataDir.desc":
     "Where sessions, settings and macros are exported (defaults to your home directory). Saving copies the current data to the new location; the .tera-shell suffix is fixed.",

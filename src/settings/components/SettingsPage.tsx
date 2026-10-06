@@ -35,6 +35,7 @@ import {
   MIN_FONT_SIZE,
   TERMINAL_FONT_FALLBACK,
   type AppSettings,
+  type CursorStyle,
   type LanguageMode,
   type ThemeMode
 } from "@/settings/lib/settings";
@@ -88,6 +89,24 @@ const localeOptions = (
   }
 ];
 
+/** 终端光标形状下拉。 */
+const cursorStyleOptions = (
+  t: Translator
+): SelectOption<CursorStyle>[] => [
+  {
+    value: "block",
+    label: t("settings.cursor.block")
+  },
+  {
+    value: "underline",
+    label: t("settings.cursor.underline")
+  },
+  {
+    value: "bar",
+    label: t("settings.cursor.bar")
+  }
+];
+
 type SettingsPageProps = {
   settings: AppSettings;
   onChange: (patch: Partial<AppSettings>) => void;
@@ -113,6 +132,10 @@ export default function SettingsPage({
   );
   const localeList = useMemo(
     () => localeOptions(t),
+    [t]
+  );
+  const cursorList = useMemo(
+    () => cursorStyleOptions(t),
     [t]
   );
   const [section, setSection] =
@@ -348,6 +371,47 @@ export default function SettingsPage({
                     onChange({
                       fontSize: Number(size)
                     })
+                  }
+                />
+              }
+            />
+
+            <SettingsRow
+              title={t("settings.cursor.title")}
+              description={t(
+                "settings.cursor.desc"
+              )}
+              control={
+                <SettingsSelect
+                  value={settings.cursorStyle}
+                  options={cursorList}
+                  ariaLabel={t(
+                    "settings.cursor.title"
+                  )}
+                  onChange={cursorStyle =>
+                    onChange({ cursorStyle })
+                  }
+                />
+              }
+            />
+
+            <SettingsRow
+              title={t(
+                "settings.cursorBlink.title"
+              )}
+              description={t(
+                "settings.cursorBlink.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.cursorBlink.title"
+                  )}
+                  isSelected={
+                    settings.cursorBlink
+                  }
+                  onChange={cursorBlink =>
+                    onChange({ cursorBlink })
                   }
                 />
               }

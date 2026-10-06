@@ -22,6 +22,10 @@ export type LanguageMode =
 /** 底部状态栏的形态：macros=快捷宏，info=系统信息栏。 */
 export type StatusMode = "macros" | "info";
 
+/** 终端光标形状。 */
+export type CursorStyle =
+  "block" | "underline" | "bar";
+
 export type AppSettings = {
   /** 终端字体族。留空表示用内置默认（见 TERMINAL_FONT_FALLBACK）。 */
   fontFamily: string;
@@ -39,6 +43,10 @@ export type AppSettings = {
   welcomeCard: boolean;
   /** 终端命令补全（ghost text 内联建议）是否开启（设置-终端里开关）。 */
   commandCompletion: boolean;
+  /** 终端光标形状（设置-终端里选择）。 */
+  cursorStyle: CursorStyle;
+  /** 终端光标是否闪烁（设置-终端里开关）。 */
+  cursorBlink: boolean;
   /**
    * 数据存储目录。空字符串表示用默认位置（用户主目录）。
    *
@@ -67,6 +75,8 @@ export const defaultSettings: AppSettings = {
   statusMode: "macros",
   welcomeCard: true,
   commandCompletion: true,
+  cursorStyle: "block",
+  cursorBlink: true,
   dataDir: ""
 };
 
@@ -124,6 +134,13 @@ export function loadSettings(): AppSettings {
       welcomeCard: parsed.welcomeCard !== false,
       commandCompletion:
         parsed.commandCompletion !== false,
+      // 光标形状非法值一律退回方块
+      cursorStyle:
+        parsed.cursorStyle === "underline" ||
+        parsed.cursorStyle === "bar"
+          ? parsed.cursorStyle
+          : "block",
+      cursorBlink: parsed.cursorBlink !== false,
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir

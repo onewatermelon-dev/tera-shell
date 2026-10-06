@@ -59,6 +59,8 @@ export function useTerminals(
     | "fontSize"
     | "colorScheme"
     | "commandCompletion"
+    | "cursorStyle"
+    | "cursorBlink"
   >
 ) {
   const [opened, setOpened] = useState<
@@ -263,6 +265,10 @@ export function useTerminals(
       session.terminal.options.fontSize =
         appearance.fontSize;
       session.terminal.options.theme = theme;
+      session.terminal.options.cursorStyle =
+        appearance.cursorStyle;
+      session.terminal.options.cursorBlink =
+        appearance.cursorBlink;
       /* eslint-enable react-hooks/immutability */
       // 命令补全开关实时同步：关掉立即收起已显示的 ghost text
       session.completion.setEnabled(
@@ -275,6 +281,8 @@ export function useTerminals(
     appearance.fontSize,
     appearance.colorScheme,
     appearance.commandCompletion,
+    appearance.cursorStyle,
+    appearance.cursorBlink,
     resize
   ]);
 
@@ -332,7 +340,8 @@ export function useTerminals(
       sourceSessionId: string
     ): OpenSession => {
       const terminal = new Terminal({
-        cursorBlink: true,
+        cursorBlink: appearance.cursorBlink,
+        cursorStyle: appearance.cursorStyle,
         allowProposedApi: true,
         // 字体与字号取自设置；自定义字体会拼在内置字体栈前面，
         // 没装时顺着回退，不会掉成难看的默认衬线体

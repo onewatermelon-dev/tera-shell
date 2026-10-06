@@ -8,6 +8,7 @@ import {
   TextField
 } from "@heroui/react";
 import Hint from "@/shared/components/Hint";
+import { keepTerminalFocus } from "@/shared/lib/keepTerminalFocus";
 import { useT } from "@/settings/lib/i18n";
 import {
   PlusOutlined,
@@ -153,7 +154,11 @@ export default function SessionSidebar({
   return (
     // aside 保留 complementary 语义；面板底色/描边/圆角走 .sidebar（HeroUI token）。
     // 收起/展开的开关在左侧竖条（AppRail）上，这里只负责展开态的内容。
-    <aside className="sidebar">
+    // 空白处点击不抢终端焦点（keepTerminalFocus）
+    <aside
+      className="sidebar"
+      onMouseDown={keepTerminalFocus}
+    >
       <Header className="sidebar-head">
         <div>
           <span>{t("sidebar.title")}</span>

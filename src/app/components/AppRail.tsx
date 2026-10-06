@@ -1,4 +1,5 @@
 import { Dropdown, Kbd } from "@heroui/react";
+import { keepTerminalFocus } from "@/shared/lib/keepTerminalFocus";
 import {
   MenuOutlined,
   MenuFoldOutlined,
@@ -168,6 +169,8 @@ type RailProps = {
   /** 底部状态栏形态（快捷宏 ⇆ 信息栏）与切换动作。 */
   statusMode: StatusMode;
   onToggleStatus: () => void;
+  /** 竖条菜单收起（动作执行或直接关闭）后的焦点回还回调。 */
+  onMenuClosed: () => void;
 };
 
 /**
@@ -184,16 +187,25 @@ export default function AppRail({
   onToggleSidebar,
   onOpenSettings,
   statusMode,
-  onToggleStatus
+  onToggleStatus,
+  onMenuClosed
 }: RailProps) {
   const t = useT();
   return (
     <nav
       className="app-rail"
       aria-label={t("app.menu.aria")}
+      // 点击竖条空白处不让焦点离开终端（按钮区域除外）：mousedown 阶段
+      // 阻止默认行为，click 照常触发，终端光标保持闪烁
+      onMouseDown={keepTerminalFocus}
     >
       <>
-        <Dropdown.Root>
+        <Dropdown.Root
+          // 菜单收起（执行了动作或直接关闭）后把焦点还给终端
+          onOpenChange={open => {
+            if (!open) onMenuClosed();
+          }}
+        >
           {/* 汉堡不能套 Hint：HeroUI Tooltip 的包装层会被 RAC press 判定为
               嵌套交互元素而吞掉点击，菜单打不开（外包内包都试过）——
               改用 CSS 悬停气泡（data-tip），外观对齐 Hint 的 .tooltip */}

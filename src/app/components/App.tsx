@@ -19,6 +19,7 @@ import AppHeader, {
 import SessionSidebar from "@/sessions/components/SessionSidebar";
 import TerminalWorkspace from "@/terminal/components/TerminalWorkspace";
 import { useSettings } from "@/settings/lib/useSettings";
+import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import SettingsPage from "@/settings/components/SettingsPage";
 import { useMacros } from "@/terminal/lib/useMacros";
 import MacroDialog from "@/terminal/components/MacroDialog";
@@ -84,6 +85,7 @@ export default function App() {
     appSettings.update({
       sidebarOpen: !sidebarOpen
     });
+    refocusAfterAction(refocusActive);
   }
 
   // 底部状态栏形态（快捷宏 ⇆ 信息栏）同样落盘
@@ -97,6 +99,7 @@ export default function App() {
           ? "info"
           : "macros"
     });
+    refocusAfterAction(refocusActive);
   }
 
   const terminals = useTerminals(
@@ -119,6 +122,33 @@ export default function App() {
     },
     appSettings.settings
   );
+
+  /** 把键盘焦点还给活动终端（竖条按钮动作 / 菜单关闭后的焦点回还）。 */
+  function refocusActive() {
+    if (terminals.active)
+      terminals.focusTerminal(
+        terminals.active.id
+      );
+  }
+
+  // 从设置页返回终端页时把键盘焦点交还活动终端：这是应用内切换，
+  // 系统焦点从未离开窗口，window 的 focus 事件不会触发，必须显式还
+  useEffect(() => {
+    if (!settingsOpen) refocusActive();
+    // terminals 每渲染都是新对象，进依赖会让 effect 每渲染都跑；
+    // 只跟踪真正影响行为的 settingsOpen
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 见上
+  }, [settingsOpen]);
+
+  // 会话编辑 / 宏管理 / 密码弹窗关闭后，同样把焦点还给终端
+  const anyDialogOpen =
+    dialogOpen ||
+    macroOpen ||
+    !!terminals.passwordRequest;
+  useEffect(() => {
+    if (!anyDialogOpen) refocusActive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 同上
+  }, [anyDialogOpen]);
 
   function openCreate() {
     setEditingSession(null);
@@ -298,7 +328,8 @@ export default function App() {
         title: active.name
       }).catch(fail);
     },
-    openSettings: () => setSettingsOpen(true)
+    openSettings: () => setSettingsOpen(true),
+    refocusTerminal: refocusActive
   };
 
   // 终端配色方案的背景/前景下传给 CSS：.terminal-host 的余数缝隙要跟
@@ -330,6 +361,9 @@ export default function App() {
         statusMode={statusMode}
         onToggleStatus={toggleStatusMode}
         hideMenus={settingsOpen}
+        onMenuClosed={() =>
+          refocusAfterAction(refocusActive)
+        }
       />
       <section
         className={
