@@ -377,6 +377,10 @@ const zhCN = {
   "settings.fontSize.title": "终端字号",
   "settings.fontSize.desc":
     "单位像素，可选 {min} 到 {max}。",
+  "settings.scrollback.title": "回滚行数",
+  "settings.scrollback.desc":
+    "终端在内存里保留的历史输出行数，决定向上能翻多远；越大越占内存，调小会丢掉最老的行。",
+  "settings.scrollback.unit": "{value} 行",
   "settings.colorScheme.title": "配色方案",
   "settings.colorScheme.desc":
     "463 个内置方案，点击卡片立即应用到终端，当前方案见顶部预览。",
@@ -777,6 +781,10 @@ const enUS: Record<MessageKey, string> = {
   "settings.fontSize.title": "Terminal font size",
   "settings.fontSize.desc":
     "In pixels, pick from {min} to {max}.",
+  "settings.scrollback.title": "Scrollback lines",
+  "settings.scrollback.desc":
+    "Lines of history kept in memory per terminal, which sets how far you can scroll back. Larger values use more memory; shrinking drops the oldest lines.",
+  "settings.scrollback.unit": "{value} lines",
   "settings.colorScheme.title": "Color scheme",
   "settings.colorScheme.desc":
     "463 built-in schemes. Click a card to apply it to the terminal instantly; the current one is previewed on top.",

@@ -48,6 +48,12 @@ export type AppSettings = {
   /** 终端光标是否闪烁（设置-终端里开关）。 */
   cursorBlink: boolean;
   /**
+   * 终端回滚行数：内存里保留多少行历史输出（设置-终端里选择）。
+   *
+   * 传给 xterm 的 `scrollback`，见 MIN_SCROLLBACK/MAX_SCROLLBACK。
+   */
+  scrollback: number;
+  /**
    * 数据存储目录。空字符串表示用默认位置（用户主目录）。
    *
    * 会话、设置、宏等数据都以文件形式存这里（见 storage.ts 的存储层），
@@ -65,6 +71,28 @@ export const MIN_FONT_SIZE = 10;
 export const MAX_FONT_SIZE = 24;
 export const DEFAULT_FONT_SIZE = 14;
 
+/**
+ * 回滚行数（xterm 的 `scrollback`）：终端在内存里保留多少行历史输出，
+ * 决定滚轮向上能翻多远。
+ *
+ * 每行都要占内存（还带颜色等属性），且**每个终端实例各留一份** ——
+ * 开满 4 个 pane 就是四倍。上限放到 10 万行，够翻完一整个编译日志，
+ * 又不至于把内存吃穿；下限 500 行保证最基本的回看能力。
+ */
+export const MIN_SCROLLBACK = 500;
+export const MAX_SCROLLBACK = 100000;
+export const DEFAULT_SCROLLBACK = 5000;
+
+/**
+ * 设置页下拉里的档位。
+ *
+ * 不给任意输入：改回滚行数会立刻裁剪或保留缓冲区内容，
+ * 逐字符输入会一路触发，点选一次到位更稳（与字号同一考虑）。
+ */
+export const SCROLLBACK_PRESETS = [
+  1000, 2000, 5000, 10000, 20000, 50000, 100000
+];
+
 export const defaultSettings: AppSettings = {
   fontFamily: "",
   fontSize: DEFAULT_FONT_SIZE,
@@ -77,6 +105,7 @@ export const defaultSettings: AppSettings = {
   commandCompletion: true,
   cursorStyle: "block",
   cursorBlink: true,
+  scrollback: DEFAULT_SCROLLBACK,
   dataDir: ""
 };
 
@@ -90,6 +119,19 @@ export function clampFontSize(
   return Math.min(
     MAX_FONT_SIZE,
     Math.max(MIN_FONT_SIZE, Math.round(size))
+  );
+}
+
+/** 把任意输入夹到合法回滚行数；非法值（含 0 与负数）一律退回默认。 */
+export function clampScrollback(
+  value: unknown
+): number {
+  const lines = Number(value);
+  if (!Number.isFinite(lines) || lines <= 0)
+    return DEFAULT_SCROLLBACK;
+  return Math.min(
+    MAX_SCROLLBACK,
+    Math.max(MIN_SCROLLBACK, Math.round(lines))
   );
 }
 
@@ -141,6 +183,11 @@ export function loadSettings(): AppSettings {
           ? parsed.cursorStyle
           : "block",
       cursorBlink: parsed.cursorBlink !== false,
+      // 回滚行数：旧数据没这个字段（undefined）时 clampScrollback
+      // 会退回默认值，无需额外判断
+      scrollback: clampScrollback(
+        parsed.scrollback
+      ),
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir

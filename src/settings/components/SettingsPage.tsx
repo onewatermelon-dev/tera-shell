@@ -33,6 +33,7 @@ import {
   firstFontOf,
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
+  SCROLLBACK_PRESETS,
   TERMINAL_FONT_FALLBACK,
   type AppSettings,
   type CursorStyle,
@@ -107,6 +108,31 @@ const cursorStyleOptions = (
   }
 ];
 
+/**
+ * 回滚行数下拉：只列预设档位，外加「当前值」。
+ *
+ * 补当前值是为了手改过设置文件、或早期数据留下的非档位值（如 3000）——
+ * 不补的话 SettingsSelect 找不到选中项会回退成第一项，用户会看到
+ * 5,000 行这种与实际不符的显示。
+ */
+const scrollbackOptions = (
+  t: Translator,
+  current: number
+): SelectOption<string>[] => {
+  const values = [...SCROLLBACK_PRESETS];
+  if (!values.includes(current)) {
+    values.push(current);
+    values.sort((a, b) => a - b);
+  }
+  return values.map(value => ({
+    value: String(value),
+    label: t("settings.scrollback.unit", {
+      // 千分位：100000 直接写出来一眼读不出量级
+      value: value.toLocaleString()
+    })
+  }));
+};
+
 type SettingsPageProps = {
   settings: AppSettings;
   onChange: (patch: Partial<AppSettings>) => void;
@@ -137,6 +163,11 @@ export default function SettingsPage({
   const cursorList = useMemo(
     () => cursorStyleOptions(t),
     [t]
+  );
+  const scrollbackList = useMemo(
+    () =>
+      scrollbackOptions(t, settings.scrollback),
+    [t, settings.scrollback]
   );
   const [section, setSection] =
     useState<Section>("general");
@@ -370,6 +401,31 @@ export default function SettingsPage({
                   onChange={size =>
                     onChange({
                       fontSize: Number(size)
+                    })
+                  }
+                />
+              }
+            />
+
+            <SettingsRow
+              title={t(
+                "settings.scrollback.title"
+              )}
+              description={t(
+                "settings.scrollback.desc"
+              )}
+              control={
+                <SettingsSelect
+                  value={String(
+                    settings.scrollback
+                  )}
+                  options={scrollbackList}
+                  ariaLabel={t(
+                    "settings.scrollback.title"
+                  )}
+                  onChange={lines =>
+                    onChange({
+                      scrollback: Number(lines)
                     })
                   }
                 />

@@ -51,7 +51,8 @@ export function useTerminals(
     | undefined,
   /**
    * 终端外观与行为设置：字体、字号与配色随之变化，整批终端一起更新；
-   * 命令补全开关同样实时同步（新建会话取初值，已有会话由 effect 推送）。
+   * 命令补全开关同样实时同步（新建会话取初值，已有会话由 effect 推送）；
+   * 回滚行数也在这里，改动会立刻调整已打开终端的滚动缓冲区。
    */
   appearance: Pick<
     AppSettings,
@@ -61,6 +62,7 @@ export function useTerminals(
     | "commandCompletion"
     | "cursorStyle"
     | "cursorBlink"
+    | "scrollback"
   >
 ) {
   const [opened, setOpened] = useState<
@@ -286,6 +288,28 @@ export function useTerminals(
     resize
   ]);
 
+  /**
+   * 回滚行数（scrollback）变化后，调整所有已打开终端的滚动缓冲区。
+   *
+   * xterm 的 `options.scrollback` 可以运行时赋值：调大立刻生效，
+   * 调小则**丢弃最老的那部分历史行**（再调大也回不来）—— 这是用户
+   * 自己在设置里选的，不额外确认。缓冲区大小不影响行列数，无需 resize。
+   */
+  useEffect(() => {
+    for (const session of openedRef.current) {
+      // 与字体/字号同一套路：xterm 只暴露可变的 options、没有 setter，
+      // 改配置只能就地赋值（react-hooks/immutability 对第三方实例不适用）
+      /* eslint-disable react-hooks/immutability */
+      session.terminal.options.scrollback =
+        appearance.scrollback;
+      /* eslint-enable react-hooks/immutability */
+    }
+    console.debug(
+      "[terminal] 回滚行数已应用",
+      appearance.scrollback
+    );
+  }, [appearance.scrollback]);
+
   // opened/activeId 变化后统一挂载/切换终端。layout effect 在 commit 之后、
   // 浏览器绘制之前同步执行，此时 terminalHostRef 已由 ref 回调赋值，
   // 不会像手写 rAF 那样在 DOM 未更新时提前早退。
@@ -350,7 +374,8 @@ export function useTerminals(
         ),
         fontSize: appearance.fontSize,
         lineHeight: 1.3,
-        scrollback: 5000,
+        // 回滚行数取自设置（改动由上面的 effect 推送到已有终端）
+        scrollback: appearance.scrollback,
         theme: toXtermTheme(
           resolveColorScheme(
             appearance.colorScheme
