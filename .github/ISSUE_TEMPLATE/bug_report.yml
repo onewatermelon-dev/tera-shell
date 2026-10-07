@@ -1,0 +1,70 @@
+name: Bug 反馈
+description: 报告一个复现的 bug
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你发现问题！下面的信息能大幅加快定位速度。
+        日志路径：设置 → 数据目录 下的 `logs/<日期>/`。
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 帮助页或关于页面显示的版本号
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 操作系统
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 描述你期望发生什么，实际发生了什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 一步一步列出触发问题的操作
+      placeholder: |
+        1. 打开设置
+        2. 切换到深色主题
+        3. 关闭设置页
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志内容
+      description: |
+        设置 → 数据目录下的 `logs/<日期>/`，找到报错时间附近的内容粘贴上来。
+        密码等敏感信息请自行删除后再粘贴。
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他补充
+      description: 截图、终端输出、相关配置等
+    validations:
+      required: false

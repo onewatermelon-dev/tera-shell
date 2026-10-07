@@ -122,6 +122,8 @@ tests/            # vitest 单元测试
 
 ## 🗺️ 路线图
 
+公开路线图，欢迎认领。想参与的直接在 Issues 里开 issue 说明想法，或先去 [Discussions](https://github.com/onewatermelon-dev/tera-shell/discussions) 聊一聊方向。
+
 - [ ] SSH 密钥登录与跳板机
 - [ ] 端口转发管理
 - [ ] 命令失败时 AI 自动诊断
@@ -142,12 +144,37 @@ tests/            # vitest 单元测试
 
 ## 🤝 参与贡献
 
-项目仍在快速迭代期，路线图上的每一项都欢迎认领：
+欢迎任何形式的参与，不限代码。
 
-1. 新功能请先开 issue 讨论方向，避免返工
-2. 代码风格跟随 ESLint / Prettier / Stylelint，注释使用中文
-3. 核心逻辑改动请补充 `tests/` 用例
-4. 提交走 `pnpm commit`
+**不确定该问还是该报？→ [Discussions](https://github.com/onewatermelon-dev/tera-shell/discussions)**
+
+提问、想法、路线图讨论都欢迎，不用为一句话开 issue，也不用担心问得不够专业被判为无效。先搜一下关键词，找不到已有讨论再开新的。
+
+- 报 bug → [Bug 反馈模板](https://github.com/onewatermelon-dev/tera-shell/issues/new?template=bug_report.yml)，请附上 `~/.tera-shell/logs/<日期>/` 下的日志（可用 `RUST_LOG=debug` 提升级别），粘贴前删除密码、token 等敏感信息
+- 要功能 → [功能建议模板](https://github.com/onewatermelon-dev/tera-shell/issues/new?template=feature_request.yml)
+
+### 提交代码
+
+日常开发都在 `develop` 上，从它切功能分支：
+
+```bash
+git checkout develop && git pull
+git checkout -b feature/xxx
+
+# ...改代码...
+pnpm commit                # 必须走这个，commit-msg 钩子会拒绝直接 git commit
+git push -u github feature/xxx
+```
+
+代码风格跟随 ESLint / Prettier / Stylelint，注释使用中文，核心逻辑改动请补充 `tests/` 用例。
+
+发版时把 `develop` 用 `git merge --no-ff develop` 合进 `main`，在 GitHub 上点合并，再打 tag：
+
+```bash
+git tag -a v1.0.0 -m "v1.0.0"
+git push github v1.0.0
+git push origin v1.0.0
+```
 
 任何 PR，无论大小，都会认真 review。⭐
 

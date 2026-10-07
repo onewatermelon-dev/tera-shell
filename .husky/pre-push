@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+#拦截误推 main（发布分支）。main 只接受来自 develop 的 PR 更新，
+# 本地提前挡住，避免在 GitHub 侧被 protected branch 拒绝。
+# develop 上的常规推送不受影响。
+
+branch="$(git symbolic-ref --short HEAD 2>/dev/null)"
+
+if [ "$branch" = "main" ]; then
+  echo "" >&2
+  echo "❌ 拒绝推送：main 是发布分支，仅接受 develop → main 的 PR" >&2
+  echo "   请先在 develop 上开发并推送，再到 GitHub 开合并请求" >&2
+  echo "" >&2
+  exit 1
+fi
+
+exit 0
