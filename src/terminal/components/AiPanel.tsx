@@ -401,6 +401,7 @@ export default function AiPanel({
     pendingCardId,
     error,
     stream,
+    title,
     send,
     confirm,
     skip,
@@ -487,15 +488,20 @@ export default function AiPanel({
     const id = renamingId;
     if (!id) return;
     setRenamingId(null);
-    const title = renameValue.trim().slice(0, 40);
-    if (!title) return;
-    renameHistory(id, title);
+    // 局部名避开组件级的 title（顶栏显示的当前对话标题），
+    // 免得读代码时以为改的是顶栏那个
+    const next = renameValue.trim().slice(0, 40);
+    if (!next) return;
+    renameHistory(id, next);
     setHistories(list =>
       list.map(item =>
-        item.id === id ? { ...item, title } : item
+        item.id === id
+          ? { ...item, title: next }
+          : item
       )
     );
-    renameCurrent(id, title);
+    // 只有改的正是当前对话时，顶栏标题才会跟着变（由 renameCurrent 判定）
+    renameCurrent(id, next);
   }
 
   // 新消息 / 状态变化后滚到底部，聊天面板的默认阅读位置在最新一条
@@ -537,7 +543,21 @@ export default function AiPanel({
       }}
     >
       <div className="ai-panel-head">
-        <span>{t("ai.title")}</span>
+        <span className="ai-panel-head-brand">
+          {t("ai.title")}
+        </span>
+        {/* 当前对话标题：居中在「AI 助手」与「新对话」按钮之间。
+            没起标题（新对话刚点开、还没发过消息）时不渲染 —— 元素缺席时
+            右侧动作组会滑进中间列，所以那一列在 scss 里用
+            grid-column: 3 钉住，两侧各归各位、布局不塌。 */}
+        {title && (
+          <span
+            className="ai-panel-head-title"
+            title={title}
+          >
+            {title}
+          </span>
+        )}
         <div className="ai-panel-head-actions">
           <button
             type="button"

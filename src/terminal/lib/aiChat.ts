@@ -1244,6 +1244,16 @@ export function useAiChat(
   const historyTitleRef = useRef<string | null>(
     null
   );
+  /**
+   * 当前对话标题的**渲染态**。
+   *
+   * `historyTitleRef` 只是给自动保存 effect 读的，写它不触发重渲染 ——
+   * 面板顶栏要显示标题，光靠 ref 是画不出来的。这里与 ref 同步维护：
+   * 凡是给 ref 赋标题的地方都要同时 `setTitle`。
+   */
+  const [title, setTitle] = useState<
+    string | null
+  >(null);
 
   // 引擎空闲且有内容时自动落一份历史快照（含协议消息，恢复后可续聊）
   useEffect(() => {
@@ -1254,14 +1264,14 @@ export function useAiChat(
       const firstUser = entries.find(
         entry => entry.kind === "user"
       );
-      const title =
+      const generated =
         firstUser && firstUser.kind === "user"
           ? firstUser.text.trim() || "（图片）"
           : "对话";
-      historyTitleRef.current = title.slice(
-        0,
-        40
-      );
+      const trimmed = generated.slice(0, 40);
+      historyTitleRef.current = trimmed;
+      // 新建对话时给顶栏一个标题（见 title 的注释）
+      setTitle(trimmed);
     }
     saveHistory({
       id: historyIdRef.current,
@@ -1275,9 +1285,11 @@ export function useAiChat(
 
   /** 列表里改名：若改的正是当前对话，钉住标题防止下次自动保存冲掉。 */
   const renameCurrent = useCallback(
-    (id: string, title: string) => {
-      if (historyIdRef.current === id)
-        historyTitleRef.current = title;
+    (id: string, next: string) => {
+      if (historyIdRef.current === id) {
+        historyTitleRef.current = next;
+        setTitle(next);
+      }
     },
     []
   );
@@ -1287,6 +1299,7 @@ export function useAiChat(
     (history: AiHistory) => {
       historyIdRef.current = history.id;
       historyTitleRef.current = history.title;
+      setTitle(history.title);
       messagesRef.current =
         history.messages as ProtocolMessage[];
       setEntries(
@@ -1320,6 +1333,7 @@ export function useAiChat(
     // 清空后下一次保存开一条新历史，不覆盖旧的
     historyIdRef.current = null;
     historyTitleRef.current = null;
+    setTitle(null);
   }, []);
 
   /** 执行一张卡片并把结果回填进协议流。mode 见 ExecCardMode。 */
@@ -1708,6 +1722,8 @@ export function useAiChat(
     pendingCardId,
     error,
     stream,
+    /** 当前对话标题（null = 还没起标题，新对话刚点开时）。 */
+    title,
     send,
     confirm,
     skip,
