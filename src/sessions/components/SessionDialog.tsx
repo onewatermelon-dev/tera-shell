@@ -15,6 +15,7 @@ import {
   type SavedSession
 } from "@/sessions/lib/session";
 import {
+  colorHex,
   normalizeColorTag,
   UNGROUPED_ID,
   type ColorTag
@@ -325,6 +326,51 @@ export default function SessionDialog({
                     )}
                   />
                 </TextField>
+                {/**
+                 * 已有分组的快捷选择：一排可点的胶囊，点一下填进上面的
+                 * 输入框。
+                 *
+                 * 为什么用胶囊而不是下拉菜单：下拉的定位要锚在触发器上，
+                 * 之前用 InputGroup + Dropdown 时菜单反复跑偏（锚到小箭头
+                 * 上导致溢出弹窗），而分组数量本来就少、名字短，平铺
+                 * 一眼就能看完，也省掉了「点开才知道有哪些」这一步。
+                 *
+                 * 分组很多时这里会换行占位，但那是低频情况——分组过十
+                 * 的话更该做的是折叠侧栏，不是让弹窗里选分组。
+                 */}
+                {groups.length > 0 && (
+                  <div
+                    className="group-chips"
+                    role="group"
+                    aria-label={t(
+                      "group.quickPick"
+                    )}
+                  >
+                    {groups.map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`group-chip${item.name.trim() === groupName.trim() ? " is-active" : ""}`}
+                        onClick={() =>
+                          setGroupName(item.name)
+                        }
+                      >
+                        {item.color && (
+                          <span
+                            className="group-chip-color"
+                            style={{
+                              background:
+                                colorHex(
+                                  item.color
+                                )
+                            }}
+                          />
+                        )}
+                        {item.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="form-row">
                   <span className="form-label">

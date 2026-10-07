@@ -265,6 +265,7 @@ const zhCN = {
   "group.namePlaceholder":
     "如：生产环境 / 测试环境",
   "group.nameRequired": "请填写分组名称",
+  "group.quickPick": "快速选择已有分组",
   "group.save": "保存分组",
   "group.new": "新建分组",
   "group.rename": "重命名分组",
@@ -724,6 +725,8 @@ const enUS: Record<MessageKey, string> = {
   "group.namePlaceholder":
     "e.g. Production / Staging",
   "group.nameRequired": "Group name is required",
+  "group.quickPick":
+    "Quick pick an existing group",
   "group.save": "Save group",
   "group.new": "New group",
   "group.rename": "Rename group",
