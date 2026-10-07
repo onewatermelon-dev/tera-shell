@@ -157,8 +157,22 @@ const zhCN = {
   "ai.welcome.title": "欢迎使用运维 AI 助手",
   "ai.welcome.desc":
     "我是一名服务器运维 AI 助手，可以帮助您完成各种服务器运维和管理任务。您可以直接输入需求，我会尽力帮助您解决问题！",
-  "ai.welcome.tip":
-    "磁盘空间不足：可以对我说“帮我清理一下磁盘空间”，我会帮您分析磁盘占用情况，并给出清理建议",
+  "ai.welcome.tip.0":
+    "磁盘空间不足？可以对我说「帮我清理一下磁盘空间」，我会分析占用并给出清理建议",
+  "ai.welcome.tip.1":
+    "服务起不来？可以说「帮我排查 nginx 启动失败」，把报错发给我更好",
+  "ai.welcome.tip.2":
+    "端口被占了？可以说「帮我查一下 8080 端口被谁占用」",
+  "ai.welcome.tip.3":
+    "CPU 飙高？可以说「帮我看看哪个进程最吃 CPU」，我会定位并给出建议",
+  "ai.welcome.tip.4":
+    "想查日志？可以说「帮我检索今天 nginx 日志里的 500 错误」",
+  "ai.welcome.tip.5":
+    "内存吃紧？可以说「帮我分析内存占用最高的 5 个进程」",
+  "ai.welcome.tip.6":
+    "定时任务没跑？可以说「帮我看看 crontab 里有哪些任务」",
+  "ai.welcome.tip.7":
+    "想批量操作？把目标描述清楚，我会拆成命令逐步执行并等你确认",
   "ai.input":
     "输入消息或粘贴图片…（Shift+Enter换行）",
   "ai.thinking": "思考中…",
@@ -563,8 +577,22 @@ const enUS: Record<MessageKey, string> = {
     "Welcome to the Ops AI Assistant",
   "ai.welcome.desc":
     "I'm a server operations AI assistant that can help you with all kinds of maintenance and management tasks. Just type your request and I'll do my best to help!",
-  "ai.welcome.tip":
-    'Low disk space? Try saying "clean up my disk" — I\'ll analyze disk usage and suggest what to remove',
+  "ai.welcome.tip.0":
+    'Low disk space? Try "help me clean up disk space" — I\'ll analyze usage and suggest what to remove',
+  "ai.welcome.tip.1":
+    'Service won\'t start? Try "troubleshoot nginx startup failure" — paste the error for better results',
+  "ai.welcome.tip.2":
+    'Port taken? Try "find out what is occupying port 8080"',
+  "ai.welcome.tip.3":
+    'CPU spiking? Try "show me the top process by CPU" and I\'ll track it down',
+  "ai.welcome.tip.4":
+    'Need logs? Try "search today\'s nginx logs for 500 errors"',
+  "ai.welcome.tip.5":
+    'Memory tight? Try "analyze the top 5 processes by memory usage"',
+  "ai.welcome.tip.6":
+    'Cron not firing? Try "list the tasks in my crontab"',
+  "ai.welcome.tip.7":
+    "Batch operations? Describe the goal and I'll break it into commands, running them step by step with your confirmation",
   "ai.input":
     "Type a message or paste an image… (Shift+Enter for newline)",
   "ai.thinking": "Thinking",
