@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   attrToGroupId,
+  COLOR_TAGS,
   colorHex,
   groupSessions,
+  isCustomColor,
   normalizeColorTag,
   parseGroups,
   UNGROUPED_ATTR,
@@ -219,5 +221,53 @@ describe("拖拽落点的分组标记", () => {
   it("占位符不是合法分组名，不会与 randomUUID 撞车", () => {
     expect(UNGROUPED_ATTR).not.toBe(UNGROUPED_ID);
     expect(UNGROUPED_ATTR).toBeTruthy();
+  });
+});
+
+describe("自定义颜色（HeroUI ColorPicker 产出）", () => {
+  it("认#rrggbb 与 #rgb 两种写法", () => {
+    expect(isCustomColor("#ff8800")).toBe(true);
+    expect(isCustomColor("#f80")).toBe(true);
+    expect(isCustomColor("#FF8800")).toBe(true);
+  });
+
+  it("拒绝不合法或非字符串的色值", () => {
+    expect(isCustomColor("red")).toBe(false);
+    expect(isCustomColor("")).toBe(false);
+    expect(isCustomColor(undefined)).toBe(false);
+    // 5 位 / 8 位 hex 都不是合法 CSS 颜色写法
+    expect(isCustomColor("#ff88")).toBe(false);
+    expect(isCustomColor("#ff880011")).toBe(
+      false
+    );
+    expect(isCustomColor("#gggggg")).toBe(false);
+    // 非 # 开头的颜色函数也不认（本组件只存 hex）
+    expect(isCustomColor("rgb(1,2,3)")).toBe(
+      false
+    );
+  });
+
+  it("normalizeColorTag 放行合法 hex，拦下脏值", () => {
+    expect(normalizeColorTag("#ff8800")).toBe(
+      "#ff8800"
+    );
+    expect(normalizeColorTag("#f80")).toBe(
+      "#f80"
+    );
+    // ⚠️ 回归：曾一律回退空串，导致用户取的颜色存下来却看不见
+    expect(normalizeColorTag("#ff88")).toBe("");
+    expect(normalizeColorTag(null)).toBe("");
+  });
+
+  it("colorHex 原样返回自定义色值", () => {
+    expect(colorHex("#ff8800")).toBe("#ff8800");
+  });
+
+  it("色板仍是「具名色 + 空串」，不含自定义色", () => {
+    for (const item of COLOR_TAGS) {
+      expect(isCustomColor(item.value)).toBe(
+        false
+      );
+    }
   });
 });

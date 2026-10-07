@@ -558,12 +558,176 @@ body.tab-dragging .group-head:hover {
 }
 
 // 表单里的颜色选择器（一排圆点）
-.color-picker {
+// 固定色点 + 末尾自由取色器，共处一行
+.color-picker-row {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+/**
+ * 消掉 HeroUI ColorPicker 根容器这层包装。
+ *
+ * DOM 上取色器比 10 个色点多一层：
+ *   <div class="color-picker">      ← HeroUI 的 DialogTrigger 包装层
+ *     <button class="color-custom-trigger">
+ * 而色点是裸的 <label class="color-dot">。那层是 inline-flex，作为 flex
+ * item 会带上 line-height 撑出的多余高度，按钮跟旁边 10 个圈对不齐。
+ *
+ * display: contents 让这层不生成盒子、不参与布局，button 直接成为
+ * .color-picker-row 的 flex item —— 结构上就跟色点平级了。
+ * （不能给 display 加 !important：HeroUI 的 .color-picker 是 (0,1,0)，
+ *  这里 (0,2,0) 已经够 Specificity 胜出。）
+ */
+.color-picker-row > .color-picker {
+  display: contents;
+}
+
+// ⚠️ 类名不能叫 .color-picker —— 那是 **HeroUI ColorPicker 根容器**
+// 的类名（tailwind-variants 生成的 base slot）。撞名后这条规则会
+// 作用到 HeroUI 的触发器容器上。
+// ⚠️ 这里**不能有 flex: 1**：那会让色点容器撑满整行，把末尾的取色器
+// 推到最右、与最后一个色点隔开一大段。容器要按内容宽度收缩，
+// 取色器才会紧跟在第 10 个圆圈后面（同属一排）。
+.color-swatches {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
   align-items: center;
-  margin-bottom: 4px;
+}
+
+// 自由取色触发器：**甜甜圈** —— 外圈圆环 + 里面圆形。
+// 内外**同色联动**：两者都取 var(--trigger-color)，选色时一起变；
+// 未选色时外圈是彩虹渐变、内圈透明（读作「还没设颜色」）。
+// 整体 20px，与旁边 10 个色点同尺寸；内圆的画法（12px + 内侧 1px
+// var(--border) 描边）与.color-dot::before 完全一致 —— 分隔线必须
+// 是"内圆内侧的 1px 描边"，才能看得出是一套。
+// ⚠️ 两条踩过的坑：
+// ① 不能写 `.color-custom-trigger.button` —— HeroUI 的 ColorPicker.Trigger
+//    用裸 RAC Button，类名只有 `color-picker__trigger color-custom-trigger`，
+//    没有 `button`（那是 HeroUI Button 包装器才加的），写两个类整条失配。
+//    选择器带 `.color-picker-row` 提特异性：组件库样式在 main.css、
+//    加载顺序在本文件**之后**。
+// ② 分隔线用 box-shadow 的**外扩**（0 0 0 2px）而非 inset ——
+//    inset 是往里挖，会缩小内圆，而不是在它外面画线。
+.color-picker-row .color-custom-trigger {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+
+  // 外圈。⚠️ 必须与内圆**同色联动** —— 写死 conic-gradient 就只有内圆
+  // 变色、外圈永远是彩虹，看着像两个独立元素而不是同一个色。
+  // 未选自定义色时回落到彩虹渐变（约定俗成的「任意颜色」记号）。
+  background: var(
+    --trigger-color,
+    conic-gradient(
+      from 180deg,
+      #f31260,
+      #f5a524,
+      #e3c800,
+      #17c964,
+      #00b7c3,
+      #3b82f6,
+      #8b5cf6,
+      #ec4899,
+      #f31260
+    )
+  );
+  border-radius: 50%;
+
+  // 悬停：与 .color-dot 一致放大
+  transition: transform 0.12s ease;
+
+  // 去掉 ghost 按下时的圆形底色（同 .edit/.delete）
+  --button-bg-hover: transparent;
+  --button-bg-pressed: transparent;
+
+  // 内圆：与外圈**同一个变量**，所以选色时两者一起变。
+  // 没选自定义色时是空心（内圆透明、只留外圈彩虹）。
+  // ⚠️ 尺寸与描边**必须照抄.color-dot::before**（12px + inset 1px
+  // var(--border)）—— 分隔线是"内圆内侧的 1px 描边"，不是"内圆外侧的
+  // 2px 环"。之前用 `0 0 0 2px var(--surface)` 外扩，粗细/颜色/位置
+  // 都与那10 个圈不一致，一眼就能看出不是一套。
+  &::before {
+    width: 12px;
+    height: 12px;
+    content: "";
+    background: var(--trigger-color, transparent);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+
+  &:hover {
+    transform: scale(1.12);
+  }
+}
+
+// 自定义取色弹层
+.color-custom-popover {
+  width: 248px;
+  padding: 10px;
+}
+
+// 取色面板各区块。类名都挂在组件的 className 上，不依赖 HeroUI 内部类名。
+// 取色区：
+// ⚠️ **绝不能设 height** —— HeroUI 的 `.color-area` 靠
+// `aspect-ratio: 1/1` + `w-full` + `max-w-56` 自动撑成正方形。
+// 强加高度会破坏宽高比，而 Thumb 的位置是 React Aria 按实测尺寸算出的
+// 百分比，尺寸一对不上就飘到区域外面去了（实测：取色区变成扁条、
+// 滑块跑到区域上方）。要调大小就调 max-width。
+.color-custom-area {
+  width: 100%;
+}
+
+/**
+ * 色相滑杆：**只调间距，不碰布局**。
+ *
+ * ⚠️ 之前写了 `display: flex; flex-wrap: wrap` 想让「色相」和数值并排，
+ * 结果把 HeroUI 的 grid 布局覆盖掉了 —— `.color-slider` 用的是
+ * grid-template-areas: "label output" / "track track"，靠 grid 才能让
+ * 标签与数值同一行、滑条独占下一行。改成 flex 后 grid 区域失效，
+ * 两者就不在同一列了。组件默认布局已经是对的，别动。
+ */
+.color-custom-slider {
+  margin-top: 8px;
+}
+
+.color-custom-output {
+  font-family: Consolas, monospace;
+}
+
+.color-custom-space {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.color-custom-space-value {
+  text-transform: uppercase;
+}
+
+.color-custom-space-item {
+  text-transform: uppercase;
+}
+
+// 通道输入框：三个一排。这里只需要网格，**不要给 input 加边框** ——
+// ColorField.Group 自带 border，再叠一层就会出现双边框。
+.color-custom-fields {
+  display: grid;
+  grid-template-columns: repeat(
+    3,
+    minmax(0, 1fr)
+  );
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  margin-top: 8px;
 }
 
 .color-dot {

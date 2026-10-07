@@ -7,7 +7,13 @@ import type { SavedSession } from "@/sessions/lib/session";
  * 会话只存一个 `groupId` 引用，重命名分组不必改写每条会话。
  */
 
-/** 颜色标记的取值。空串表示不标记（走中性色）。 */
+/**
+ * 颜色标记的取值。
+ *
+ * 空串 = 不标记；其余是色板里的**具名**颜色，或以 `#` 开头的**自定义**
+ * 色值（由 HeroUI ColorPicker 取色/ 手输 hex 产生）。两者共存是为了
+ * 「常用色一键点、特殊色自由取」——固定色板覆盖不了所有场景。
+ */
 export type ColorTag =
   | ""
   | "red"
@@ -18,7 +24,26 @@ export type ColorTag =
   | "blue"
   | "purple"
   | "pink"
-  | "gray";
+  | "gray"
+  // 自定义色值（#rgb / #rrggbb）
+  | (string & {});
+
+/** 具名色板（不含「无颜色」那一项）。 */
+export const NAMED_COLORS = [
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "cyan",
+  "blue",
+  "purple",
+  "pink",
+  "gray"
+] as const;
+
+/** 具名色之一（排除空串与自定义色值）。 */
+export type NamedColor =
+  (typeof NAMED_COLORS)[number];
 
 /**
  * 可选颜色（会话与分组共用一套）。
@@ -27,7 +52,8 @@ export type ColorTag =
  * 侧栏色条与图标底色都用它。
  */
 export const COLOR_TAGS: {
-  value: ColorTag;
+  /** 只可能是空串或具名色（自定义色不进色板），i18n 查名才有着落 */
+  value: "" | NamedColor;
   /** CSS 颜色，直接写进行内 style */
   hex: string;
 }[] = [
@@ -43,21 +69,46 @@ export const COLOR_TAGS: {
   { value: "gray", hex: "#8a8f99" }
 ];
 
-/** 取颜色对应的 CSS 色值；未登记的取值一律当「无颜色」处理。 */
+/** 合法的自定义色值：`#rgb` 或 `#rrggbb`。 */
+const CUSTOM_HEX =
+  /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** 是否是自定义色值（以 # 开头的 hex）。 */
+export function isCustomColor(
+  tag: string | undefined
+): boolean {
+  return Boolean(tag && CUSTOM_HEX.test(tag));
+}
+
+/**
+ * 取颜色对应的 CSS 色值。
+ *
+ * 具名色查色板；自定义色值（合法 hex）原样返回 ——
+ * 不能一律回退 transparent，否则用户取的颜色会「存下来但看不见」。
+ * 不认识的取值当「无颜色」处理。
+ */
 export function colorHex(
   tag: ColorTag | undefined
 ): string {
   if (!tag) return "transparent";
+  if (isCustomColor(tag)) return tag;
   return (
     COLOR_TAGS.find(item => item.value === tag)
       ?.hex ?? "transparent"
   );
 }
 
-/** 把任意输入夹成合法的 ColorTag（脏数据 / 旧版本残留的安全网）。 */
+/**
+ * 把任意输入夹成合法的 ColorTag（脏数据 / 旧版本残留的安全网）。
+ *
+ * 认两种形态：色板里的具名色，或合法的自定义 hex。
+ * 两者都不匹配（null、对象、乱字符串）才退回空串。
+ */
 export function normalizeColorTag(
   value: unknown
 ): ColorTag {
+  if (typeof value !== "string") return "";
+  if (isCustomColor(value)) return value;
   return COLOR_TAGS.some(
     item => item.value === value
   )
