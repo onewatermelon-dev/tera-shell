@@ -79,6 +79,51 @@ export function positionMessageTip(
   };
 }
 
+/**
+ * 滚动目标是否像个 DOM 节点 —— 即带 `contains` 方法。
+ *
+ * 刻意用鸭子类型而不是 `instanceof Element`：`instanceof` 需要真实的
+ * `Element` 全局，而本项目测试跑在 `environment: "node"` 下没有 DOM，
+ * 引用即 ReferenceError。而 `Node.contains` 本来就是全 DOM 通用的
+ * 标准方法，window / document / 元素 / 片段都实现了同一个签名，
+ * 鸭子类型判定与真实行为完全一致，还顺带让这段逻辑可单测。
+ */
+function isNodeLike(
+  value: unknown
+): value is { contains(node: unknown): boolean } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "contains" in value &&
+    typeof (value as { contains: unknown })
+      .contains === "function"
+  );
+}
+
+/**
+ * 这次滚动是否该让气泡消失。
+ *
+ * 只有**锚点会跟着移动**时才关：滚动容器是锚点的祖先（消息列表滚动、
+ * 面板整体滚动）。反之滚动别处（如下面的终端）时锚点没动，气泡仍指向
+ * 正确位置，擅自关掉只会让用户白等一次悬停。
+ *
+ * 判不出时一律保守关闭 —— 气泡挂在错误位置比提前消失更糟：
+ * - `target` 为空、`anchor` 已卸载 → 关
+ * - `target` 没有 `contains`（window、document 之外的自定义对象）→ 关
+ */
+export function shouldDismissTipOnScroll(
+  scrollTarget: unknown,
+  anchor: unknown
+): boolean {
+  if (!anchor) return true;
+  if (!scrollTarget) return true;
+  // window 只有 contains 判定不了归属，等价于「整页都在动」，关。
+  // document 自带 contains，锚点在文档内时同样落到 true。
+  return isNodeLike(scrollTarget)
+    ? scrollTarget.contains(anchor)
+    : true;
+}
+
 /** 改造自 aicss MessageActions：为用户与助手消息显示复制和时间。 */
 export function ChatMessageActions({
   text,
@@ -197,24 +242,38 @@ export function ChatMessageActions({
   const tipKind = tip?.kind;
   useEffect(() => {
     if (!tipKind) return;
-    const follow = () => {
-      const anchor =
-        tipKind === "copy"
-          ? copyRef.current
-          : timeRef.current;
-      if (anchor) showTip(tipKind, anchor);
+    const anchor =
+      tipKind === "copy"
+        ? copyRef.current
+        : timeRef.current;
+    if (!anchor) return;
+    const follow = () => showTip(tipKind, anchor);
+    // 滚动直接收起气泡，而不是跟着锚点重定位：
+    // 消息列表滚动时锚点会离开指针下方，气泡若继续跟随就变成一片
+    // 悬在别处的浮层（用户反馈「滚一下气泡还在」）。
+    // 但滚的若是别的容器（终端等），锚点没动 —— 由
+    // shouldDismissTipOnScroll 判定后保持气泡。
+    const onScroll = (event: Event) => {
+      if (
+        shouldDismissTipOnScroll(
+          event.target,
+          anchor
+        )
+      )
+        setTip(null);
     };
     follow();
     window.addEventListener(
       "scroll",
-      follow,
+      onScroll,
       true
     );
+    // 面板可拖拽调宽，尺寸变化时气泡要重新贴合锚点
     window.addEventListener("resize", follow);
     return () => {
       window.removeEventListener(
         "scroll",
-        follow,
+        onScroll,
         true
       );
       window.removeEventListener(
