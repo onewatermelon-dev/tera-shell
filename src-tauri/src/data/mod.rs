@@ -5,6 +5,7 @@
 //! ```text
 //! <根目录>/.tera-shell/
 //!   ├── sessions.json
+//!   ├── groups.json
 //!   ├── settings.json
 //!   ├── macros.json
 //!   ├── models.json
@@ -31,8 +32,9 @@ const SUBDIR: &str = ".tera-shell";
 const LOCATION_FILE: &str = "location.json";
 
 /// 允许被读写的逻辑数据名。限定白名单，避免前端传任意文件名。
-const ALLOWED: [&str; 7] = [
+const ALLOWED: [&str; 8] = [
 	"sessions",
+	"groups",
 	"settings",
 	"macros",
 	"models",

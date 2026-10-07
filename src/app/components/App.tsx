@@ -9,6 +9,8 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { Alert } from "@heroui/react";
 import { useSessions } from "@/sessions/lib/useSessions";
+import { useSessionGroups } from "@/sessions/lib/useSessionGroups";
+import type { SessionGroup } from "@/sessions/lib/sessionGroup";
 import { useTerminals } from "@/terminal/lib/useTerminals";
 import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
 import { useT } from "@/settings/lib/i18n";
@@ -25,6 +27,8 @@ import { useMacros } from "@/terminal/lib/useMacros";
 import MacroDialog from "@/terminal/components/MacroDialog";
 import type { TerminalMacro } from "@/terminal/lib/terminalMacros";
 import SessionDialog from "@/sessions/components/SessionDialog";
+import GroupDialog from "@/sessions/components/GroupDialog";
+import ConfirmDialog from "@/shared/components/ConfirmDialog";
 import PasswordDialog from "@/sessions/components/PasswordDialog";
 import AppLoading, {
   type AppLoadingHandle
@@ -50,6 +54,30 @@ export default function App() {
   }, [error]);
   const [editingSession, setEditingSession] =
     useState<SavedSession | null>(null);
+  // 分组弹窗：editingGroup 为 null 表示本次是「新建分组」
+  const [groupDialogOpen, setGroupDialogOpen] =
+    useState(false);
+  const [editingGroup, setEditingGroup] =
+    useState<SessionGroup | null>(null);
+  // 待确认删除的分组（null = 没有待确认项）
+  const [groupToRemove, setGroupToRemove] =
+    useState<SessionGroup | null>(null);
+  // 新建会话时预选的分组
+  const [newSessionGroup, setNewSessionGroup] =
+    useState<string>("");
+  /**
+   * 弹窗「本次打开」的递增令牌。
+   *
+   * 会话/分组弹窗都用 useState 初始化表单，只在挂载时跑一次，而 key 里的
+   * id 只在**编辑**时有值 —— 新建时 key 恒为 "new"，同一个 key 复用同一个
+   * 组件实例，于是「打开→填一半→关掉→再打开」会带着上次的残留表单
+   * （新建会话表现为落错分组，新建分组表现为残留上次输入的名字）。
+   *
+   * 令牌每次打开自增，key 就永远不同，必然重挂载。比在 key 里拼业务字段
+   * 稳（那种写法要求每个字段都不能漏，且漏了就是静默 bug）。
+   */
+  const [dialogToken, setDialogToken] =
+    useState(0);
   const [appReady, setAppReady] = useState(false);
   const [macroOpen, setMacroOpen] =
     useState(false);
@@ -71,8 +99,18 @@ export default function App() {
     save,
     update,
     remove,
-    reorder
+    move,
+    unassignGroup
   } = useSessions();
+
+  const groupStore = useSessionGroups();
+  const {
+    groups,
+    add: addGroup,
+    update: updateGroup,
+    remove: removeGroup,
+    toggle: toggleGroup
+  } = groupStore;
 
   // 显示偏好：字体、字号、主题。必须早于 useTerminals —— 终端要用它建实例
   const appSettings = useSettings();
@@ -163,6 +201,24 @@ export default function App() {
 
   function openCreate() {
     setEditingSession(null);
+    // 会话弹窗里分组是必填项：侧栏标题栏的「+」没有分组上下文，
+    // 预选第一个分组让常见路径只需填连接信息；一个分组都没有时才留空，
+    // 由弹窗提示用户填。
+    setNewSessionGroup(groups[0]?.id ?? "");
+    setDialogToken(token => token + 1);
+    setDialogOpen(true);
+  }
+
+  /**
+   * 打开新建会话弹窗并预选目标分组。
+   *
+   * 侧栏分组标题行的「+」走这里 —— 用户已经用「点哪个分组的加号」
+   * 表明了意图，再让他在弹窗里重选一遍是白填。
+   */
+  function openCreateInGroup(groupId: string) {
+    setEditingSession(null);
+    setNewSessionGroup(groupId);
+    setDialogToken(token => token + 1);
     setDialogOpen(true);
   }
 
@@ -200,13 +256,76 @@ export default function App() {
 
   function openEdit(session: SavedSession) {
     setEditingSession(session);
+    setDialogToken(token => token + 1);
     setDialogOpen(true);
   }
 
-  function saveSession(session: SavedSession) {
-    if (editingSession) update(session);
-    else save(session);
+  function openCreateGroup() {
+    setEditingGroup(null);
+    setDialogToken(token => token + 1);
+    setGroupDialogOpen(true);
+  }
+
+  function openEditGroup(group: SessionGroup) {
+    setEditingGroup(group);
+    setDialogToken(token => token + 1);
+    setGroupDialogOpen(true);
+  }
+
+  /**
+   * 保存会话。`pendingGroupName` 是弹窗分组框里手输、尚不存在的分组名。
+   *
+   * 先建组拿到 id 再挂会话 —— 顺序反了会话就指向空气；虽然 groupSessions
+   * 会把它们兜进未分组节，但数据上是悬空引用，同名分组日后重建还会跳回去。
+   */
+  function saveSession(
+    session: SavedSession,
+    pendingGroupName: string
+  ) {
+    let groupId = session.groupId ?? "";
+    if (pendingGroupName) {
+      groupId = addGroup({
+        name: pendingGroupName
+      });
+      console.debug(
+        `[groups] 保存会话时顺带新建分组：${pendingGroupName}`
+      );
+    }
+    const next = { ...session, groupId };
+    if (editingSession) update(next);
+    else save(next);
     setDialogOpen(false);
+  }
+
+  function saveGroup(group: SessionGroup) {
+    if (editingGroup) {
+      updateGroup(group.id, {
+        name: group.name,
+        color: group.color
+      });
+    } else {
+      addGroup({
+        name: group.name,
+        color: group.color
+      });
+    }
+    setGroupDialogOpen(false);
+  }
+
+  /**
+   * 确认删除分组：把组内会话一并移回未分组。
+   *
+   * 只删分组不清理引用的话，那些会话的 groupId 会悬空；同名分组日后重建，
+   * 它们会莫名跳回旧组。console 留痕，方便事后对账。
+   */
+  function confirmRemoveGroup() {
+    if (!groupToRemove) return;
+    const id = groupToRemove.id;
+    unassignGroup(id);
+    removeGroup(id);
+    console.info(
+      `[groups] 删除分组「${groupToRemove.name}」，组内会话已移回未分组`
+    );
   }
 
   /** 打开本机终端：会话列表里固定的 local 会话，标题栏菜单与空状态共用。 */
@@ -385,6 +504,7 @@ export default function App() {
       >
         <SessionSidebar
           sessions={filteredSessions}
+          groups={groups}
           activeId={
             terminals.active?.sourceSessionId ??
             ""
@@ -396,7 +516,12 @@ export default function App() {
           onEdit={openEdit}
           onRemove={remove}
           onCreate={openCreate}
-          onReorder={reorder}
+          onToggleGroup={toggleGroup}
+          onCreateGroup={openCreateGroup}
+          onEditGroup={openEditGroup}
+          onRemoveGroup={setGroupToRemove}
+          onCreateInGroup={openCreateInGroup}
+          onMove={move}
         />
         <TerminalWorkspace
           opened={terminals.opened}
@@ -474,12 +599,39 @@ export default function App() {
         )}
       </section>
       <SessionDialog
-        key={editingSession?.id ?? "new"}
+        // key 带上 dialogToken：每次打开都是新实例，表单按本次的
+        // initialGroupId 重新初始化（否则新建时 key 恒为 "new"，
+        // 组件被复用，上一次的分组/输入会残留下来）
+        key={`${editingSession?.id ?? "new"}-${dialogToken}`}
         open={dialogOpen}
         session={editingSession}
+        groups={groups}
+        initialGroupId={newSessionGroup}
         onClose={() => setDialogOpen(false)}
         onSave={saveSession}
       />
+      <GroupDialog
+        key={`${editingGroup?.id ?? "new-group"}-${dialogToken}`}
+        open={groupDialogOpen}
+        group={editingGroup}
+        onClose={() => setGroupDialogOpen(false)}
+        onSave={saveGroup}
+      />
+      {groupToRemove && (
+        <ConfirmDialog
+          key={groupToRemove.id}
+          eyebrow={t("group.remove")}
+          title={t("group.removeTitle")}
+          description={t(
+            "group.removeDescription",
+            { name: groupToRemove.name }
+          )}
+          confirmText={t("group.remove")}
+          danger
+          onConfirm={confirmRemoveGroup}
+          onClose={() => setGroupToRemove(null)}
+        />
+      )}
       {terminals.passwordRequest && (
         <PasswordDialog
           key={

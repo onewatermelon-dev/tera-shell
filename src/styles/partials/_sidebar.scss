@@ -1,7 +1,25 @@
-// HeroUI ListBoxItem 自带 hover/选中/圆角样式，这里只留布局约束
+// 会话条目：以前是 HeroUI ListBox.Item，自带 hover/选中/圆角；
+// 改成分组渲染后换成普通 div，这些状态得自己画。
 .session-item {
+  position: relative;
+  display: flex;
   gap: 9px;
+  align-items: center;
   width: 100%;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.12s ease;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  // 活动会话：跟着已打开的终端标签走（App 传 activeId）
+  &.is-active,
+  &[aria-current="true"] {
+    background: var(--accent-soft);
+  }
 }
 
 .session-icon {
@@ -46,11 +64,51 @@
   color: var(--muted);
 }
 
-.delete,
-.edit {
+// 悬停才露出的编辑/删除。
+// ⚠️ 选择器带 `.button` 提特异性：HeroUI 的
+// `.button--icon-only.button--sm` 是 (0,2,0)，只写 `.edit` (0,1,0)
+// 会被它的 `w-9 md:w-8`（32px）盖掉，按钮比声明的 15px 大一倍。
+.delete.button,
+.edit.button {
   display: none;
   width: 15px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0;
   color: var(--muted);
+
+  /**
+   * 去掉按下时的圆形底色。
+   *
+   * HeroUI 的 ghost 变体给按钮定了三个 CSS 变量：
+   *   --button-bg: transparent
+   *   --button-bg-hover: var(--default)
+   *   --button-bg-pressed: var(--default)← 按下时填这层
+   * 所以点一下会闪出一块圆形色块（--default 是带圆角的浅色）。
+   *
+   * 直接把 hover / pressed 两态都改成 transparent：这两个按钮只在
+   * 会话行悬停时出现、点完即消失，底色本来就没有存在意义。
+   * 用变量覆盖而不是 background: none —— 前者保留 focus-visible
+   * 的无障碍焦点环，后者会把它一起抹掉。
+   */
+  --button-bg-hover: transparent;
+  --button-bg-pressed: transparent;
+
+  // HeroUI 给 sm 按钮的 svg 定了 size-4（16px），比 15px 的按钮还大，
+  // 会撑出按钮外；这里一并压到 11px
+  svg {
+    width: 11px;
+  }
+
+  // 悬停变亮：图标平时是 muted，hover 提到 foreground 才看得出可点。
+  // 删除给 danger 色 —— 破坏性操作提前示警，和分组标题行的删除按钮一致
+  &:hover {
+    color: var(--foreground);
+  }
+}
+
+.delete.button:hover {
+  color: var(--danger);
 }
 
 .session-item:hover .delete,
