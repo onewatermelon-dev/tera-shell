@@ -1,3 +1,8 @@
+// 细滚动条 mixin 在 _scrollbar.scss —— AI 面板与终端区的信息抽屉共用。
+// `as *` 不能省：scss 的 @use 是按文件隔离的命名空间，不加就得写
+// @include scrollbar.thin-scrollbar 这种全名。
+@use "scrollbar" as *;
+
 // 会话条目：以前是 HeroUI ListBox.Item，自带 hover/选中/圆角；
 // 改成分组渲染后换成普通 div，这些状态得自己画。
 .session-item {
@@ -351,6 +356,8 @@
   background: var(--surface-secondary);
   border: 1px solid var(--border);
   border-radius: 10px;
+
+  @include thin-scrollbar;
 }
 
 .ai-history-item {
@@ -450,6 +457,8 @@
   min-height: 0;
   padding: 12px;
   overflow-y: auto;
+
+  @include thin-scrollbar;
 }
 
 // 空面板欢迎卡片：贴底显示在输入框上方（参考 WisdomSSH 截图）
@@ -504,6 +513,17 @@
     align-self: stretch;
     padding: 0;
     white-space: normal;
+
+    // Streamdown 给代码块/宽表格挂了 tailwind 的 overflow-x-auto、
+    // overflow-auto，这些是 AI 面板里真正会滚起来的地方（正文
+    // 一般不溢出，代码块一长就滚）。tailwind 只管 overflow，
+    // 滚动条外观没人写，于是又回到浏览器默认的宽灰条。
+    // ⚠️ 别写成 `.ai-entry pre`：Streamdown 的代码块是 pre>code，
+    // 直接选 pre 也会命中表格内部的 pre 之类，范围太宽。
+    pre,
+    table {
+      @include thin-scrollbar;
+    }
   }
 
   &.is-error {
@@ -592,6 +612,8 @@
   white-space: pre-wrap;
   background: var(--surface-secondary);
   border-radius: 6px;
+
+  @include thin-scrollbar;
 }
 
 .ai-card-result {
@@ -613,6 +635,8 @@
     white-space: pre-wrap;
     background: var(--surface-secondary);
     border-radius: 6px;
+
+    @include thin-scrollbar;
   }
 
   pre.is-error {
@@ -723,6 +747,8 @@
   white-space: pre-wrap;
   background: var(--surface-secondary);
   border-radius: 8px;
+
+  @include thin-scrollbar;
 }
 
 // PromptInput（CSS module 限宽 420）在面板里撑满剩余宽度
@@ -844,6 +870,8 @@
   margin: 0;
   overflow-y: auto;
   list-style: none;
+
+  @include thin-scrollbar;
 
   li {
     display: flex;

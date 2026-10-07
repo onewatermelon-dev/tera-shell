@@ -1,3 +1,9 @@
+// 细滚动条 mixin 在 _scrollbar.scss —— 本文件的系统/进程/网络信息
+// 抽屉要用（滚动容器是 .sys-drawer-body）。
+// `as *` 不能省：scss 的 @use 是按文件隔离的命名空间，不加就得写
+// @include scrollbar.thin-scrollbar 这种全名。
+@use "scrollbar" as *;
+
 // 查找浮层：右上角，压在终端内容之上。
 // 类名用 find-* 而非 search-*，避免与侧栏"搜索会话"的 .search-box 冲突
 .find-box {
@@ -665,11 +671,16 @@ body.tab-dragging {
   }
 }
 
+// 三个信息抽屉（系统/进程/网络）共用的正文区，也是它们唯一的滚动
+// 容器 —— 里面的 .sys-table-wrap 是 overflow:hidden，表格不滚。
+// 滚动条按 _scrollbar.scss 的细滑块规格，与终端、AI 面板一致。
 .sys-drawer-body {
   flex: 1;
   min-height: 0;
   padding: 0 14px 14px;
   overflow-y: auto;
+
+  @include thin-scrollbar;
 }
 
 .sys-loading {

@@ -1,0 +1,51 @@
+// 细滚动条：与终端滑块同一套规格，供各功能域的原生滚动容器 @include。
+// 单独成文件是因为它跨域（会话侧栏的 AI 面板、终端区的系统/进程/
+// 网络信息抽屉都要用），而 partial 之间此前没有互相 @use 的先例 ——
+// 放哪个域的 partial 里都会让另一个域反过来依赖它，徒增耦合。
+
+// 终端的滑块是 xterm 自绘 DOM（见 _terminal.scss），规格为 6px 宽 +
+// 3px 全圆角；应用内这些是浏览器原生滚动条，默认样式又宽又灰、带方角，
+// 与终端割裂。这里统一成同一套规格，滑块取前景色的低透明变体
+// （HeroUI 的 --scrollbar-thumb 就是这个思路），轨道透明。
+// ⚠️ 终端滑块颜色跟着**终端配色**走（theme.scrollbarSlider*，随光标色
+// 变），这些面板没有配色概念，只能跟应用主题 —— 对齐的是"低调、细、
+// 不抢内容视线"这个观感，不是具体色值。
+@mixin thin-scrollbar {
+  // Firefox / 标准属性：Chromium 系不读，但 WebView2 之外的渲染器
+  // （浏览器里调试、Linux WebKitGTK）靠它拿到同样观感
+  scrollbar-color: var(--scrollbar-thumb)
+    transparent;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+
+    // 横向滚动条同样收窄：AI 面板的代码块/命令输出会横向溢出，
+    // 默认 15px 在窄面板里吃掉一行内容宽度
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+
+    // 3px = 6px 宽的一半，圆角才是"胶囊"而不是椭圆
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: color-mix(
+      in oklab,
+      var(--foreground) 28%,
+      transparent
+    );
+  }
+
+  // 双轴都溢出时右下角会垫一块默认灰方块，与细滑块不搭
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
