@@ -311,26 +311,9 @@ export function useTerminals(
             cols: session.terminal.cols
           })
             .then(() => {
-              // 尺寸一变，ConPTY 会把屏幕重放一遍、远端 shell 也会重画
-              // 提示符，两边错位就会在屏上留下重复/缩进错乱的提示符。
-              // 让远端自己清屏重画一次（Ctrl+L）最干净，历史输出仍在
-              // 滚动缓冲里；备用屏（vim/top 等全屏应用）不动，免得打断。
-              if (
-                session.terminal.buffer.active
-                  .type === "alternate"
-              ) {
-                return;
-              }
-              invoke("terminal_write", {
-                id: session.id,
-                data: "\u000c",
-                command: null
-              }).catch(reason =>
-                console.debug(
-                  `[terminal] resize 后重画失败 ${session.id}`,
-                  reason
-                )
-              );
+              // 这里**不要**再发 Ctrl+L 清屏重画：输出重复的根因是孤儿
+              // 监听器（已修复），resize 本身的 ConPTY 重绘内容是完整的，
+              // 每次都清屏反而把用户正在看的屏幕抹掉
             })
             .catch(reason => {
               // PTY 还没建立（start 未完成）时会走到这里。以前静默吞掉，
