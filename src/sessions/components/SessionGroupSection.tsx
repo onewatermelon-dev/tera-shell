@@ -37,7 +37,7 @@ type Props = {
     session: SavedSession
   ) => void;
   onEdit: (session: SavedSession) => void;
-  onRemove: (id: string) => void;
+  onRemove: (session: SavedSession) => void;
 };
 
 /** 单个会话条目。抽成独立组件，让父级只管分组结构。 */
@@ -112,7 +112,7 @@ function SessionRow({
           size="sm"
           isIconOnly
           aria-label={t("sidebar.remove")}
-          onPress={() => onRemove(session.id)}
+          onPress={() => onRemove(session)}
         >
           <DeleteOutlined />
         </Button>

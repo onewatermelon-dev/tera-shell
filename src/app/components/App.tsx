@@ -62,6 +62,9 @@ export default function App() {
   // 待确认删除的分组（null = 没有待确认项）
   const [groupToRemove, setGroupToRemove] =
     useState<SessionGroup | null>(null);
+  // 待确认删除的会话（null = 没有待确认项）
+  const [sessionToRemove, setSessionToRemove] =
+    useState<SavedSession | null>(null);
   // 新建会话时预选的分组
   const [newSessionGroup, setNewSessionGroup] =
     useState<string>("");
@@ -328,6 +331,21 @@ export default function App() {
     );
   }
 
+  /**
+   * 确认删除会话。
+   *
+   * 二次确认的价值：会话是用户逐条攒下来的连接信息，点错那个 × 就没了，
+   * 且没有撤销入口。本机终端（id=local）不参与 —— 它是内置的、
+   * 侧栏本来就不给删除按钮。
+   */
+  function confirmRemoveSession() {
+    if (!sessionToRemove) return;
+    remove(sessionToRemove.id);
+    console.info(
+      `[sessions] 删除会话「${sessionToRemove.name}」（${sessionToRemove.kind}）`
+    );
+  }
+
   /** 打开本机终端：会话列表里固定的 local 会话，标题栏菜单与空状态共用。 */
   function openLocal() {
     const local = sessions.find(
@@ -514,7 +532,7 @@ export default function App() {
           onQueryChange={setQuery}
           onDuplicate={terminals.duplicate}
           onEdit={openEdit}
-          onRemove={remove}
+          onRemove={setSessionToRemove}
           onCreate={openCreate}
           onToggleGroup={toggleGroup}
           onCreateGroup={openCreateGroup}
@@ -630,6 +648,22 @@ export default function App() {
           danger
           onConfirm={confirmRemoveGroup}
           onClose={() => setGroupToRemove(null)}
+        />
+      )}
+      {sessionToRemove && (
+        <ConfirmDialog
+          key={sessionToRemove.id}
+          eyebrow={t("session.remove")}
+          title={t("session.removeTitle", {
+            name: sessionToRemove.name
+          })}
+          description={t(
+            "session.removeDescription"
+          )}
+          confirmText={t("session.remove")}
+          danger
+          onConfirm={confirmRemoveSession}
+          onClose={() => setSessionToRemove(null)}
         />
       )}
       {terminals.passwordRequest && (

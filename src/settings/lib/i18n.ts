@@ -250,6 +250,11 @@ const zhCN = {
   "session.authHint":
     "身份验证由系统 SSH 处理，支持已有密钥和 ssh-agent。",
   "session.save": "保存会话",
+  "session.remove": "删除会话",
+  "session.removeTitle":
+    "确定删除会话「{name}」？",
+  "session.removeDescription":
+    "会话将从列表中移除，保存的连接信息与密码一并清除，此操作不可撤销。",
   "session.hostRequired": "请填写主机地址",
   "session.group": "分组",
   "session.groupPlaceholder":
@@ -721,6 +726,11 @@ const enUS: Record<MessageKey, string> = {
   "session.authHint":
     "Authentication is handled by the system SSH client, so existing keys and ssh-agent both work.",
   "session.save": "Save session",
+  "session.remove": "Delete session",
+  "session.removeTitle":
+    "Delete session “{name}”?",
+  "session.removeDescription":
+    "The session is removed from the list and its saved connection details and password are cleared. This cannot be undone.",
   "session.hostRequired": "Host is required",
   "session.group": "Group",
   "session.groupPlaceholder":

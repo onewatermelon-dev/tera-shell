@@ -33,7 +33,11 @@ type Props = {
   onQueryChange: (value: string) => void;
   onDuplicate: (session: SavedSession) => void;
   onEdit: (session: SavedSession) => void;
-  onRemove: (id: string) => void;
+  /**
+   * 请求删除会话。传整个会话对象而非 id —— 二次确认弹窗要显示会话名，
+   * 拿到 id 得反查，不如直接给。
+   */
+  onRemove: (session: SavedSession) => void;
   onCreate: () => void;
   onToggleGroup: (id: string) => void;
   /** 新建分组（打开分组弹窗）。 */
