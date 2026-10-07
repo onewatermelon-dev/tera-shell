@@ -401,6 +401,11 @@ export function useTerminals(
           // 上方内容，恢复时整屏重绘把历史打回空白；只缩本地视口即可，
           // 远端布局保持不变（见 setPtyResizePaused）
           if (ptyPausedRef.current) continue;
+          // Ctrl+滚轮缩放期间所有会话都挂起 PTY 同步（见 pausePtyForZoom）：
+          // SSH 会话里 ssh.exe 同样跑在 ConPTY 中，resize 会触发
+          // 「ConPTY 整屏重绘 + 远端 readline 重绘 + xterm reflow」三方
+          // 叠加，屏幕只剩一个提示符
+          if (zoomSyncPausedRef.current) continue;
           // 尺寸连续变化时合并，只在稳定后同步一次（见 schedulePtyResize）
           schedulePtyResize(session);
         }
@@ -424,6 +429,37 @@ export function useTerminals(
     },
     [resize]
   );
+
+  /** Ctrl+滚轮缩放期间挂起 PTY 尺寸同步的标记与手势收尾定时器 */
+  const zoomSyncPausedRef = useRef(false);
+  const zoomSettleTimer = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  /**
+   * 缩放手势开始：挂起**所有会话**的 PTY 尺寸同步，滚轮停止 600ms 后解除。
+   *
+   * 每档字号都会改列数，而每次 resize 都会触发一轮三方重绘叠加：
+   * 本地 ConPTY 整屏重发视口（`\x1b[H` + 逐行覆盖）、SSH 会话里
+   * ssh.exe 同样跑在 ConPTY 中加上远端 readline 重绘、xterm 自身再做
+   * 一次 reflow —— 三者互相错位，屏幕上只剩一个提示符（实测：探针抓
+   * ConPTY 序列 + stub 回放）。因此缩放引发的尺寸变化**不同步给任何
+   * PTY**：本地 fit 照常执行（显示正确、缓冲不丢），各 PTY 保持原宽度，
+   * 直到下一次真实的容器 resize（拖窗口/开关面板）再重新对齐。
+   * ponytail: 600ms 挂起窗口内恰好拖动窗口的话，那一次尺寸变化也会被
+   * 跳过，下次拖窗口自动补齐 —— 权衡下来可接受。
+   */
+  const pausePtyForZoom = useCallback(() => {
+    // 定时器句柄是可变状态，规则按不可变数据对待属于误报，显式放行
+    /* eslint-disable react-hooks/immutability */
+    zoomSyncPausedRef.current = true;
+    if (zoomSettleTimer.current)
+      clearTimeout(zoomSettleTimer.current);
+    zoomSettleTimer.current = setTimeout(() => {
+      zoomSettleTimer.current = null;
+      zoomSyncPausedRef.current = false;
+    }, 600);
+    /* eslint-enable react-hooks/immutability */
+  }, []);
 
   /**
    * 设置里的字体/字号变化后，同步到所有已打开的终端。
@@ -458,6 +494,9 @@ export function useTerminals(
         appearance.commandCompletion
       );
     }
+    // 字号变化（Ctrl+滚轮或设置页）必然改列数：挂起 PTY 同步，手势
+    // 停止 600ms 后恢复，避免连续缩放触发一串 ConPTY 整屏重绘
+    pausePtyForZoom();
     resize();
   }, [
     appearance.fontFamily,
@@ -466,6 +505,7 @@ export function useTerminals(
     appearance.commandCompletion,
     appearance.cursorStyle,
     appearance.cursorBlink,
+    pausePtyForZoom,
     resize
   ]);
 
