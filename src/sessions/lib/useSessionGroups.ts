@@ -93,6 +93,25 @@ export function useSessionGroups() {
     [persist]
   );
 
+  /**
+   * 批量追加分组（会话导入用）。
+   *
+   * id 由 `parseImportPayload` 预先生成，且已与导入会话的 groupId 对应，
+   * 所以这里**必须原样保留传入的 id**，不能像 `add()` 那样重新生成
+   * ——否则会话会指向不存在的分组。一次写盘，别逐条调 `add()`。
+   */
+  const addMany = useCallback(
+    (incoming: SessionGroup[]) => {
+      if (incoming.length === 0) return;
+      setGroups(prev => {
+        const next = [...prev, ...incoming];
+        persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+
   /** 折叠 / 展开切换。 */
   const toggle = useCallback(
     (id: string) => {
@@ -130,6 +149,7 @@ export function useSessionGroups() {
   return {
     groups,
     add,
+    addMany,
     update,
     remove,
     toggle,

@@ -9,6 +9,8 @@ pub mod icons;
 pub mod infra;
 pub mod sftp;
 pub mod terminal;
+/// 会话导入/导出的文件搬运（格式逻辑在前端，这里只管读写与对话框）
+pub mod transfer;
 
 /// 前端 F12 / Ctrl+Shift+I 打开 DevTools。
 /// 浏览器级快捷键被禁用后 F12 不再生效，需要走这个命令手动打开。
@@ -86,6 +88,8 @@ pub fn run() {
             data::set_data_dir,
             data::pick_data_dir,
             fonts::list_fonts,
+            transfer::export_to_file,
+            transfer::import_from_file,
             open_devtools
         ])
         .setup(|app| {

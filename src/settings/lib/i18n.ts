@@ -255,6 +255,24 @@ const zhCN = {
     "确定删除会话「{name}」？",
   "session.removeDescription":
     "会话将从列表中移除，保存的连接信息与密码一并清除，此操作不可撤销。",
+  "transfer.export": "导出会话",
+  "transfer.exportDone": "已导出 {count} 个会话",
+  "transfer.exportEmpty": "没有可导出的会话",
+  "transfer.exportFailed": "导出失败：{error}",
+  "transfer.import": "导入会话",
+  "transfer.importTitle":
+    "导入 {sessions} 个会话、{groups} 个分组？",
+  "transfer.importDescription":
+    "导入的会话会分配新的标识；出于安全考虑密码不会被导入，需要重新填写。",
+  "transfer.importMerged":
+    "{count} 个分组与现有分组同名，会并入现有分组。",
+  "transfer.importSkipped":
+    "{count} 个会话已存在（同一台机器与账号），将跳过。",
+  "transfer.importNothingNew":
+    "没有新会话可导入：文件里的 {count} 个会话都已存在。",
+  "transfer.importDone":
+    "已导入 {sessions} 个会话、{groups} 个分组",
+  "transfer.importFailed": "导入失败：{error}",
   "session.hostRequired": "请填写主机地址",
   "session.group": "分组",
   "session.groupPlaceholder":
@@ -731,6 +749,27 @@ const enUS: Record<MessageKey, string> = {
     "Delete session “{name}”?",
   "session.removeDescription":
     "The session is removed from the list and its saved connection details and password are cleared. This cannot be undone.",
+  "transfer.export": "Export sessions",
+  "transfer.exportDone":
+    "Exported {count} sessions",
+  "transfer.exportEmpty": "No sessions to export",
+  "transfer.exportFailed":
+    "Export failed: {error}",
+  "transfer.import": "Import sessions",
+  "transfer.importTitle":
+    "Import {sessions} sessions and {groups} groups?",
+  "transfer.importDescription":
+    "Imported sessions are given new identifiers. Passwords are never exported, so you will need to re-enter them.",
+  "transfer.importMerged":
+    "{count} groups share a name with an existing group and will be merged into it.",
+  "transfer.importSkipped":
+    "{count} sessions already exist (same host and account) and will be skipped.",
+  "transfer.importNothingNew":
+    "Nothing to import: all {count} sessions in the file already exist.",
+  "transfer.importDone":
+    "Imported {sessions} sessions and {groups} groups",
+  "transfer.importFailed":
+    "Import failed: {error}",
   "session.hostRequired": "Host is required",
   "session.group": "Group",
   "session.groupPlaceholder":

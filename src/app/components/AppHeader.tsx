@@ -44,6 +44,10 @@ export type HeaderActions = {
   devtools: () => void;
   /** 打开 SFTP 窗口，连接目标取当前活动会话。 */
   openSftp: () => void;
+  /** 把当前会话与分组导出到 JSON 文件（文件菜单）。 */
+  exportSessions: () => void;
+  /** 从 JSON 文件导入会话，选完文件先弹确认框（文件菜单）。 */
+  importSessions: () => void;
   /** 打开设置页。 */
   openSettings: () => void;
   /** 竖条菜单收起后的焦点回还（菜单动作多为终端操作）。 */

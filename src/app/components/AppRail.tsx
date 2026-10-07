@@ -72,6 +72,17 @@ export function buildMenus(
           id: "openLocal",
           label: t("app.menu.openLocal")
         },
+        // 导入/导出走当前会话库：没有可导出内容时不置灰，
+        // 点击后由 App 给出"没有可导出的会话"的提示。
+        // 文案复用 transfer.* —— 同一件事，菜单与确认框不该有两种说法
+        {
+          id: "exportSessions",
+          label: t("transfer.export")
+        },
+        {
+          id: "importSessions",
+          label: t("transfer.import")
+        },
         {
           id: "closeActive",
           label: t("app.menu.closeActive"),

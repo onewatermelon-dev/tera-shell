@@ -10,6 +10,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { Alert } from "@heroui/react";
 import { useSessions } from "@/sessions/lib/useSessions";
 import { useSessionGroups } from "@/sessions/lib/useSessionGroups";
+import {
+  parseImportPayload,
+  serializeExport,
+  type ImportPreview
+} from "@/sessions/lib/sessionTransfer";
 import type { SessionGroup } from "@/sessions/lib/sessionGroup";
 import { useTerminals } from "@/terminal/lib/useTerminals";
 import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
@@ -65,6 +70,15 @@ export default function App() {
   // 待确认删除的会话（null = 没有待确认项）
   const [sessionToRemove, setSessionToRemove] =
     useState<SavedSession | null>(null);
+  /**
+   * 待确认导入的内容（null = 当前没有待确认的导入）。
+   *
+   * 解析结果先落在状态里、再让用户确认，是为了让「会导入几条、有几条
+   * 重复」这些数字能在确认框里如实显示 —— 直接倒进去的话用户根本无从
+   * 知晓会发生什么。
+   */
+  const [pendingImport, setPendingImport] =
+    useState<ImportPreview | null>(null);
   // 新建会话时预选的分组
   const [newSessionGroup, setNewSessionGroup] =
     useState<string>("");
@@ -101,6 +115,7 @@ export default function App() {
     filteredSessions,
     save,
     update,
+    addMany: addManySessions,
     remove,
     move,
     unassignGroup
@@ -110,6 +125,7 @@ export default function App() {
   const {
     groups,
     add: addGroup,
+    addMany: addManyGroups,
     update: updateGroup,
     remove: removeGroup,
     toggle: toggleGroup
@@ -346,6 +362,106 @@ export default function App() {
     );
   }
 
+  /**
+   * 把当前会话与分组导出到 JSON 文件。
+   *
+   * 本机终端不在导出范围内（见 buildExportPayload）。密码由后端那条
+   * 「写文件」命令随内容一起落盘，所以这里传出去的 JSON 已经不含密码。
+   */
+  async function exportSessions() {
+    if (sessions.length === 0) {
+      setError(t("transfer.exportEmpty"));
+      return;
+    }
+    try {
+      const path = await invoke<string | null>(
+        "export_to_file",
+        {
+          content: serializeExport(
+            sessions,
+            groups
+          )
+        }
+      );
+      // 用户取消保存框：后端返回 null，不是错误，静默收手
+      if (!path) return;
+      console.info(
+        `[transfer] 导出 ${sessions.length} 个会话到 ${path}`
+      );
+      console.info(
+        `[transfer] 导出完成：${sessions.length} 个会话`
+      );
+    } catch (reason) {
+      console.error("导出会话失败", reason);
+      setError(
+        t("transfer.exportFailed", {
+          error: String(reason)
+        })
+      );
+    }
+  }
+
+  /**
+   * 选文件 → 解析 → 停在确认框。
+   *
+   * 解析失败（选错文件、格式不对、版本过新）一律在这里就地提示，不弹框。
+   * 传现有会话与分组：连接目标已存在的整条跳过，同名分组并入现有分组。
+   * 全被跳过时不弹「导入 0 个会话」的确认框，直接提示后收手。
+   */
+  async function importSessions() {
+    try {
+      const raw = await invoke<string | null>(
+        "import_from_file"
+      );
+      if (!raw) return;
+      const result = parseImportPayload(
+        raw,
+        sessions,
+        groups
+      );
+      if (!result.ok) {
+        setError(
+          t("transfer.importFailed", {
+            error: result.error
+          })
+        );
+        return;
+      }
+      // 整份文件里的会话都已在列表中：没什么可导的，
+      // 弹确认框让用户点「导入」再看结果只会莫名其妙
+      if (result.sessions.length === 0) {
+        console.info(
+          `[transfer] 导入中止：${result.skipped} 条会话均已存在`
+        );
+        setError(
+          t("transfer.importNothingNew", {
+            count: result.skipped
+          })
+        );
+        return;
+      }
+      setPendingImport(result);
+    } catch (reason) {
+      console.error("读取会话文件失败", reason);
+      setError(
+        t("transfer.importFailed", {
+          error: String(reason)
+        })
+      );
+    }
+  }
+
+  /** 确认导入：分组与会话各一次写盘，顺序不能反 —— 会话要引用分组 id。 */
+  function confirmImport() {
+    if (!pendingImport) return;
+    addManyGroups(pendingImport.groups);
+    addManySessions(pendingImport.sessions);
+    console.info(
+      `[transfer] 导入 ${pendingImport.sessions.length} 个会话、新建 ${pendingImport.groups.length} 个分组（跳过已有 ${pendingImport.skipped} 条，${pendingImport.mergedGroups} 个同名分组并入现有分组）`
+    );
+    setPendingImport(null);
+  }
+
   /** 打开本机终端：会话列表里固定的 local 会话，标题栏菜单与空状态共用。 */
   function openLocal() {
     const local = sessions.find(
@@ -477,6 +593,8 @@ export default function App() {
       }).catch(fail);
     },
     openSettings: () => setSettingsOpen(true),
+    exportSessions,
+    importSessions,
     refocusTerminal: refocusActive
   };
 
@@ -664,6 +782,41 @@ export default function App() {
           danger
           onConfirm={confirmRemoveSession}
           onClose={() => setSessionToRemove(null)}
+        />
+      )}
+      {pendingImport && (
+        <ConfirmDialog
+          // 一次性的令牌：连续导入两个文件时，内容变了但组件类型没变，
+          // 不加 key 会复用上一次的实例
+          key={
+            pendingImport.sessions[0]?.id ??
+            "import"
+          }
+          eyebrow={t("transfer.import")}
+          title={t("transfer.importTitle", {
+            sessions:
+              pendingImport.sessions.length,
+            groups: pendingImport.groups.length
+          })}
+          description={[
+            t("transfer.importDescription"),
+            pendingImport.mergedGroups > 0
+              ? t("transfer.importMerged", {
+                  count:
+                    pendingImport.mergedGroups
+                })
+              : null,
+            pendingImport.skipped > 0
+              ? t("transfer.importSkipped", {
+                  count: pendingImport.skipped
+                })
+              : null
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          confirmText={t("transfer.import")}
+          onConfirm={confirmImport}
+          onClose={() => setPendingImport(null)}
         />
       )}
       {terminals.passwordRequest && (

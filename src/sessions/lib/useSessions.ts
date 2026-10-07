@@ -129,6 +129,36 @@ export function useSessions() {
     [persist]
   );
 
+  /**
+   * 批量追加会话（会话导入用）。
+   *
+   * 只追加，不去重：id 已由 `parseImportPayload` 重新生成过，天然不会与
+   * 现有冲突；重复的「同名同主机」条目由用户在导入确认框里决定是否保留。
+   * 一次 setSessions + 一次写盘 —— 逐条调`save()` 会让导入 50 条触发
+   * 50 次写盘与50 次重渲染。
+   */
+  const addMany = useCallback(
+    (incoming: SavedSession[]) => {
+      if (incoming.length === 0) return;
+      setSessions(prev => {
+        const next = [
+          ...prev,
+          ...incoming.map(session => ({
+            ...session,
+            groupId:
+              session.groupId ?? UNGROUPED_ID,
+            color: normalizeColorTag(
+              session.color
+            )
+          }))
+        ];
+        persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+
   const remove = useCallback(
     (id: string) => {
       if (id === localSession.id) return;
@@ -228,6 +258,7 @@ export function useSessions() {
     filteredSessions,
     save,
     update,
+    addMany,
     remove,
     move,
     unassignGroup
