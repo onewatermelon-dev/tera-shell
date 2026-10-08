@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   anthropicAdapter,
+  dequeueMessage,
+  enqueueMessage,
+  moveQueued,
+  nudgeQueued,
+  ownsRound,
   parseToolArguments,
   responsesAdapter,
-  trimToolOutput
+  trimToolOutput,
+  type AiQueuedMessage
 } from "@/terminal/lib/aiChat";
 import {
   parseNetInfo,
@@ -338,5 +344,260 @@ describe("parseNetInfo", () => {
     expect(udp?.pid).toBe(0);
     expect(udp?.name).toBe("-");
     expect(udp?.connCount).toBe(0);
+  });
+});
+
+describe("enqueueMessage", () => {
+  it("按 FIFO 追加，id 自动生成且互不相同", () => {
+    let queue: AiQueuedMessage[] = [];
+    queue = enqueueMessage(queue, {
+      text: "第一条",
+      images: []
+    });
+    queue = enqueueMessage(queue, {
+      text: "第二条",
+      images: []
+    });
+    expect(queue.map(q => q.text)).toEqual([
+      "第一条",
+      "第二条"
+    ]);
+    expect(queue[0]?.id).not.toBe(queue[1]?.id);
+  });
+
+  it("同 id 视为编辑：原位替换而不追加", () => {
+    let queue = enqueueMessage([], {
+      id: "m1",
+      text: "原文",
+      images: []
+    });
+    queue = enqueueMessage(queue, {
+      id: "m1",
+      text: "改过的",
+      images: []
+    });
+    expect(queue).toHaveLength(1);
+    expect(queue[0]?.text).toBe("改过的");
+  });
+
+  it("文字与图片都空的条目不入队", () => {
+    const queue = enqueueMessage([], {
+      text: "   ",
+      images: []
+    });
+    expect(queue).toHaveLength(0);
+  });
+
+  it("只带图（无文字）也允许入队", () => {
+    const queue = enqueueMessage([], {
+      text: "",
+      images: ["data:image/png;base64,AAA"]
+    });
+    expect(queue).toHaveLength(1);
+    expect(queue[0]?.text).toBe("");
+  });
+
+  it("trim 正文，但保留入参的图片数组不被外部改动影响", () => {
+    const images = ["data:image/png;base64,AAA"];
+    const queue = enqueueMessage([], {
+      text: "  看这里  ",
+      images
+    });
+    expect(queue[0]?.text).toBe("看这里");
+    expect(queue[0]?.images).not.toBe(images);
+    expect(queue[0]?.images).toEqual(images);
+  });
+});
+
+describe("dequeueMessage", () => {
+  it("移除指定 id，其余保持顺序", () => {
+    let queue: AiQueuedMessage[] = [];
+    for (const text of ["a", "b", "c"]) {
+      queue = enqueueMessage(queue, {
+        text,
+        images: []
+      });
+    }
+    const mid = queue[1]?.id ?? "";
+    const next = dequeueMessage(queue, mid);
+    expect(next.map(q => q.text)).toEqual([
+      "a",
+      "c"
+    ]);
+  });
+
+  it("id 不存在时内容不变（filter 仍会返回新数组，比内容不比引用）", () => {
+    const queue = enqueueMessage([], {
+      text: "a",
+      images: []
+    });
+    expect(dequeueMessage(queue, "none")).toEqual(
+      queue
+    );
+  });
+});
+
+/** 造一条固定 id 的队列，省得每例都拿 crypto.randomUUID() 再回查。 */
+function makeQueue(
+  texts: string[]
+): AiQueuedMessage[] {
+  return texts.map((text, index) => ({
+    id: `q${index + 1}`,
+    text,
+    images: []
+  }));
+}
+
+describe("moveQueued", () => {
+  it("向下拖：落到目标之后（移除自己后目标左移一位）", () => {
+    const queue = makeQueue(["a", "b", "c"]);
+    // a 拖到 c 上：a 挪出后 b/c 变 [b, c]，插到下标 2 → 落c 后面
+    const next = moveQueued(queue, "q1", "q3");
+    expect(next.map(q => q.text)).toEqual([
+      "b",
+      "c",
+      "a"
+    ]);
+  });
+
+  it("向上拖：落到目标之前", () => {
+    const queue = makeQueue(["a", "b", "c"]);
+    // c 拖到 a 上：插到下标 0
+    const next = moveQueued(queue, "q3", "q1");
+    expect(next.map(q => q.text)).toEqual([
+      "c",
+      "a",
+      "b"
+    ]);
+  });
+
+  it("相邻两条互换", () => {
+    const queue = makeQueue(["a", "b", "c"]);
+    expect(
+      moveQueued(queue, "q2", "q1").map(
+        q => q.text
+      )
+    ).toEqual(["b", "a", "c"]);
+    expect(
+      moveQueued(queue, "q2", "q3").map(
+        q => q.text
+      )
+    ).toEqual(["a", "c", "b"]);
+  });
+
+  it("from/to 相同或任一 id 不存在时原样返回", () => {
+    const queue = makeQueue(["a", "b"]);
+    expect(moveQueued(queue, "q1", "q1")).toEqual(
+      queue
+    );
+    expect(moveQueued(queue, "q1", "zz")).toEqual(
+      queue
+    );
+    expect(moveQueued(queue, "zz", "q1")).toEqual(
+      queue
+    );
+  });
+
+  it("不改动原数组", () => {
+    const queue = makeQueue(["a", "b", "c"]);
+    const snapshot = queue.map(q => q.text);
+    moveQueued(queue, "q1", "q3");
+    expect(queue.map(q => q.text)).toEqual(
+      snapshot
+    );
+  });
+});
+
+describe("nudgeQueued", () => {
+  it("上移/下移一位", () => {
+    const queue = makeQueue(["a", "b", "c"]);
+    expect(
+      nudgeQueued(queue, "q3", -1).map(
+        q => q.text
+      )
+    ).toEqual(["a", "c", "b"]);
+    expect(
+      nudgeQueued(queue, "q1", 1).map(q => q.text)
+    ).toEqual(["b", "a", "c"]);
+  });
+
+  it("已在边界或 id 不存在时不动", () => {
+    const queue = makeQueue(["a", "b"]);
+    expect(nudgeQueued(queue, "q1", -1)).toEqual(
+      queue
+    );
+    expect(nudgeQueued(queue, "q2", 1)).toEqual(
+      queue
+    );
+    expect(nudgeQueued(queue, "zz", -1)).toEqual(
+      queue
+    );
+  });
+});
+
+describe("ownsRound（轮次令牌）", () => {
+  /** 模拟 hook 里的 roundRef。 */
+  let current = 0;
+
+  // 复刻用户实机踩到的那个竞态：
+  // 用户在卡片上点「执行」→ confirm 唤醒上一轮挂起的 runLoop →
+  // 它被唤醒后立刻 return → 上一轮的 finally 也跑 →
+  // setBusy(false) 把 confirm 刚设的 busy=true 冲掉，
+  // 症状是「点完卡片按钮，底部发送键退回发送态」。
+  // 令牌让旧轮的收尾失效。
+
+  it("同一轮内令牌相等，收尾有效", () => {
+    expect(ownsRound(3, 3)).toBe(true);
+  });
+
+  it("被新轮次接管后，旧轮收尾必须失效", () => {
+    // 第 1 轮 send → 挂起等确认；confirm 领第 2 轮
+    const round = (current += 1); // dispatch 领 1
+    expect(ownsRound(round, current)).toBe(true);
+    current += 1; // confirm 领 2
+    expect(ownsRound(round, current)).toBe(false);
+  });
+
+  it("停止动作夺取令牌后，在跑的轮次收尾失效", () => {
+    const round = (current += 1); // 第 N 轮正在生成
+    expect(ownsRound(round, current)).toBe(true);
+    current += 1; // stop() 夺取
+    expect(ownsRound(round, current)).toBe(false);
+  });
+
+  it("切历史 / 新对话后，旧轮收尾失效（否则会写回新话题）", () => {
+    const round = (current += 1);
+    current += 1; // restore / clear
+    expect(ownsRound(round, current)).toBe(false);
+  });
+
+  it("令牌严格递增，永不复用", () => {
+    // ⚠️ `current` 是 describe 作用域的累加计数器（前面的用例已用过），
+    // 所以断言只能验「相对递增」，不能写死[1,2,3,4,5]。
+    const base = current;
+    const seen: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      current += 1;
+      seen.push(current);
+    }
+    expect(seen).toEqual([
+      base + 1,
+      base + 2,
+      base + 3,
+      base + 4,
+      base + 5
+    ]);
+    // 不该出现重复号（判据用排序去重而非 Set：node 测试环境
+    // 没装 @types/node，Set 泛型在部分配置下会报类型错）
+    const sorted = [...seen].sort(
+      (a, b) => a - b
+    );
+    const distinct = sorted.filter(
+      (value, index) =>
+        index === 0 || value !== sorted[index - 1]
+    );
+    expect(distinct.length).toBe(seen.length);
+    // 最早那个号在任何后续时刻都已被判失效
+    expect(ownsRound(1, current)).toBe(false);
   });
 });

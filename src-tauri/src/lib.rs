@@ -42,6 +42,8 @@ pub fn run() {
         .manage(sftp::open::EditWatchers::default())
         // AI 命令的 exec 会话池：独立于终端 PTY 的命令执行通道。
         .manage(ai::ExecPool::default())
+        // 进行中的模型流，供「停止生成」掐断 reqwest 请求。
+        .manage(ai::AiStreams::default())
         // 暴露给前端 invoke() 的最小终端命令集合。
         .invoke_handler(tauri::generate_handler![
             terminal::start,
@@ -78,6 +80,7 @@ pub fn run() {
             sftp::cancel_transfer,
             ai::run_command,
             ai::chat_stream,
+            ai::chat_cancel,
             infra::secret::encrypt,
             infra::secret::decrypt,
             infra::http::http_post_json,

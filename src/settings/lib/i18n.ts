@@ -191,6 +191,19 @@ const zhCN = {
   "ai.message.copied": "已复制",
   "ai.message.time": "发送时间",
   "ai.send": "发送",
+  "ai.stop": "停止生成",
+  "ai.stopHint": "中断本轮回答",
+  "ai.queue.hint":
+    "排队中 {count} 条，本轮结束后自动发送",
+  "ai.queue.handle": "拖动排序",
+  "ai.queue.handleHint":
+    "按住拖动可调整顺序，聚焦后按上下方向键也能移动",
+  "ai.queue.dragging": "拖动中",
+  "ai.queue.copy": "复制排队消息",
+  "ai.queue.edit": "编辑",
+  "ai.queue.saveEdit": "保存修改",
+  "ai.queue.cancelEdit": "取消编辑",
+  "ai.queue.remove": "从队列移除",
   "ai.menu.attach": "附件",
   "ai.menu.uploadImage": "上传图片",
   "ai.menu.uploadImageHint":
@@ -684,6 +697,19 @@ const enUS: Record<MessageKey, string> = {
   "ai.message.copied": "Copied",
   "ai.message.time": "Sent at",
   "ai.send": "Send",
+  "ai.stop": "Stop generating",
+  "ai.stopHint": "Interrupt this turn",
+  "ai.queue.hint":
+    "{count} queued — sending automatically when this turn ends",
+  "ai.queue.handle": "Drag to reorder",
+  "ai.queue.handleHint":
+    "Hold and drag to reorder, or focus and use the arrow keys",
+  "ai.queue.dragging": "Dragging",
+  "ai.queue.copy": "Copy queued message",
+  "ai.queue.edit": "Edit",
+  "ai.queue.saveEdit": "Save changes",
+  "ai.queue.cancelEdit": "Cancel edit",
+  "ai.queue.remove": "Remove from queue",
   "ai.menu.attach": "Attachments",
   "ai.menu.uploadImage": "Upload image",
   "ai.menu.uploadImageHint":

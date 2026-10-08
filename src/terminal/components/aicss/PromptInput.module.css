@@ -657,6 +657,16 @@
   background: var(--pi-send-bg-hover, #2a2f3a);
 }
 
+/* 生成中：这个键是「停止」。跟发送键要能一眼分开 —— 底色换成 danger，
+   悬停再深一档。图标本身是实心方块（fill），描边箭头在 14px 下太像「上移」。*/
+.send[data-stop]::before {
+  background: var(--pi-stop-bg, #d64545);
+}
+
+.send[data-stop]:hover::before {
+  background: var(--pi-stop-bg-hover, #e05555);
+}
+
 .spinnerBtn {
   cursor: default;
 }

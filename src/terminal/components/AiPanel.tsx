@@ -1,8 +1,10 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
-  useState
+  useState,
+  type PointerEvent as ReactPointerEvent
 } from "react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
@@ -26,6 +28,7 @@ import { PromptInput } from "@/terminal/components/aicss/PromptInput";
 import type { ExecCardMode } from "@/terminal/lib/aiChat";
 import { useT } from "@/settings/lib/i18n";
 import { ChatMessageActions } from "@/terminal/components/aicss/ChatMessageActions";
+import { QueuedMessageRow } from "@/terminal/components/aicss/QueuedMessageRow";
 import { PROVIDERS_CHANGED_EVENT } from "@/settings/lib/modelProviders";
 import {
   listOpenAiModels,
@@ -402,17 +405,175 @@ export default function AiPanel({
     error,
     stream,
     title,
+    queued,
     send,
+    stop,
     confirm,
     skip,
     clear,
     restore,
-    renameCurrent
+    renameCurrent,
+    updateQueued,
+    removeQueued,
+    reorderQueued,
+    nudgeQueuedBy
   } = useAiChat(session, {
     autoExecute,
     autoApply,
     blacklist
   });
+  // 排队消息的拖拽换序。状态放在这里（而不是每行自己管）是因为
+  // 「谁在被拖」和「谁是落点」跨行共享 —— 各自管会各拖各的。
+  const [dragId, setDragId] = useState<
+    string | null
+  >(null);
+  const [dropId, setDropId] = useState<
+    string | null
+  >(null);
+  // pointermove 是普通函数，不在 React 渲染期里，闭包拿到的 state 永远
+  // 是按下那一刻的值。落点每帧都要读最新的队列（判断"移到队尾"），
+  // 所以走 ref；dropId 同理，用 ref 存一份给收尾逻辑读。
+  const queuedRef = useRef(queued);
+  const dropIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    queuedRef.current = queued;
+  }, [queued]);
+
+  /**
+   * 在手柄上按下 → 可能演变成一次拖拽。
+   *
+   * 整段照搬会话侧栏「拖标签换组」的成熟做法（那边在 WebView2 里已验证
+   * 能用），刻意**不用** HTML5 的 draggable/dragover/drop：那套依赖浏览器
+   * 内置拖拽管线与 dataTransfer，在 Tauri 的 WebView2 里实测完全拖不动，
+   * 而且不报错、控制台干净，是最难查的一类问题。
+   *
+   * pointer 方案的三要素：
+   * ① `pointermove`/`pointerup` 挂 **window** —— 指针移出列表外仍能收到，
+   *    否则拖到边缘松手就"卡住不落了"；
+   * ② 越过 6px 位移阈值才算拖动，纯点击手柄不会误触发；
+   * ③ 落点用 `elementFromPoint` 取 —— 被拖的行跟着指针走，不能用
+   *    `event.target`。
+   */
+  const startQueueDrag = useCallback(
+    (
+      id: string,
+      event: ReactPointerEvent<HTMLSpanElement>
+    ) => {
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let dragging = false;
+      let ghost: HTMLElement | null = null;
+      const text = queued.find(
+        item => item.id === id
+      )?.text;
+      /**
+       * 落点命中**原始** id（可能等于自己，可能 null=缝隙）。
+       *
+       * 别拿高亮用的 dropIdRef 代替：那份在"落回自己身上"时被置成 null，
+       * 与"落在缝隙"混成同一个值 —— 收尾时就会把"原地不动"误判成
+       * "移到队尾"，用户只是手滑一下，队列就变了。三种状态必须分开存：
+       * 命中自己=不动，命中别的=换过去，null=移到队尾。
+       */
+      let hitRef: string | null = null;
+
+      // 局部监听刻意不叫 onMove：props 里已有同名回调会遮蔽它
+      const onDragMove = (ev: PointerEvent) => {
+        if (
+          !dragging &&
+          Math.hypot(
+            ev.clientX - startX,
+            ev.clientY - startY
+          ) > 6
+        ) {
+          dragging = true;
+          setDragId(id);
+          ghost = document.createElement("div");
+          ghost.className = "ai-queue-drag-ghost";
+          // 超长消息只留开头，否则浮标能撑破整个面板
+          ghost.textContent =
+            (text ?? "").slice(0, 40) +
+            ((text ?? "").length > 40 ? "…" : "");
+          document.body.appendChild(ghost);
+          // 全局 grabbing：指针移出手柄后光标不该变回去
+          document.body.classList.add(
+            "ai-queue-dragging"
+          );
+          console.info(
+            `[ai] 队列开始拖动：${id}`
+          );
+        }
+        if (!ghost) return;
+        ghost.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px) translate(-50%, -50%)`;
+        const under = document.elementFromPoint(
+          ev.clientX,
+          ev.clientY
+        );
+        const row = (
+          under as HTMLElement | null
+        )?.closest(
+          ".ai-queue-row"
+        ) as HTMLElement | null;
+        const hitId =
+          row?.getAttribute("data-queued-id") ??
+          null;
+        hitRef = hitId;
+        // 落回自己身上 = 不动。高亮也要跟着取消，用户才能明确知道
+        // 「松手不会有变化」，而不是白闪一下
+        const next = hitId === id ? null : hitId;
+        if (next !== dropIdRef.current) {
+          dropIdRef.current = next;
+          setDropId(next);
+        }
+        ev.preventDefault();
+      };
+
+      const onDragEnd = (ev: PointerEvent) => {
+        window.removeEventListener(
+          "pointermove",
+          onDragMove
+        );
+        window.removeEventListener(
+          "pointerup",
+          onDragEnd
+        );
+        ghost?.remove();
+        document.body.classList.remove(
+          "ai-queue-dragging"
+        );
+        if (!dragging) return;
+        // 松手后不要顺带触发 click，否则落点行的操作按钮会被误点
+        ev.preventDefault();
+        const list = queuedRef.current;
+        // 三态判定，顺序不能换：先排除"落回自己"，再谈缝隙
+        const target =
+          hitRef === id
+            ? null
+            : (hitRef ??
+              list[list.length - 1]?.id ??
+              null);
+        if (target) reorderQueued(id, target);
+        console.info(
+          `[ai] 队列拖放完成：${id} → ${
+            target ?? "(原地不动)"
+          }`
+        );
+        hitRef = null;
+        dropIdRef.current = null;
+        setDropId(null);
+        setDragId(null);
+      };
+
+      window.addEventListener(
+        "pointermove",
+        onDragMove
+      );
+      window.addEventListener(
+        "pointerup",
+        onDragEnd
+      );
+    },
+    [queued, reorderQueued]
+  );
   const bodyRef = useRef<HTMLDivElement>(null);
   // 欢迎卡片的示例提示：卡片每次出现随机换一条 —— 依赖用 entries 的
   // 数组引用而非长度：点「新对话」时 clear() 换上新数组，即便此前也是
@@ -846,6 +1007,36 @@ export default function AiPanel({
           </p>
         )}
       </div>
+      {/* 排队中的消息：AI 还在跑时用户发的消息排在这里，等本轮结束
+          自动接着发。位置在**消息流与输入框之间**（截图里的位置），
+          不塞进消息流 —— 消息流是"已发出的历史"，混进去会分不清
+          哪些已经问过了。 */}
+      {queued.length > 0 && (
+        <div className="ai-queue">
+          <div className="ai-queue-hint">
+            {t("ai.queue.hint", {
+              count: queued.length
+            })}
+          </div>
+          <div className="ai-queue-list">
+            {queued.map(message => (
+              <QueuedMessageRow
+                key={message.id}
+                message={message}
+                onUpdate={updateQueued}
+                onRemove={removeQueued}
+                dragging={dragId === message.id}
+                dropTarget={
+                  dropId === message.id &&
+                  dragId !== message.id
+                }
+                onDragStart={startQueueDrag}
+                onNudge={nudgeQueuedBy}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {/* 输入框：@aicss/react PromptInput 改造版，模型选择在「+」菜单里 */}
       <div className="ai-panel-compose">
         <PromptInput
@@ -879,7 +1070,6 @@ export default function AiPanel({
               list.filter((_, i) => i !== index)
             )
           }
-          busy={busy}
           history={entries.flatMap(entry =>
             entry.kind === "user" && entry.text
               ? [entry.text]
@@ -892,9 +1082,18 @@ export default function AiPanel({
               selected,
               attachments
             );
+            // 可以立刻清附件：enqueueMessage / dispatch 落库时都复制了
+            // attachments（队列条目与这里不是同一个数组引用）
             setAttachments([]);
           }}
+          busy={busy || Boolean(pendingCardId)}
+          onStop={stop}
         />
+        {/* busy 要传 `busy || Boolean(pendingCardId)`：等确认卡片时
+            runLoop 会把 busy 置回 false（否则卡片上的执行/跳过按钮会被
+            自己的 disabled 卡住），但本轮并没有结束 —— 只传 busy 的话
+            底部按钮会在弹卡片那一刻退回发送态，看着能发消息，实际既没有
+            HTTP 流也没有工具循环在跑，点了什么也不会发生。*/}
       </div>
       {riskOpen && (
         <AutoExecuteRiskDialog

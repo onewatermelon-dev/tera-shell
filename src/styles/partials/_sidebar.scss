@@ -687,6 +687,267 @@
   }
 }
 
+// ---- 排队中的消息（AI 生成中发送的，等本轮结束自动续发）----
+// 贴在消息流与输入框之间。两条 border-top 各有分工，别当重复删掉：
+// 队列自己的 = 与消息流分隔；.ai-panel-compose 的 = 队列与输入框分隔。
+// 队列隐藏时 compose 那条仍在原处，视觉上无变化。
+.ai-queue {
+  flex: none;
+  padding: 8px 12px;
+  background: var(--surface-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.ai-queue-hint {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding-bottom: 6px;
+  font-size: 11px;
+  color: var(--muted);
+
+  &::before {
+    width: 5px;
+    height: 5px;
+    content: "";
+    background: var(--accent);
+    border-radius: 50%;
+    animation: ai-queue-pulse 1.4s ease-in-out
+      infinite;
+  }
+}
+
+// 呼吸点：告诉用户"这一轮还在跑，队列会自己动"
+@keyframes ai-queue-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.ai-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 168px;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+// 每条队列消息：左侧一条竖线标记"尚未发出"，底色比卡片略浅，
+// 与消息流里已发出的气泡区分开
+.ai-queue-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 7px 8px 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 8px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+
+  // 编辑态：去掉左侧竖线（"正在改"由底色与边框表达，避免两种强调叠一起）
+  &[data-editing] {
+    background: var(--accent-soft);
+    border-left-color: transparent;
+  }
+}
+
+// 拖动中的那条：压暗 + 让位，视线跟着落点走。
+// 被拖走的行在原位留个半透明壳是对的 —— 用户能看清"我从第几条挪到
+// 第几条"，中途松手也有明确的归位目标
+.ai-queue-row[data-dragging] {
+  opacity: 0.45;
+}
+
+// 当前落点：整个边框换虚线 + 描边色，和普通行区分得很明确。
+// 用虚线而不是加粗，是因为加粗会让这一行突然变宽/变窄，
+// 列表里其他行的位置跟着抖
+.ai-queue-row[data-drop-target] {
+  border-color: var(--accent);
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+// 手柄：6 个点的点阵（2 列 × 3 行），CSS 画的而不是图标 ——
+// 图标库里没有"6 点"这种规格，而 radial-gradient 改点距只要动
+// background-size，尺寸与配色都跟着 currentcolor 走
+.ai-queue-handle {
+  flex: none;
+  width: 10px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--muted);
+
+  // 手柄要做自定义拖拽，必须掐掉浏览器默认的触摸手势，
+  // 否则触屏上会变成滚动页面而不是换序
+  touch-action: none;
+  cursor: grab;
+
+  // 点直径 2px、格子 5×6px → 10×18 的框里正好 2 列 3 行 = 6 个点
+  background-image: radial-gradient(
+    circle,
+    currentcolor 1px,
+    transparent 1.2px
+  );
+  background-size: 5px 6px;
+  border-radius: 4px;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+
+  // hover 与 focus-visible 必须成对：手柄是可 Tab 到的（role=button），
+  // 只写 hover 的话键盘用户永远看不到它在哪
+  &:hover,
+  &:focus-visible {
+    color: var(--foreground);
+    background-color: var(--surface-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  &:active,
+  &[data-dragging] {
+    color: var(--accent);
+    cursor: grabbing;
+  }
+
+  // 编辑态禁用手柄拖拽（此时手边有 textarea，拖它只会误操作）
+  &[data-disabled] {
+    color: var(--muted);
+    cursor: default;
+    opacity: 0.3;
+  }
+}
+
+// 拖动中的跟手浮标：与侧栏 .tab-drag-ghost 同一套做法。
+// ⚠️ pointer-events 必须关掉 —— 不关的话 elementFromPoint 命中的是
+// 浮标自己，落点判定直接失效，症状是「拖到哪都不换序」
+.ai-queue-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 999;
+  max-width: 220px;
+  padding: 5px 10px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--foreground);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--segment);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+  opacity: 0.92;
+}
+
+// 拖拽进行中：全局压成 grabbing。手柄之外的地方也该给同样的光标，
+// 否则指针"跑到浮标下面"时用户会以为丢了
+body.ai-queue-dragging {
+  cursor: grabbing;
+  user-select: none;
+
+  * {
+    cursor: grabbing !important;
+  }
+}
+
+// 队列里的消息最多显示两行：用户刚发的话要能看清，
+// 但也不能把输入框挤到看不见
+.ai-queue-text {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+}
+
+.ai-queue-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--foreground);
+  resize: vertical;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+.ai-queue-ops {
+  display: flex;
+  flex: none;
+  gap: 1px;
+  align-items: center;
+}
+
+// 平时半透明，悬停/键盘聚焦时才显形 —— 队列不该抢消息流的视线。
+// ⚠️ focus-visible 必须与 hover 同等处理：Tab 聚焦时没有 hover，
+// 只写 :hover 的话键盘用户永远看不到按钮（opacity 停在 0.4）。
+.ai-queue-op {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  opacity: 0.4;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--foreground);
+    background: var(--surface-hover);
+    opacity: 1;
+  }
+
+  // 保存按钮是编辑态的正向操作，红色删除同理 —— 各给一点颜色，
+  // 用户不必逐个悬停试哪个是哪个
+  &.is-primary:hover,
+  &.is-primary:focus-visible {
+    color: var(--success);
+  }
+
+  &.is-danger:hover,
+  &.is-danger:focus-visible {
+    color: var(--danger);
+  }
+}
+
 .ai-panel-compose {
   display: flex;
   flex: none;
