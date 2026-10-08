@@ -16,6 +16,8 @@ import type {
 import type { FileAction } from "@/sftp/components/FileContextMenu";
 import FilePane from "@/sftp/components/FilePane";
 import TransferPanel from "@/sftp/components/TransferPanel";
+import { usePaneDrag } from "@/sftp/lib/usePaneDrag";
+import type { DropTarget } from "@/sftp/lib/dragTransfer";
 
 type SftpPanelProps = {
   /** 决定远程栏标题与是否连 SFTP（本机终端没有远程目录） */
@@ -55,6 +57,17 @@ type SftpPanelProps = {
     id: string,
     action: TransferControlAction
   ) => void;
+  /**
+   * 拖拽落点确认：把条目从来源栏传进目标栏的该目录。
+   *
+   * 拖拽控制器放在本组件内部（两个消费方 —— 独立窗口与嵌入面板 —— 都白拿），
+   * 消费方只需要实现"怎么传"这一件事。
+   */
+  onDropEntries: (
+    from: PaneSide,
+    entries: PaneEntry[],
+    directory: string
+  ) => void;
 };
 
 /**
@@ -87,7 +100,8 @@ export default function SftpPanel({
   onChmodEntry,
   transfers,
   onClearTransfers,
-  onTransferControl
+  onTransferControl,
+  onDropEntries
 }: SftpPanelProps) {
   // 标题栏文案：与会话名一致（后端建窗口时的标题用的是同一个名字）
   const title = `SFTP · ${session?.name ?? "会话"}`;
@@ -96,6 +110,23 @@ export default function SftpPanel({
     session?.kind === "ssh"
       ? `远程 · ${session.host}`
       : "远程";
+
+  // 跨栏拖拽：松手时把来源栏的条目传进目标栏目录。
+  // 单一回调入口，两个 FilePane 共用同一套拖拽状态 ——
+  // 「谁在被拖」和「哪栏是落点」天然跨栏共享。
+  const {
+    startDrag,
+    isDragging,
+    isTarget,
+    isPaneTarget
+  } = usePaneDrag({
+    onDrop: (payload, target: DropTarget) =>
+      onDropEntries(
+        payload.from,
+        payload.entries,
+        target.intoDirectory
+      )
+  });
 
   return (
     <div className="sftp-panel">
@@ -169,6 +200,11 @@ export default function SftpPanel({
             onRename={(entry, name) =>
               onRenameEntry("local", entry, name)
             }
+            side="local"
+            onDragStart={startDrag}
+            isDragging={isDragging}
+            isTarget={isTarget}
+            isPaneTarget={isPaneTarget("local")}
           />
           <FilePane
             label={remoteLabel}
@@ -200,6 +236,11 @@ export default function SftpPanel({
             onChmod={(entry, mode) =>
               onChmodEntry(entry, mode)
             }
+            side="remote"
+            onDragStart={startDrag}
+            isDragging={isDragging}
+            isTarget={isTarget}
+            isPaneTarget={isPaneTarget("remote")}
           />
         </div>
         <TransferPanel

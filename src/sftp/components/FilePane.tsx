@@ -14,7 +14,8 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import type {
   PaneEntry,
-  PaneListing
+  PaneListing,
+  PaneSide
 } from "@/sftp/lib/useSftp";
 import PathPicker, {
   type PlaceListing
@@ -69,6 +70,20 @@ type FilePaneProps = {
     entry: PaneEntry,
     mode: number
   ) => void;
+  /** 本栏是哪一侧 —— 拖拽跨栏判定与 DOM 属性都要用 */
+  side: PaneSide;
+  /** 行按下：起手拖拽。整行可拖，不另设手柄 */
+  onDragStart: (
+    side: PaneSide,
+    entries: PaneEntry[],
+    event: React.PointerEvent<HTMLElement>
+  ) => void;
+  /** 该行是否正被拖走（压暗，让用户看清从哪儿来） */
+  isDragging?: (path: string) => boolean;
+  /** 该条目是否是当前落点（目录高亮成"放这里"） */
+  isTarget?: (path: string) => boolean;
+  /** 整栏是否是当前落点栏（描边提示） */
+  isPaneTarget?: boolean;
 };
 
 /**
@@ -95,7 +110,12 @@ const FilePane = memo(function FilePane({
   onContextAction,
   onCreate,
   onRename,
-  onChmod
+  onChmod,
+  side,
+  onDragStart,
+  isDragging,
+  isTarget,
+  isPaneTarget = false
 }: FilePaneProps) {
   // 导航历史：paths 是走过的目录序列，cursor 指向当前那一项。
   // 后退 / 前进只移动 cursor，不新增记录；新导航会截断 cursor 之后的分叉。
@@ -190,7 +210,15 @@ const FilePane = memo(function FilePane({
     : "file-grid--remote";
 
   return (
-    <Surface className="sftp-pane">
+    <Surface
+      className="sftp-pane"
+      // 拖拽落点靠这三个属性定位：栏身份、栏当前目录（落点默认位置）。
+      // React 会省略空串属性，所以路径为空时不能指望这个属性存在 ——
+      // probeDrop 读不到就当无效落点，不会误传方向。
+      data-pane-side={side}
+      data-pane-path={listing?.path ?? ""}
+      data-pane-target={isPaneTarget || undefined}
+    >
       <div className="sftp-pane-head">
         <span className="sftp-pane-title">
           {label}
@@ -340,6 +368,26 @@ const FilePane = memo(function FilePane({
                 <div
                   key={entry.path}
                   className={`file-row ${gridClass}`}
+                  // 落点判定只读这两个属性：路径用于配对，isDir 决定
+                  // "落进这个目录"还是"落到所在目录"。刻意不把整条
+                  // listing 塞进属性里 —— 大目录下那会撑爆 DOM。
+                  data-entry-path={entry.path}
+                  data-entry-dir={entry.isDir}
+                  data-dragging={
+                    isDragging?.(entry.path) ||
+                    undefined
+                  }
+                  data-drop-target={
+                    isTarget?.(entry.path) ||
+                    undefined
+                  }
+                  onPointerDown={event =>
+                    onDragStart(
+                      side,
+                      [entry],
+                      event
+                    )
+                  }
                   onDoubleClick={() => {
                     if (entry.isDir)
                       onOpen(entry.path);

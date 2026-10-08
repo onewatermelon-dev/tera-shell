@@ -165,6 +165,26 @@ export default function SftpWindow({
     [sftp, onError]
   );
 
+  /** 跨栏拖放落点：把条目传进目标目录。 */
+  const handleDropEntries = useCallback(
+    async (
+      from: PaneSide,
+      entries: PaneEntry[],
+      directory: string
+    ) => {
+      try {
+        await sftp.transferEntries(
+          from,
+          entries,
+          directory
+        );
+      } catch (reason) {
+        onError(String(reason));
+      }
+    },
+    [sftp, onError]
+  );
+
   return (
     <SftpPanel
       session={sftp.session}
@@ -185,6 +205,7 @@ export default function SftpWindow({
       transfers={sftp.transfers}
       onClearTransfers={sftp.clearTransfers}
       onTransferControl={handleTransferControl}
+      onDropEntries={handleDropEntries}
     />
   );
 }

@@ -254,6 +254,96 @@ export function useSftp(
     ]
   );
 
+  /**
+   * 批量传输：把一批条目从来源栏传到目标栏的指定目录（拖拽用）。
+   *
+   * 与 `transferFile` 的区别有两个：
+   * ① **目标目录显式传入** —— 拖拽可以落在子目录里，右键菜单的"传输"
+   *    永远只传到另一栏的当前目录；
+   * ② **不吞异常** —— 单个条目失败不该中断整批，逐个记 console 即可
+   *    （传输面板里每条任务各自有成败状态）。
+   *
+   * ⚠️ `joinPath` 会沿用目录的分隔符：本地 Windows 是 `\`、远程是 `/`，
+   * 传错目录会让拼接结果不对，所以这里不加工序，直接交给它判断。
+   */
+  const transferEntries = useCallback(
+    async (
+      from: PaneSide,
+      entries: PaneEntry[],
+      directory: string
+    ) => {
+      if (entries.length === 0) return;
+      if (!directory) {
+        throw new Error("目标目录尚未加载");
+      }
+      const connection = await remoteConnection();
+      for (const entry of entries) {
+        const id = tasks.registerTask(
+          entry.name,
+          from === "local"
+            ? "upload"
+            : "download",
+          entry.size
+        );
+        try {
+          if (from === "local") {
+            await invoke("sftp_upload", {
+              job: {
+                ...connection,
+                id,
+                local: entry.path,
+                remote: joinPath(
+                  directory,
+                  entry.name
+                )
+              }
+            });
+          } else {
+            await invoke("sftp_download", {
+              job: {
+                ...connection,
+                id,
+                remote: entry.path,
+                local: joinPath(
+                  directory,
+                  entry.name
+                )
+              }
+            });
+          }
+        } catch (reason) {
+          // 取消是用户主动行为，不算失败
+          if (tasks.failTask(id, String(reason)))
+            continue;
+          console.error(
+            `[sftp] 拖放传输失败：${entry.name}`,
+            reason
+          );
+          continue;
+        }
+        tasks.finishTask(id);
+      }
+      // 目标栏刷新，新文件立刻可见。批量只刷一次，
+      // 逐条刷会把远程栏的连接锁占满
+      if (from === "local") {
+        void navigateRemote(
+          session as SavedSession,
+          directory,
+          true
+        );
+      } else {
+        void navigateLocal(directory);
+      }
+    },
+    [
+      remoteConnection,
+      tasks,
+      navigateRemote,
+      navigateLocal,
+      session
+    ]
+  );
+
   /** 清空已结束的传输记录；正在传输的保留。 */
   const clearTransfers = tasks.clearTransfers;
 
@@ -520,6 +610,7 @@ export function useSftp(
       navigateRemote,
       openEntry,
       transferFile,
+      transferEntries,
       createEntry,
       removeEntry,
       renameEntry,
@@ -542,6 +633,7 @@ export function useSftp(
       navigateRemote,
       openEntry,
       transferFile,
+      transferEntries,
       createEntry,
       removeEntry,
       renameEntry,

@@ -62,6 +62,69 @@
   background: var(--default);
 }
 
+// ===== 跨栏拖拽 =====
+// 行可拖，但**不能给 grab 光标**：整片列表都用默认光标时，
+// "按住就能拖" 与双击进入的直觉一致；到处是 grab 反而像列表不能点
+.file-row[data-entry-path] {
+  touch-action: none;
+}
+
+// 正被拖走的那几行：压暗 + 缩进，让用户看清从哪儿拿走的。
+// 不用 opacity 单独控制 —— 下面 hover 规则会把它顶回来
+.file-row[data-dragging] {
+  opacity: 0.4;
+}
+
+// 当前落点（目录条目）：整行虚线框 + 染色，一眼看出"放这里"。
+// 用虚线而不是加粗边框：加粗会让行突然变高，整列的行位跟着抖。
+// `outline` 画在边框外侧、`offset` 内收，所以不会改变行高 —— 虚线框
+// 与 hover 的实心底色能叠在一起
+.file-row[data-drop-target] {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  background: var(--accent-soft);
+}
+
+// 落点所在的整栏：外描边提示（表头与空状态都能接住）
+.sftp-pane[data-pane-target] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+// 跟手浮标：显示被拖条目名
+// ⚠️ **pointer-events 必须 none** —— 不关的话 document.elementFromPoint
+// 命中的是浮标自己，落点判定全废，症状是「拖到哪都不生效」。
+// 同一个道理见 body.sftp-dragging 的 cursor 覆盖
+.sftp-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 999;
+  max-width: 220px;
+  padding: 5px 10px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--foreground);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--segment);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+  opacity: 0.92;
+}
+
+// 拖拽进行中：全局抓取光标 + 禁选文本。
+// 用 !important 是因为要盖住 .file-row:hover 等处已有的 cursor
+body.sftp-dragging {
+  cursor: grabbing;
+
+  * {
+    cursor: grabbing !important;
+    user-select: none !important;
+  }
+}
+
 // 名称列：图标 + 文件名，宽度自适应并允许截断
 .cell-name {
   display: flex;

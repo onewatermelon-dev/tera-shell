@@ -18,6 +18,8 @@ import type { FileAction } from "@/sftp/components/FileContextMenu";
 import FilePane from "@/sftp/components/FilePane";
 import SftpDock from "@/sftp/components/SftpDock";
 import TransferPanel from "@/sftp/components/TransferPanel";
+import { usePaneDrag } from "@/sftp/lib/usePaneDrag";
+import type { DropTarget } from "@/sftp/lib/dragTransfer";
 
 type Props = {
   /** 当前活动会话：由 App 从终端状态里取，用于确定 SFTP 的连接目标。 */
@@ -70,6 +72,12 @@ type Props = {
     id: string,
     action: TransferControlAction
   ) => void;
+  /** 跨栏拖放落点：把条目从来源栏传进目标栏的该目录 */
+  onDropEntries: (
+    from: PaneSide,
+    entries: PaneEntry[],
+    directory: string
+  ) => void;
   /** 全部打开的 SFTP 窗口（底部标签栏用；只有一个窗口时不显示） */
   windowTabs?: { id: string; label: string }[];
   /** 当前前台窗口 id */
@@ -107,6 +115,7 @@ export default function SftpDialog({
   transfers,
   onClearTransfers,
   onTransferControl,
+  onDropEntries,
   windowTabs,
   activeWindowId,
   onSelectWindow,
@@ -117,6 +126,22 @@ export default function SftpDialog({
   // 窗口是否铺满：默认**不铺满**，让下面的终端照常可见可操作
   const [maximized, setMaximized] =
     useState(false);
+
+  // 跨栏拖拽。⚠️ hook 必须写在下面的 `if (!session) return null` **之前** ——
+  // 条件渲染会让 hook 数量变化，React 直接报「Rendered fewer hooks」。
+  const {
+    startDrag,
+    isDragging,
+    isTarget,
+    isPaneTarget
+  } = usePaneDrag({
+    onDrop: (payload, target: DropTarget) =>
+      onDropEntries(
+        payload.from,
+        payload.entries,
+        target.intoDirectory
+      )
+  });
 
   // 兜底：父级条件渲染已保证有会话，HMR 或异常时序下仍可能短暂为空值
   if (!session) return null;
@@ -250,6 +275,13 @@ export default function SftpDialog({
                       name
                     )
                   }
+                  side="local"
+                  onDragStart={startDrag}
+                  isDragging={isDragging}
+                  isTarget={isTarget}
+                  isPaneTarget={isPaneTarget(
+                    "local"
+                  )}
                 />
                 <FilePane
                   label={remoteLabel}
@@ -292,6 +324,13 @@ export default function SftpDialog({
                   onChmod={(entry, mode) =>
                     onChmodEntry(entry, mode)
                   }
+                  side="remote"
+                  onDragStart={startDrag}
+                  isDragging={isDragging}
+                  isTarget={isTarget}
+                  isPaneTarget={isPaneTarget(
+                    "remote"
+                  )}
                 />
               </div>
               <TransferPanel
