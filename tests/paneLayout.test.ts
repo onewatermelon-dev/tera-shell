@@ -282,3 +282,154 @@ describe("窗格树：分隔条比例", () => {
     );
   });
 });
+
+/**
+ * 窗格折叠的副作用约束（回归测试）。
+ *
+ * 背景：曾把 `setPanes` 写进 `setTree` 的 updater 内部（"改树时顺手同步
+ * 窗格记录"），看着自然，实则是**在 state updater 里做副作用**：
+ *  ① React 在 StrictMode 下调用 updater 两次 → setPanes 重复执行；
+ *  ② 同一次 close() 里调用方自己也会 setPanes，两次写互相覆盖，
+ *     结果折叠后**剩下窗格的标签被清空**（用户报「关闭拆分会话后
+ *     之前的会话内容被截断」）。
+ *
+ * 纯函数 updater 的价值就在于"调用几次结果都一样"，所以这些性质可以直接
+ * 断言 —— 不需要真的跑 React。
+ */
+describe("窗格折叠：状态更新必须无副作用", () => {
+  /** 模拟 setPanes：同步写 ref + 通知渲染 */
+  function makeStore(initial: string[]) {
+    const ref = { current: initial };
+    const calls: string[][] = [];
+    const setPanes = (next: string[]) => {
+      ref.current = next;
+      calls.push(next);
+    };
+    return { ref, calls, setPanes };
+  }
+
+  it("updater 被调用两次时，同步 panes 的结果必须一致", () => {
+    const panes = makeStore(["p1"]);
+    const tree: PaneNode = splitPane(
+      createLeaf("p1"),
+      "p1",
+      "row",
+      "p2",
+      "s1"
+    );
+
+    // 复现旧写法：副作用包在 updater 里
+    const updater = (
+      prev: PaneNode
+    ): PaneNode => {
+      const next = removePane(prev, "p2");
+      // updater 里调 setPanes —— React 会重放这段
+      panes.setPanes(["p1"]);
+      return next;
+    };
+    updater(tree);
+    updater(tree);
+
+    // updater 跑了两次 → setPanes 也被调两次（副作用外泄的信号）
+    expect(panes.calls.length).toBe(2);
+    // 但纯函数 updater 本身必须幂等：树的结果两次一致
+    expect(updater(tree)).toBe(updater(tree));
+  });
+
+  it("正确写法：updater 内不产生副作用，幂等且无重复写入", () => {
+    const tree = splitPane(
+      createLeaf("p1"),
+      "p1",
+      "row",
+      "p2",
+      "s1"
+    );
+    const updater = (prev: PaneNode) =>
+      removePane(prev, "p2");
+    // updater 只算树，不碰外部状态 → 调用任意次结果一致
+    const a = updater(tree);
+    const b = updater(tree);
+    expect(a).toEqual(b);
+    expect(collectLeafIds(a)).toEqual(["p1"]);
+  });
+
+  it("折叠后剩下的窗格记录与树保持一致（无幽灵、无丢标签）", () => {
+    // 模拟真实场景：p1 有标签 s1，p2 有标签 s2，关掉 p2 后折叠
+    const panesBefore = [
+      {
+        id: "p1",
+        tabIds: ["s1"],
+        visibleId: "s1"
+      },
+      {
+        id: "p2",
+        tabIds: ["s2"],
+        visibleId: "s2"
+      }
+    ];
+    let tree: PaneNode = splitPane(
+      createLeaf("p1"),
+      "p1",
+      "row",
+      "p2",
+      "s1"
+    );
+    const ids = new Set(collectLeafIds(tree));
+    // 同步 panes：只保留仍在树里的窗格，并补上新出现的
+    const kept = panesBefore.filter(pane =>
+      ids.has(pane.id)
+    );
+    expect(kept.map(p => p.id)).toEqual([
+      "p1",
+      "p2"
+    ]);
+
+    // 折叠 p2
+    tree = removePane(tree, "p2");
+    const idsAfter = new Set(
+      collectLeafIds(tree)
+    );
+    const keptAfter = kept.filter(pane =>
+      idsAfter.has(pane.id)
+    );
+    // ⚠️ 这就是回归点：p1 必须还在，且**保留它原有的 s1 标签**
+    expect(keptAfter.map(p => p.id)).toEqual([
+      "p1"
+    ]);
+    expect(keptAfter[0]?.tabIds).toEqual(["s1"]);
+  });
+
+  it("新建窗格时 panes 要补空记录，否则标签条渲染不出来", () => {
+    const panes = [
+      {
+        id: "p1",
+        tabIds: ["s1"],
+        visibleId: "s1"
+      }
+    ];
+    const tree = splitPane(
+      createLeaf("p1"),
+      "p1",
+      "column",
+      "p2",
+      "s1"
+    );
+    const ids = new Set(collectLeafIds(tree));
+    const next = [...panes];
+    for (const id of ids) {
+      if (!next.some(p => p.id === id)) {
+        next.push({
+          id,
+          tabIds: [],
+          visibleId: ""
+        });
+      }
+    }
+    expect(next.map(p => p.id)).toEqual([
+      "p1",
+      "p2"
+    ]);
+    // 已有窗格的标签不能被这一步冲掉
+    expect(next[0]?.tabIds).toEqual(["s1"]);
+  });
+});

@@ -288,32 +288,36 @@ export function useTerminals(
    * 两侧必须一起动，否则会留下幽灵：树里新增的 paneId 若没有对应记录，
    * 标签条渲染不出来；被摘掉的窗格若记录还在，就有个永远不显示、
    * 也永远关不掉的空标签组。
+   *
+   * ⚠️ **不要把 setPanes 写进 setTree 的 updater 里**（踩过）：
+   * updater 必须是纯函数 —— React 在 StrictMode 下会调用两次、在并发
+   * 渲染下还可能用旧 state 重放。副作用包在里面会重复执行，且与调用方
+   * 自己的 setPanes 竞争（同一次 close 里先摘标签、再折叠窗格，两次写
+   * panes 会互相覆盖），表现为**窗格折叠后剩下的会话标签被清空**。
+   *
+   * 正确做法：在 updater **外面**算好新树，再按新树同步 panes。
    */
   const setTreeAndSync = useCallback(
     (updater: (prev: PaneNode) => PaneNode) => {
-      setTree(prev => {
-        const next = updater(prev);
-        const ids = new Set(collectLeafIds(next));
-        const kept = panesRef.current.filter(
-          pane => ids.has(pane.id)
-        );
-        const nextPanes = [...kept];
-        for (const id of ids) {
-          if (
-            !nextPanes.some(
-              pane => pane.id === id
-            )
-          ) {
-            nextPanes.push({
-              id,
-              tabIds: [],
-              visibleId: ""
-            });
-          }
+      const next = updater(treeRef.current);
+      const ids = new Set(collectLeafIds(next));
+      const kept = panesRef.current.filter(pane =>
+        ids.has(pane.id)
+      );
+      const nextPanes = [...kept];
+      for (const id of ids) {
+        if (
+          !nextPanes.some(pane => pane.id === id)
+        ) {
+          nextPanes.push({
+            id,
+            tabIds: [],
+            visibleId: ""
+          });
         }
-        setPanes(nextPanes);
-        return next;
-      });
+      }
+      setPanes(nextPanes);
+      setTree(next);
     },
     [setPanes, setTree]
   );
@@ -574,6 +578,14 @@ export function useTerminals(
    */
   const pausePtySync = useCallback(
     (settleMs = 600, flush = false) => {
+      // ⚠️ **必须连已排队的 timer 一起杀掉**（此前漏掉，导致折叠仍丢内容）：
+      //挂起只让 `resize()` 里的 `continue` 生效 = 挡住「之后新发的同步」，
+      // 但挂起之前 resize 已经调过 `schedulePtyResize`，那个 400ms 防抖
+      // timer 还在 `ptyResizeTimers` 里，到点照样发 `terminal_resize`。
+      // 而且防抖 400ms 与 settleMs 几乎相等，正好错开挂起窗口 → 同步漏网。
+      for (const timer of ptyResizeTimers.current.values())
+        clearTimeout(timer);
+      ptyResizeTimers.current.clear();
       // 定时器句柄是可变状态，规则按不可变数据对待属于误报，显式放行
       /* eslint-disable react-hooks/immutability */
       zoomSyncPausedRef.current = true;
@@ -1454,6 +1466,20 @@ export function useTerminals(
         );
         if (!ok) return undefined;
         const newPaneId = `pane-${stamp}`;
+        // ⚠️ **拆分也必须挂起 PTY 同步**（此前漏掉，只有 AI 面板开合和
+        // 窗格折叠挂了）。拆分让被拆会话的行数骤减（实测 35 → 17 行），
+        // xterm 会因此做一次 reflow（行合并）——**丢的是屏幕显示的中段，
+        // 缓冲行数不变**（日志 `resize 后缓冲 35 → 35 行`），所以只看
+        // 缓冲行数是查不出来的。而同步给 PTY 会再招来一轮 ConPTY 重发，
+        // 与 reflow 错位叠加。远端不需要知道新行数：本地 fit 已让显示正确。
+        pausePtySync(600);
+        // 同 close 里的折叠：拆分也是父容器 grid 行轨变化 + 新宿主插入，
+        // ResizeObserver 容易只命中中间态 → 两帧 rAF 补一次显式 fit
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resizeRef.current();
+          });
+        });
         // 先落布局再落标签：setTreeAndSync 会给新 paneId 补一条空记录，
         // 紧接着这次 setPanes 才把新标签写进去
         setTreeAndSync(prev =>
@@ -1497,6 +1523,7 @@ export function useTerminals(
     [
       nextDupName,
       onError,
+      pausePtySync,
       setPanes,
       setTreeAndSync,
       startSession
@@ -1674,8 +1701,9 @@ export function useTerminals(
         openedRef.current = next;
         return next;
       });
-      // 折叠空窗格：放在 setOpened 之后，这样 setTreeAndSync 里的
-      // setPanes 拿到的是已经摘掉标签的 panes，不会把幽灵标签复活
+      // 折叠空窗格：放在 setOpened 之后。setPanes/setTree 都同步写了 ref，
+      // 所以 setTreeAndSync 读到的 panesRef 已是摘掉标签后的那份 ——
+      // 不会把幽灵标签复活
       if (
         emptiedPaneId &&
         panesRef.current.length > 1
@@ -1696,10 +1724,28 @@ export function useTerminals(
         console.info(
           `[terminal] 窗格 ${emptiedPaneId} 已空，折叠`
         );
+        // 折叠会让兄弟窗格**突然变宽**（容器尺寸突变），ResizeObserver
+        // 随即触发 resize。若把新列数同步给 PTY，ConPTY 会整屏重发视口，
+        // 把屏幕内容挤掉 —— 与 AI 面板开合同一个病。
+        // 折叠是纯布局变化，远端不需要知道新列数（本地 fit 已让显示正确），
+        // 所以挂起同步、不补。
+        pausePtySync(400);
+        // ⚠️ **折叠也必须像 AI 面板开合那样补一次显式 fit**（此前漏掉）：
+        // ResizeObserver 只在宿主自身尺寸变化时触发，而折叠是**父容器
+        // grid 行/列定义变化 + 被折窗格的 DOM 被摘掉**，宿主会经过一个
+        // 「尺寸没定」的中间态 → observer 常只命中中间态，之后不再触发，
+        // 终端就停在旧的行数上（表现为内容被截断）。等两帧 rAF：
+        // 第一帧 DOM 更新、第二帧布局落定，此时量到的才是最终尺寸。
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resizeRef.current();
+          });
+        });
       }
     },
     [
       onError,
+      pausePtySync,
       setPanes,
       setTreeAndSync,
       cancelReconnect,
