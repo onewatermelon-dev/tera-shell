@@ -41,9 +41,34 @@ import {
   toXtermTheme
 } from "@/terminal/lib/colorSchemes";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
+import {
+  collectLeafIds,
+  createLeaf,
+  hasLeaf,
+  removePane,
+  setSplitRatio,
+  splitPane,
+  type PaneNode,
+  type SplitDirection
+} from "@/terminal/lib/paneLayout";
 
 // 会话类型定义在 terminalTypes，这里重新导出，外部仍从 useTerminals 引入
 export type { OpenSession } from "@/terminal/lib/terminalTypes";
+
+/**
+ * 一个窗格：它自己的一组标签 + 当前显示哪一个。
+ *
+ * 每个标签是一只**独立会话**（独立 PTY），窗格只负责决定「这一格里
+ * 摆哪些标签、现在亮哪一只」。
+ */
+export type PaneState = {
+  /** 与布局树里的叶子 paneId 对应 */
+  id: string;
+  /** 本窗格的标签（会话 id，按加入顺序） */
+  tabIds: string[];
+  /** 当前显示在这个窗格里的会话 id；空串表示本窗格没有标签 */
+  visibleId: string;
+};
 
 /**
  * PTY 尺寸同步的防抖时长（毫秒）：尺寸连续变化期间只在停下来之后通知一次。
@@ -128,7 +153,6 @@ export function useTerminals(
   const [opened, setOpened] = useState<
     OpenSession[]
   >([]);
-  const [activeId, setActiveId] = useState("");
   const [disconnected, setDisconnected] =
     useState<Record<string, boolean>>({});
   const [passwordRequest, setPasswordRequest] =
@@ -137,15 +161,18 @@ export function useTerminals(
       sourceSessionId: string;
     } | null>(null);
   const openedRef = useRef(opened);
-  /** 解释落画期间按会话扣住远端输出的队列（见 terminal-output 监听） */
-  const activeIdRef = useRef(activeId);
+  /**
+   * 当前会话 id：= **活动窗格正在显示的那只**。
+   *
+   * 搜索、快捷宏、AI 面板、状态栏都以它为"用户正对着的那只会话"，
+   * 因此它必须跟着活动窗格走 —— 焦点在右格时，搜索要搜的是右格那只。
+   * 用 ref 暴露给 useTerminalSearch / 输出监听等命令式代码。
+   */
+  const activeIdRef = useRef("");
   const disconnectedRef = useRef(disconnected);
   useEffect(() => {
     openedRef.current = opened;
   }, [opened]);
-  useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
   useEffect(() => {
     disconnectedRef.current = disconnected;
   }, [disconnected]);
@@ -178,8 +205,6 @@ export function useTerminals(
   const documentShortcutHandler = useRef<
     ((event: KeyboardEvent) => void) | undefined
   >(undefined);
-  const terminalHostRef =
-    useRef<HTMLElement | null>(null);
   // 终端右键菜单（命令式 DOM，逻辑见 terminalContextMenu）：
   // 首次用到时才创建，那时 openSearch 已经定义好。
   // 菜单只建一次，重连入口经 ref 转发，避免闭包锁死旧设置
@@ -191,57 +216,143 @@ export function useTerminals(
     reconnectRef.current = reconnectSession;
   }, [reconnectSession]);
 
-  const setTerminalHost = useCallback(
-    (el: HTMLElement | null) => {
-      terminalHostRef.current = el;
-    },
-    []
+  // ---- 窗格（多标签组网格） ----
+  // panes 与 tree 分开存：
+  // - panes：每个窗格有哪些标签、当前显示哪一个（**可变状态**）
+  // - tree ：窗格怎么排（**布局**，纯数据，见 paneLayout.ts）
+  // 分开是因为「关掉一个标签」只动 panes，「折叠一个窗格」才动 tree，
+  // 两者互不牵连，React 比较时也能各自短路。
+  //
+  // 拆分 = 用被拆会话的配置新起一个独立会话（独立 PTY，VSCode 式），
+  // 不是同一 PTY 的镜像 —— 单 PTY 喂两个不同宽度的视图必然互相重排
+  // （拖分隔线时提示行被重复推下去），独立 PTY 各管各的尺寸就没有这类
+  // 问题。拖标签进别的窗格也能加标签；关掉标签就是关掉该会话。
+  const FIRST_PANE_ID = "pane-1";
+  const [panes, setPanesState] = useState<
+    PaneState[]
+  >([
+    {
+      id: FIRST_PANE_ID,
+      tabIds: [],
+      visibleId: ""
+    }
+  ]);
+  const [tree, setTreeState] = useState<PaneNode>(
+    createLeaf(FIRST_PANE_ID)
   );
+  // 活动窗格：键盘焦点、选中胶囊、宏执行目标都跟着它走
+  const [activePaneId, setActivePaneId] =
+    useState(FIRST_PANE_ID);
+  // 闭包里读活动窗格（close 折叠窗格时判断活动权要不要移交）
+  const activePaneIdRef = useRef(activePaneId);
+  useEffect(() => {
+    activePaneIdRef.current = activePaneId;
+  }, [activePaneId]);
 
-  // ---- 拆分标签组 ----
-  // splitIds = 右侧第二个标签组的标签列表（按加入顺序）：拆分 = 用同一份
-  // 配置新起一个独立会话（独立 PTY，VSCode 式），不是同一 PTY 的镜像 ——
-  // 单 PTY 喂两个不同宽度的视图必然互相重排（拖分隔线时提示行被重复推
-  // 下去），独立 PTY 各管各的尺寸就没有这类问题。拖左栏标签进组也能加
-  // 标签；关掉组内标签就是关掉该会话（标签上的 ×）。
-  const [splitIds, setSplitIdsState] = useState<
-    string[]
-  >([]);
   // ref 供闭包读最新值（split/close/输出监听里判断）
-  const splitIdsRef = useRef<string[]>([]);
-  const setSplitIds = useCallback(
-    (ids: string[]) => {
-      splitIdsRef.current = ids;
-      setSplitIdsState(ids);
+  const panesRef = useRef(panes);
+  const setPanes = useCallback(
+    (
+      updater:
+        | PaneState[]
+        | ((prev: PaneState[]) => PaneState[])
+    ) => {
+      const next =
+        typeof updater === "function"
+          ? updater(panesRef.current)
+          : updater;
+      panesRef.current = next;
+      setPanesState(next);
     },
     []
   );
-  // 组内当前显示在拆分窗格里的那一只。与会话栏的左栏（activeId）互不干扰：
-  // 两栏各有各的可见会话，点谁的标签/窗格就只动谁。
-  const [splitVisibleId, setSplitVisibleState] =
-    useState("");
-  const splitVisibleIdRef = useRef("");
-  const setSplitVisible = useCallback(
-    (id: string) => {
-      splitVisibleIdRef.current = id;
-      setSplitVisibleState(id);
-    },
-    []
-  );
-  // 拆分窗格的宿主：整组只有一个窗格，切换标签只是换挂的元素
-  const splitHostRef = useRef<HTMLElement | null>(
-    null
-  );
-  const setSplitHost = useCallback(
-    (el: HTMLElement | null) => {
-      splitHostRef.current = el;
+  const treeRef = useRef(tree);
+  const setTree = useCallback(
+    (
+      updater:
+        PaneNode | ((prev: PaneNode) => PaneNode)
+    ) => {
+      const next =
+        typeof updater === "function"
+          ? updater(treeRef.current)
+          : updater;
+      treeRef.current = next;
+      setTreeState(next);
     },
     []
   );
 
+  /**
+   * 改布局树，并同步维护 panes 里的窗格记录。
+   *
+   * 两侧必须一起动，否则会留下幽灵：树里新增的 paneId 若没有对应记录，
+   * 标签条渲染不出来；被摘掉的窗格若记录还在，就有个永远不显示、
+   * 也永远关不掉的空标签组。
+   */
+  const setTreeAndSync = useCallback(
+    (updater: (prev: PaneNode) => PaneNode) => {
+      setTree(prev => {
+        const next = updater(prev);
+        const ids = new Set(collectLeafIds(next));
+        const kept = panesRef.current.filter(
+          pane => ids.has(pane.id)
+        );
+        const nextPanes = [...kept];
+        for (const id of ids) {
+          if (
+            !nextPanes.some(
+              pane => pane.id === id
+            )
+          ) {
+            nextPanes.push({
+              id,
+              tabIds: [],
+              visibleId: ""
+            });
+          }
+        }
+        setPanes(nextPanes);
+        return next;
+      });
+    },
+    [setPanes, setTree]
+  );
+
+  /** 活动窗格（组被整体关掉时自动回落到第一个）。 */
+  const activePane =
+    panes.find(
+      pane => pane.id === activePaneId
+    ) ?? panes[0];
+  const activePaneRef = useRef(activePane);
+  useEffect(() => {
+    activePaneRef.current = activePane;
+  }, [activePane]);
+  // 当前会话 = 活动窗格显示的那只。派生而非独立 state —— 两个真值
+  // 来源迟早会打架（切了窗格但 activeId 还指着旧会话）。
+  const activeId = activePane?.visibleId ?? "";
   const active = opened.find(
     s => s.id === activeId
   );
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
+
+  /**
+   * 窗格宿主：paneId → 元素。终端元素是命令式 replaceChildren 挂进去的，
+   * React 不感知，所以宿主必须由调用方注册进来。
+   */
+  const paneHostRefs = useRef(
+    new Map<string, HTMLElement>()
+  );
+  const setPaneHost = useCallback(
+    (paneId: string, el: HTMLElement | null) => {
+      if (el)
+        paneHostRefs.current.set(paneId, el);
+      else paneHostRefs.current.delete(paneId);
+    },
+    []
+  );
+
   const searchResult = search.results[
     activeId
   ] ?? {
@@ -341,21 +452,22 @@ export function useTerminals(
   );
   const resize = useCallback(
     (current?: OpenSession) => {
-      // 显式指定就只动它；否则两栏各自跟一次 —— ResizeObserver 拖分隔线 /
-      // 窗口缩放都会触发，只 fit 主栏会把拆分窗格留在旧尺寸。
+      // 显式指定就只动它；否则**所有窗格**各跟一次 —— ResizeObserver
+      // 拖分隔条 / 窗口缩放都会触发，只 fit 一个窗格会把其余的留在旧尺寸。
       // 已断开的会话不再向后端 resize：PTY 可能已被移除，
       // 调用只会产生"终端会话不存在"的错误气泡
       const targets = current
         ? [current]
-        : [
-            openedRef.current.find(
-              s => s.id === activeIdRef.current
-            ),
-            openedRef.current.find(
-              s =>
-                s.id === splitVisibleIdRef.current
+        : panesRef.current
+            .map(pane =>
+              openedRef.current.find(
+                s => s.id === pane.visibleId
+              )
             )
-          ];
+            .filter(
+              (session): session is OpenSession =>
+                Boolean(session)
+            );
       for (const session of targets) {
         if (
           session &&
@@ -514,52 +626,40 @@ export function useTerminals(
     );
   }, [appearance.scrollback]);
 
-  // opened/activeId 变化后统一挂载/切换终端。layout effect 在 commit 之后、
-  // 浏览器绘制之前同步执行，此时 terminalHostRef 已由 ref 回调赋值，
-  // 不会像手写 rAF 那样在 DOM 未更新时提前早退。
+  // panes/visibleId 变化后统一挂载/切换各窗格的终端。layout effect 在
+  // commit 之后、浏览器绘制之前同步执行，此时宿主已由 ref 回调登记进
+  // paneHostRefs，不会像手写 rAF 那样在 DOM 未更新时提前早退。
   // 直接用 state 闭包而非 ref：layout effect 先于同步 ref 的被动 effect 执行，
   // 读 ref 会拿到上一次提交的旧值。
+  //
+  // 每个窗格只挂自己 visibleId 那一只，其余标签的元素离树待命（与未激活
+  // 标签同一套模式），切标签＝换挂 + 按窗格尺寸 fit。同一只会话只属于
+  // 一个窗格，因此各窗格之间不会争夺同一个元素。
   useLayoutEffect(() => {
-    const current = opened.find(
-      s => s.id === activeId
-    );
-    const host = terminalHostRef.current;
-    if (!current || !host) return;
-    // 拆分组挂的是自己宿主里的会话（与主栏不同一只），不存在元素争夺
-    current.element.className =
-      "terminal-instance";
-    host.replaceChildren(current.element);
-    const first = !current.mounted;
-    if (first) {
-      current.terminal.open(current.element);
-      current.mounted = true;
+    for (const pane of panes) {
+      const session = opened.find(
+        s => s.id === pane.visibleId
+      );
+      const host = paneHostRefs.current.get(
+        pane.id
+      );
+      if (!session || !host) continue;
+      session.element.className =
+        "terminal-instance";
+      host.replaceChildren(session.element);
+      const first = !session.mounted;
+      if (first) {
+        session.terminal.open(session.element);
+        session.mounted = true;
+      }
+      resizeObserver.current?.observe(host);
+      resize(session);
+      // 只让活动窗格抢键盘焦点：挂载时顺带 focus 活动那只，
+      // 其余窗格保持安静（否则新开一个窗格会把正在输入的那只抢走）
+      if (pane.id === activePane?.id)
+        session.terminal.focus();
     }
-    resizeObserver.current?.observe(host);
-    resize(current);
-    current.terminal.focus();
-  }, [opened, activeId, resize, splitIds]);
-
-  // 拆分窗格的挂载：只挂组内可见的那一只，其余标签的元素离树待命
-  // （与左栏未激活标签同一套模式），切标签＝换挂 + 按窗格尺寸 fit。
-  // 左栏宿主只挂激活会话、拆分组不带激活会话，两边不会争夺元素；
-  // 组清空时宿主 div 由 React 整体卸载，无需手动清空。
-  useLayoutEffect(() => {
-    const session = opened.find(
-      s => s.id === splitVisibleId
-    );
-    const host = splitHostRef.current;
-    if (!session || !host) return;
-    session.element.className =
-      "terminal-instance";
-    host.replaceChildren(session.element);
-    const first = !session.mounted;
-    if (first) {
-      session.terminal.open(session.element);
-      session.mounted = true;
-    }
-    resizeObserver.current?.observe(host);
-    resize(session);
-  }, [opened, splitVisibleId, resize]);
+  }, [opened, panes, activePane?.id, resize]);
 
   // ---- 5. Terminal creation (uses openSearch) ----
   const createTerminal = useCallback(
@@ -1019,6 +1119,44 @@ export function useTerminals(
     setPasswordRequest(null);
   }, []);
 
+  /**
+   * 切换到某只会话：显示它所在窗格里的它，并把该窗格设为活动窗格。
+   *
+   * 叫 `activateTab` 而不是 `activate`：`open`/`startSession` 都有个叫
+   * `activate` 的布尔参数，同名会被遮蔽，闭包里拿到的是 boolean。
+   */
+  const activateTab = useCallback(
+    (id: string) => {
+      setPanes(prev =>
+        prev.map(pane =>
+          pane.tabIds.includes(id)
+            ? { ...pane, visibleId: id }
+            : pane
+        )
+      );
+      const owner = panesRef.current.find(pane =>
+        pane.tabIds.includes(id)
+      );
+      if (owner) setActivePaneId(owner.id);
+    },
+    [setPanes]
+  );
+
+  /** 点某窗格内的标签：只切该窗格显示的会话，不抢活动窗格。 */
+  const activatePaneTab = useCallback(
+    (paneId: string, id: string) => {
+      setPanes(prev =>
+        prev.map(pane =>
+          pane.id === paneId &&
+          pane.tabIds.includes(id)
+            ? { ...pane, visibleId: id }
+            : pane
+        )
+      );
+    },
+    [setPanes]
+  );
+
   const startSession = useCallback(
     async (
       session: SavedSession & {
@@ -1043,7 +1181,33 @@ export function useTerminals(
         disconnectedRef.current = next;
         return next;
       });
-      if (activate) setActiveId(session.id);
+      if (activate) {
+        // 新会话进活动窗格并立刻显示（activate=false 的拆分场景由
+        // splitPaneBy 自己往新窗格写，两边不能都写）
+        const paneId =
+          activePaneRef.current?.id ??
+          panesRef.current[0]?.id;
+        if (paneId) {
+          setPanes(prev =>
+            prev.map(pane =>
+              pane.id === paneId
+                ? {
+                    ...pane,
+                    tabIds: pane.tabIds.includes(
+                      session.id
+                    )
+                      ? pane.tabIds
+                      : [
+                          ...pane.tabIds,
+                          session.id
+                        ],
+                    visibleId: session.id
+                  }
+                : pane
+            )
+          );
+        }
+      }
       // 先挂载、等尺寸稳定，再启动 PTY：PTY 直接按最终尺寸出生，首帧不再有
       // resize。ConPTY 的整屏重绘（会抹掉欢迎横幅、堆出重复提示符）因此
       // 根本不会发生
@@ -1081,21 +1245,27 @@ export function useTerminals(
       }
       return true;
     },
-    [createTerminal, onError, schedulePtyResize]
+    [
+      createTerminal,
+      onError,
+      schedulePtyResize,
+      setPanes
+    ]
   );
 
   const open = useCallback(
     async (
       session: SavedSession,
       sourceSessionId = session.id,
-      /** false 时不把新会话设为激活（拆分场景：新会话只进右侧栏） */
+      /** false 时不把新会话设为激活（拆分场景：新会话由调用方放进新窗格） */
       activate = true
     ) => {
       const current = openedRef.current.find(
         item => item.id === session.id
       );
       if (current) {
-        setActiveId(session.id);
+        // 已打开：切到它所在的窗格并显示（activate(id) 内部会找归属）
+        activateTab(session.id);
         return;
       }
       if (session.kind === "ssh") {
@@ -1127,7 +1297,7 @@ export function useTerminals(
         activate
       );
     },
-    [startSession]
+    [startSession, activateTab]
   );
 
   const submitPassword = useCallback(
@@ -1197,32 +1367,43 @@ export function useTerminals(
     [open, nextDupName]
   );
 
-  /** 向右拆分（id 缺省为当前激活会话，右键标签时传被右键的那只）：
-   *  用被拆会话的配置新起一个独立会话（独立 PTY）放进拆分标签组，
-   *  并立刻显示它；已在组内的会话忽略。不切换左栏的激活会话。
-   *  组内会话不进左栏标签列表，关掉它就是移出一个标签（close）。 */
-  const split = useCallback(
-    async (id?: string) => {
+  /**
+   * 拆分窗格（VSCode 式）。
+   *
+   * @param paneId 被拆的窗格；缺省为活动窗格
+   * @param direction `row` 向右、`column` 向下
+   * @param id       被复制的会话；缺省取被拆窗格当前显示的那只
+   * @returns 新会话 id（失败为 undefined），调用方用它聚焦新标签
+   *
+   * 用被拆会话的配置新起一个独立会话（独立 PTY）放进**新建的窗格**，
+   * 并立刻显示它。已被拆过的会话可以再拆（每次都新开窗格）。
+   */
+  const splitPaneBy = useCallback(
+    async (
+      paneId: string,
+      direction: SplitDirection,
+      id?: string
+    ) => {
       try {
-        const target = id ?? activeIdRef.current;
-        if (
-          !target ||
-          splitIdsRef.current.includes(target)
-        )
-          return;
+        if (!hasLeaf(treeRef.current, paneId))
+          return undefined;
         const current = openedRef.current.find(
-          s => s.id === target
+          s =>
+            s.id ===
+            (id ??
+              activePaneRef.current?.visibleId)
         );
-        // 已断开的会话拆出去也只是一块死屏，不开新栏
+        // 已断开的会话拆出去也只是一块死屏，不开新窗格
         if (
           !current ||
           disconnectedRef.current[current.id]
         )
-          return;
+          return undefined;
         // 只取会话定义字段（密码若是明文直接复用，不再弹密码框）；
         // 运行时字段（terminal/element 等）不能进后端 config
+        const stamp = Date.now();
         const config: SavedSession = {
-          id: `split-${current.id}-${Date.now()}`,
+          id: `split-${current.id}-${stamp}`,
           name: nextDupName(current.name),
           kind: current.kind,
           host: current.host,
@@ -1236,17 +1417,43 @@ export function useTerminals(
           false
         );
         if (!ok) return undefined;
-        setSplitIds([
-          ...splitIdsRef.current,
-          config.id
-        ]);
-        setSplitVisible(config.id);
+        const newPaneId = `pane-${stamp}`;
+        // 先落布局再落标签：setTreeAndSync 会给新 paneId 补一条空记录，
+        // 紧接着这次 setPanes 才把新标签写进去
+        setTreeAndSync(prev =>
+          splitPane(
+            prev,
+            paneId,
+            direction,
+            newPaneId,
+            `split-${stamp}`
+          )
+        );
+        setPanes(prev =>
+          prev.map(pane =>
+            pane.id === newPaneId
+              ? {
+                  ...pane,
+                  tabIds: [config.id],
+                  visibleId: config.id
+                }
+              : pane
+          )
+        );
+        setActivePaneId(newPaneId);
+        console.info(
+          `[terminal] 拆分窗格 ${paneId} → ${newPaneId}（${direction}）`
+        );
         // 返回新会话 id：调用方要用它聚焦 —— 新 id 是 split-…，
-        // 拿被拆会话的 id 选中会让胶囊落回左栏
+        // 拿被拆会话的 id 选中会让胶囊留在原窗格
         return config.id;
       } catch (error) {
         // 拆分失败要露出完整错误（含 TypeError 堆栈摘要），否则用户只看到
         // 毫无线索的气泡甚至毫无反应
+        console.error(
+          "[terminal] 拆分窗格失败",
+          error
+        );
         onError(error);
       }
       return undefined;
@@ -1254,79 +1461,114 @@ export function useTerminals(
     [
       nextDupName,
       onError,
-      setSplitIds,
-      setSplitVisible,
+      setPanes,
+      setTreeAndSync,
       startSession
     ]
   );
 
-  const activate = useCallback((id: string) => {
-    setActiveId(id);
-  }, []);
-
-  /** 点拆分组内的标签：切换拆分窗格里显示的会话。 */
-  const activateSplit = useCallback(
-    (id: string) => setSplitVisible(id),
-    [setSplitVisible]
-  );
-
-  /** 拖标签在左栏与拆分标签组之间移动：本质是 splitIds 成员关系的搬移。
-   *  进组＝成为组内新标签并立刻可见；出组回左栏时，若它正可见，
-   *  可见位交给组内剩下的第一只。激活会话被拖进组时，把激活权交给
-   *  左栏剩下的第一只会话 —— 组内会话不可激活，左栏不能没有激活会话。 */
+  /**
+   * 拖标签在窗格之间移动：本质是 tabIds 成员关系的搬移。
+   *
+   * 进入目标窗格＝成为该窗格的新标签并立刻可见；离开时若它正可见，
+   * 可见位交给该窗格剩下的第一只。会话只属于一个窗格，所以源窗格必然
+   * 要把它摘掉 —— 若那是源窗格最后一个标签，源窗格就地折叠（见 close）。
+   */
   const moveTab = useCallback(
-    (id: string, to: "main" | "split") => {
-      const inSplit =
-        splitIdsRef.current.includes(id);
-      if (to === "split" && !inSplit) {
-        setSplitIds([...splitIdsRef.current, id]);
-        setSplitVisible(id);
-        if (activeIdRef.current === id) {
-          // setSplitIds 同步写了 ref：这里 rest 已排除组内会话
-          const rest = openedRef.current.filter(
-            s =>
-              s.id !== id &&
-              !splitIdsRef.current.includes(s.id)
-          );
-          setActiveId(rest[0]?.id ?? "");
-        }
-      } else if (to === "main" && inSplit) {
-        const next = splitIdsRef.current.filter(
-          split => split !== id
-        );
-        setSplitIds(next);
-        if (splitVisibleIdRef.current === id)
-          setSplitVisible(next[0] ?? "");
-      }
+    (id: string, toPaneId: string) => {
+      const from = panesRef.current.find(pane =>
+        pane.tabIds.includes(id)
+      );
+      if (!from) return;
+      if (from.id === toPaneId) return;
+      if (
+        !panesRef.current.some(
+          pane => pane.id === toPaneId
+        )
+      )
+        return;
+      setPanes(prev =>
+        prev.map(pane => {
+          if (pane.id === from.id) {
+            const tabIds = pane.tabIds.filter(
+              tab => tab !== id
+            );
+            return {
+              ...pane,
+              tabIds,
+              visibleId:
+                pane.visibleId === id
+                  ? (tabIds[0] ?? "")
+                  : pane.visibleId
+            };
+          }
+          if (pane.id === toPaneId) {
+            return {
+              ...pane,
+              tabIds: [...pane.tabIds, id],
+              visibleId: id
+            };
+          }
+          return pane;
+        })
+      );
+      console.info(
+        `[terminal] 标签 ${id} 从窗格 ${from.id} 移到 ${toPaneId}`
+      );
     },
-    [setSplitIds, setSplitVisible]
+    [setPanes]
   );
 
-  /** 左栏内拖拽换位：把 id 插到 beforeId 之前，beforeId 为 null 表示
-   *  追加到末尾（拖到最后一个标签右侧的空白处）。左栏标签顺序就是
-   *  opened 的数组顺序，换位＝重排这个数组。 */
+  /**
+   * 窗格内拖拽换位：把 id 插到 beforeId 之前，beforeId 为 null 表示
+   * 追加到末尾（拖到最后一个标签右侧的空白处）。
+   *
+   * 只动这个窗格的 tabIds —— 标签顺序是**每窗格各自**的，与 opened
+   * 的全局顺序无关（opened 只是"哪些会话开着"的清单）。
+   */
   const reorderTab = useCallback(
-    (id: string, beforeId: string | null) => {
-      const list = openedRef.current;
-      const from = list.findIndex(
-        s => s.id === id
+    (
+      paneId: string,
+      id: string,
+      beforeId: string | null
+    ) => {
+      const pane = panesRef.current.find(
+        item => item.id === paneId
       );
+      if (!pane) return;
+      const from = pane.tabIds.indexOf(id);
       if (from < 0) return;
-      const next = [...list];
+      const next = [...pane.tabIds];
       const [moved] = next.splice(from, 1);
       if (!moved) return;
       const to =
         beforeId === null
           ? next.length
-          : next.findIndex(
-              s => s.id === beforeId
-            );
+          : next.indexOf(beforeId);
       if (to < 0) return;
       next.splice(to, 0, moved);
-      openedRef.current = next;
-      setOpened(next);
+      setPanes(prev =>
+        prev.map(item =>
+          item.id === paneId
+            ? { ...item, tabIds: next }
+            : item
+        )
+      );
     },
-    []
+    [setPanes]
+  );
+
+  /**
+   * 拖分隔条：按 splitId 写回比例。树的操作是纯函数（paneLayout），
+   * 这里只负责把新树塞进 state。
+   */
+  const setPaneRatio = useCallback(
+    (splitId: string, ratio: number) => {
+      setTree(prev =>
+        setSplitRatio(prev, splitId, ratio)
+      );
+    },
+    [setTree]
   );
 
   /**
@@ -1355,15 +1597,33 @@ export function useTerminals(
       cancelReconnect(id);
       // 待发送的尺寸同步也没必要了
       cancelPtyResize(id);
-      // 关闭的是组内会话：移出一个标签；若它正可见，可见位交给
-      // 剩下的第一只（组空了就是 ""，右侧窗格整体消失）
-      if (splitIdsRef.current.includes(id)) {
-        const next = splitIdsRef.current.filter(
-          split => split !== id
+      // 从所属窗格里摘掉这个标签；若它正可见，可见位交给剩下的第一只。
+      // 摘完窗格空了 → 把窗格从布局树里折叠掉（树会少一级），
+      // 但树里只剩一个窗格时不能折叠，否则变成空树。
+      const owner = panesRef.current.find(pane =>
+        pane.tabIds.includes(id)
+      );
+      let emptiedPaneId = "";
+      if (owner) {
+        const rest = owner.tabIds.filter(
+          tab => tab !== id
         );
-        setSplitIds(next);
-        if (splitVisibleIdRef.current === id)
-          setSplitVisible(next[0] ?? "");
+        emptiedPaneId =
+          rest.length === 0 ? owner.id : "";
+        setPanes(prev =>
+          prev.map(pane =>
+            pane.id === owner.id
+              ? {
+                  ...pane,
+                  tabIds: rest,
+                  visibleId:
+                    pane.visibleId === id
+                      ? (rest[0] ?? "")
+                      : pane.visibleId
+                }
+              : pane
+          )
+        );
       }
       await invoke("terminal_close", {
         id
@@ -1378,23 +1638,34 @@ export function useTerminals(
         openedRef.current = next;
         return next;
       });
-      if (activeIdRef.current === id) {
-        // 兜底不能落在拆分标签组的会话上：它的元素挂在拆分窗格宿主，
-        // 一旦激活会和左栏宿主争夺元素
-        const rest = openedRef.current.filter(
-          s => !splitIdsRef.current.includes(s.id)
+      // 折叠空窗格：放在 setOpened 之后，这样 setTreeAndSync 里的
+      // setPanes 拿到的是已经摘掉标签的 panes，不会把幽灵标签复活
+      if (
+        emptiedPaneId &&
+        panesRef.current.length > 1
+      ) {
+        const remaining = panesRef.current.filter(
+          pane => pane.id !== emptiedPaneId
         );
-        setActiveId(
-          rest[Math.max(0, index - 1)]?.id ||
-            rest[0]?.id ||
-            ""
+        setTreeAndSync(prev =>
+          removePane(prev, emptiedPaneId)
+        );
+        // 活动窗格被折叠掉了 → 活动权交给剩下的第一个
+        if (
+          activePaneIdRef.current ===
+          emptiedPaneId
+        ) {
+          setActivePaneId(remaining[0]?.id ?? "");
+        }
+        console.info(
+          `[terminal] 窗格 ${emptiedPaneId} 已空，折叠`
         );
       }
     },
     [
       onError,
-      setSplitIds,
-      setSplitVisible,
+      setPanes,
+      setTreeAndSync,
       cancelReconnect,
       cancelPtyResize
     ]
@@ -1552,22 +1823,25 @@ export function useTerminals(
     opened,
     activeId,
     active,
-    setTerminalHost,
     disconnected,
     /** 手动重连（断线后右键终端里的「重新连接」） */
     reconnect: reconnectSession,
     open,
     duplicate,
-    activate,
+    activate: activateTab,
     focusTerminal,
     close,
     closeMany,
     setPtyResizePaused,
-    splitIds,
-    splitVisibleId,
-    activateSplit,
-    setSplitHost,
-    split,
+    // ---- 窗格网格 ----
+    panes,
+    tree,
+    activePaneId: activePane?.id ?? "",
+    setPaneHost,
+    setPaneRatio,
+    splitPane: splitPaneBy,
+    activatePaneTab,
+    setActivePaneId,
     moveTab,
     reorderTab,
     passwordRequest,

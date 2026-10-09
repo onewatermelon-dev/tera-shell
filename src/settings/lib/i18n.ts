@@ -352,6 +352,7 @@ const zhCN = {
   "terminal.closeOthers": "关闭其他会话",
   "terminal.closeAll": "关闭所有会话",
   "terminal.splitRight": "向右拆分",
+  "terminal.splitDown": "向下拆分",
   "terminal.moreTabs": "更多标签",
   "terminal.overflowTabs":
     "{count} 个标签超出显示",
@@ -865,6 +866,7 @@ const enUS: Record<MessageKey, string> = {
   "terminal.closeOthers": "Close other tabs",
   "terminal.closeAll": "Close all tabs",
   "terminal.splitRight": "Split right",
+  "terminal.splitDown": "Split down",
   "terminal.moreTabs": "More tabs",
   "terminal.overflowTabs":
     "{count} tabs are out of view",

@@ -10,7 +10,8 @@ export type TabAction =
   | "closeRight"
   | "closeOthers"
   | "closeAll"
-  | "split";
+  | "splitRight"
+  | "splitDown";
 
 type TabContextMenuProps = {
   /** 菜单左上角坐标（视口坐标，用 fixed 定位） */
@@ -18,8 +19,6 @@ type TabContextMenuProps = {
   y: number;
   /** 该标签右侧是否还有其它标签：没有时「关闭右侧」置灰。 */
   canCloseRight: boolean;
-  /** 被右键的会话是否还能向右拆分：已有拆分栏时隐藏该项。 */
-  canSplit: boolean;
   onAction: (action: TabAction) => void;
   onClose: () => void;
 };
@@ -34,7 +33,6 @@ export default function TabContextMenu({
   x,
   y,
   canCloseRight,
-  canSplit,
   onAction,
   onClose
 }: TabContextMenuProps) {
@@ -166,16 +164,16 @@ export default function TabContextMenu({
           strong: true
         }
       )}
-      {/* 分隔线之后是布局类动作：VSCode 式向右拆分，可连续拆；
-          关拆分栏不走菜单 —— 拆分标签上的 × 是唯一入口 */}
-      {canSplit && (
-        <>
-          <div className="context-menu-separator" />
-          {renderItem(
-            "split",
-            t("terminal.splitRight")
-          )}
-        </>
+      {/* 分隔线之后是布局类动作：VSCode 式拆分，可连续拆成网格；
+          关窗格不走菜单 —— 窗格标签上的 × 关掉最后一个标签即折叠 */}
+      <div className="context-menu-separator" />
+      {renderItem(
+        "splitRight",
+        t("terminal.splitRight")
+      )}
+      {renderItem(
+        "splitDown",
+        t("terminal.splitDown")
       )}
     </div>
   );

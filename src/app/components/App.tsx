@@ -670,21 +670,21 @@ export default function App() {
             terminals.searchCaseSensitive
           }
           searchRegex={terminals.searchRegex}
-          onActivate={terminals.activate}
           onFocusTerminal={
             terminals.focusTerminal
           }
           onClose={terminals.close}
           onCloseTabs={terminals.closeMany}
-          splitIds={terminals.splitIds}
-          splitVisibleId={
-            terminals.splitVisibleId
+          panes={terminals.panes}
+          tree={terminals.tree}
+          activePaneId={terminals.activePaneId}
+          onPaneHost={terminals.setPaneHost}
+          onFocusPane={terminals.setActivePaneId}
+          onActivatePaneTab={
+            terminals.activatePaneTab
           }
-          onActivateSplit={
-            terminals.activateSplit
-          }
-          onSplitHost={terminals.setSplitHost}
-          onSplit={terminals.split}
+          onPaneRatio={terminals.setPaneRatio}
+          onSplitPane={terminals.splitPane}
           onMoveTab={terminals.moveTab}
           onReorderTab={terminals.reorderTab}
           onCreate={openCreate}
@@ -695,9 +695,6 @@ export default function App() {
             terminals.toggleCaseSensitive
           }
           onToggleRegex={terminals.toggleRegex}
-          onTerminalHost={
-            terminals.setTerminalHost
-          }
           macros={macroStore.macros}
           onRunMacro={runMacro}
           onAddMacro={() => {

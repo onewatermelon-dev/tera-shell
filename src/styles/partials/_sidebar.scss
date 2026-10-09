@@ -159,7 +159,12 @@
 .terminal-pane {
   position: relative;
   display: grid;
-  grid-template-rows: 38px 1fr 25px;
+
+  // ⚠️ **只有两行**：标签条不再与终端分区 —— 每个窗格自带自己的标签条
+  // （.pane-cell 内纵向排「标签条 + 宿主」），所以第一行直接是窗格网格。
+  // 这里曾是 `38px 1fr 25px`（标签条 / 终端 / 状态栏）；改成窗格后如果
+  // 忘了改，.pane-grid 会落进 38px 那行 → 终端被压扁、状态栏被顶到中间
+  grid-template-rows: minmax(0, 1fr) 25px;
 
   // 显式 minmax(0, 1fr)：隐式 auto 列的尺寸会被内容反推，拆分后终端内容
   // 变宽时能把卡片撑得比窗口宽 —— 底部状态栏跟着右移，SSH / UTF-8 这些
@@ -167,7 +172,7 @@
   grid-template-columns: minmax(0, 1fr);
 
   // 同 .workspace：还原 grid 默认 stretch，避免 HeroUI 全局 section 规则
-  // 的 align-items:flex-start 让 .tabs-bar / 终端宿主不撑满各自行。
+  // 的 align-items:flex-start 让窗格网格 / 终端宿主不撑满各行。
   align-items: stretch;
   min-width: 0;
   height: 100%;
@@ -178,12 +183,12 @@
   // 系统信息抽屉打开时多占一行（auto 行轨 = 抽屉高度），
   // 终端区 1fr 收缩到剩余空间，光标行始终可见
   &.has-sys-drawer {
-    grid-template-rows: 38px 1fr auto 25px;
+    grid-template-rows: minmax(0, 1fr) auto 25px;
   }
 
   // 本地会话没有底部状态栏：行轨收为两行，终端直接顶到卡片底缘
   &.no-status {
-    grid-template-rows: 38px 1fr;
+    grid-template-rows: minmax(0, 1fr);
   }
 }
 
@@ -198,7 +203,10 @@
   border-radius: 0;
 }
 
-.terminal-focus .tabs-bar,
+// 专注模式：隐藏每个窗格自带的标签条（.pane-tabs，专注时一格一屏）
+// 与状态栏等辅助元素。旧版这里写的是 .tabs-bar —— 那是拆分前的全局标签条，
+// 拆成窗格后类名已改成 .pane-tabs，写错会导致专注模式仍显示标签条
+.terminal-focus .pane-tabs,
 .terminal-focus .terminal-status,
 .terminal-focus .sys-drawer,
 .terminal-focus .find-box,
