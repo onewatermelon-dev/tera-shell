@@ -1204,7 +1204,9 @@ body.ai-queue-dragging {
   height: 72px;
   margin: auto 0;
   color: var(--accent);
+  touch-action: none;
   cursor: pointer;
+  user-select: none;
   background: var(--surface);
   border: 1px solid var(--border);
   border-right: 0;
@@ -1213,5 +1215,20 @@ body.ai-queue-dragging {
 
   &:hover {
     background: var(--surface-secondary);
+  }
+
+  // 拖动中（JS 在 body 上挂 .reopen-dragging）：跟手 + 禁用点击高亮，
+  // 不加的话按钮会闪一下按下态，看起来像被误点了
+}
+
+body.reopen-dragging {
+  cursor: grabbing;
+  user-select: none;
+
+  // ⚠️ **别加 pointer-events: none** —— 按钮靠 setPointerCapture 继续
+  // 收 pointermove，但一旦全局关掉命中测试，拖拽就断了。
+  // 要禁的只是「拖过之后那一下 click 的高亮」，用 preventDefault 拦。
+  * {
+    cursor: grabbing !important;
   }
 }

@@ -42,7 +42,9 @@ import type { StatusMode } from "@/settings/lib/settings";
 import type { TerminalMacro } from "@/terminal/lib/terminalMacros";
 import {
   loadPanelWidth,
-  savePanelWidth
+  loadReopenTabTop,
+  savePanelWidth,
+  saveReopenTabTop
 } from "@/terminal/lib/aiPrefs";
 import {
   PlusOutlined,
@@ -152,6 +154,13 @@ type Props = {
   /** 暂停/恢复向 PTY 同步行高（系统信息抽屉开合期间只动本地视口）。 */
   setPtyResizePaused: (paused: boolean) => void;
 };
+
+/**
+ * 收起后浮窗按钮的高度（px）。与 `.ai-reopen-tab` 的 height 一致 ——
+ * 窗口变矮后要把存下来的 top 钳回可视区，得知道按钮有多高。
+ * 兜底值和 CSS 保持同步，改 CSS 时这里也要改。
+ */
+const REOPEN_TAB_HEIGHT = 72;
 
 export default function TerminalWorkspace({
   opened,
@@ -524,6 +533,127 @@ export default function TerminalWorkspace({
   function endAiResize() {
     aiDragRef.current = null;
     savePanelWidth(aiWidth);
+  }
+
+  /**
+   * 收起后的浮窗按钮：默认贴右缘垂直居中，可**上下拖动**改位置，
+   * 位置跟着 `ai_prefs.json` 走（下次启动还在原处）。
+   *
+   * `reopenTop` 为 null 表示「不指定，交给 CSS 居中」—— 用 null 而不是
+   * 一个算出来的数字，是为了让「首次运行」和「窗口缩放后」都保持居中：
+   * 存死像素值的话，窗口一变高按钮就偏在旧位置上了。
+   */
+  const [reopenTop, setReopenTop] = useState<
+    number | null
+  >(() => loadReopenTabTop());
+  /** 拖拽中：钉住「指针相对按钮顶边」的偏移 + 起手时的 clientY */
+  const reopenDragRef = useRef<{
+    grabOffset: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+  /**
+   * 本次手势是否拖过（松手后仍要留着，供 click 判断）。
+   * 单独一个 ref 而不是读reopenDragRef —— 后者在 endReopenDrag
+   * 里就被清空了，click 拿到的是 null，拖过也会误判成「点击」。
+   */
+  const reopenDraggedRef = useRef(false);
+  /**
+   * 与 state 同步的镜像（写入与 setState 同一处）。用于松手时落盘：
+   * pointerup 那一刻 state 可能还没提交，读它会拿到上一帧的值。
+   * ⚠️ 渲染期不能写 ref —— 只在 move/起手这些事件回调里写。
+   */
+  const reopenTopRef = useRef(reopenTop);
+
+  function startReopenDrag(
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) {
+    // 指针不在按钮内也要能起手（比如从按钮上方按下再往下拖）
+    const rect =
+      event.currentTarget.getBoundingClientRect();
+    event.currentTarget.setPointerCapture(
+      event.pointerId
+    );
+    reopenDragRef.current = {
+      grabOffset: event.clientY - rect.top,
+      startY: event.clientY,
+      moved: false
+    };
+  }
+
+  function moveReopenDrag(
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) {
+    const drag = reopenDragRef.current;
+    if (!drag) return;
+    if (
+      !drag.moved &&
+      Math.abs(event.clientY - drag.startY) < 3
+    )
+      // 3px 内当点击处理，否则松手会既展开面板又改位置
+      return;
+    drag.moved = true;
+    reopenDraggedRef.current = true;
+    // 全局挂抓取光标（悬浮在按钮外的那些像素也要变）
+    document.body.classList.add(
+      "reopen-dragging"
+    );
+    const height =
+      event.currentTarget.offsetHeight ||
+      REOPEN_TAB_HEIGHT;
+    // 钳在窗口内：上下都留边，别拖到屏幕外找不回来
+    const max = Math.max(
+      0,
+      window.innerHeight - height
+    );
+    const next = Math.min(
+      max,
+      Math.max(0, event.clientY - drag.grabOffset)
+    );
+    // ref 与 setState 同步更新：松手时要从 ref 读最新值
+    reopenTopRef.current = next;
+    setReopenTop(next);
+  }
+
+  /**
+   * 窗口变矮后，存下来的旧位置可能已经跑到屏幕外（按钮找不回来）。
+   * 监听 resize 把位置钳回可视区，但不落盘 —— 那是拖动时给的基准，
+   * 下次窗口又变高时用户期望它还在原来的相对位置。
+   */
+  useEffect(() => {
+    const clamp = () => {
+      const current = reopenTopRef.current;
+      if (current === null) return;
+      const max = Math.max(
+        0,
+        window.innerHeight - REOPEN_TAB_HEIGHT
+      );
+      if (current > max) {
+        reopenTopRef.current = max;
+        setReopenTop(max);
+      }
+    };
+    window.addEventListener("resize", clamp);
+    return () =>
+      window.removeEventListener("resize", clamp);
+  }, []);
+
+  function endReopenDrag(
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) {
+    reopenDragRef.current = null;
+    document.body.classList.remove(
+      "reopen-dragging"
+    );
+    // 落盘拖完的位置。⚠️ 从同步的ref 读，**不要写进 setState 的
+    // updater 里落盘**（updater 是副作用重灾区：StrictMode 下跑两次、
+    // 且返回值必须是纯的）；ref 在每次 move 里就更新好了，比 state 新
+    saveReopenTabTop(reopenTopRef.current);
+    // 拖过就不当点击 —— 否则松手会顺带把面板拉回来
+    if (reopenDraggedRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }
 
   return (
@@ -1055,13 +1185,37 @@ export default function TerminalWorkspace({
         />
       )}
       {active?.kind === "ssh" && aiCollapsed && (
-        // 收起后的浮窗按钮：贴窗口右缘，点击向左拉回面板
+        // 收起后的浮窗按钮：贴窗口右缘，点击向左拉回面板。
+        // 也可上下拖动改垂直位置（reopenTop 为 null 时保持 CSS 居中）
         <button
           type="button"
           className="ai-reopen-tab"
+          style={
+            reopenTop === null
+              ? undefined
+              : ({
+                  top: `${reopenTop}px`,
+                  //给了具体 top 就得撤掉居中用的 bottom + margin:auto，
+                  // 否则两者同时生效会被bottom 拉回视口底部
+                  bottom: "auto",
+                  margin: 0
+                } as CSSProperties)
+          }
           aria-label={t("ai.expand")}
           title={t("ai.expand")}
-          onClick={() => setAiCollapsed(false)}
+          onPointerDown={startReopenDrag}
+          onPointerMove={moveReopenDrag}
+          onPointerUp={endReopenDrag}
+          onPointerCancel={endReopenDrag}
+          onClick={() => {
+            // 刚拖过的那一下不算点击（pointerup 已拦一道，
+            // 这里再兜一层：拖拽后紧跟的 click 仍可能冒到这里）
+            if (reopenDraggedRef.current) {
+              reopenDraggedRef.current = false;
+              return;
+            }
+            setAiCollapsed(false);
+          }}
         >
           <LeftOutlined />
         </button>

@@ -27,6 +27,13 @@ export type AiPrefs = {
   blacklist?: string[];
   /** AI 面板宽度（px）。 */
   panelWidth?: number;
+  /**
+   * 收起后浮窗按钮的垂直位置（px，`top`）。
+   *
+   * `null`/缺省 = 不指定，按 CSS 的 `top:0;bottom:0;margin:auto` 垂直居中。
+   * 存 null 而非一个算出来的数值：窗口高度会变，存死值下次启动就偏了。
+   */
+  reopenTabTop?: number | null;
 };
 
 /** 旧版 localStorage 键 → 偏好字段的迁移映射（键名即历史，别再复用）。 */
@@ -188,4 +195,27 @@ export function savePanelWidth(
   width: number
 ): void {
   writePrefs({ panelWidth: width });
+}
+
+/**
+ * 读取收起后浮窗按钮的垂直位置；null 表示交给 CSS 垂直居中。
+ *
+ * 校验：非有限数 / 负值一律退回 null（居中），免得旧数据里一个脏值
+ * 把按钮钉到屏幕外找不回来。
+ */
+export function loadReopenTabTop():
+  number | null {
+  const value = readPrefs().reopenTabTop;
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0
+    ? value
+    : null;
+}
+
+/** 记住收起后浮窗按钮的垂直位置（拖拽结束时调用）。 */
+export function saveReopenTabTop(
+  top: number | null
+): void {
+  writePrefs({ reopenTabTop: top });
 }

@@ -13,15 +13,18 @@ import {
 import {
   clearData,
   DataName,
-  readData
+  readData,
+  writeData
 } from "@/settings/lib/storage";
 import {
   loadBlacklist,
   loadPanelWidth,
+  loadReopenTabTop,
   loadRunFlag,
   loadSelectedModel,
   saveBlacklist,
-  savePanelWidth
+  savePanelWidth,
+  saveReopenTabTop
 } from "@/terminal/lib/aiPrefs";
 
 /** localStorage 的 node 内存替身（vitest node 环境没有这个全局）。 */
@@ -86,5 +89,61 @@ describe("aiPrefs 旧 localStorage 迁移", () => {
       false
     );
     expect(loadBlacklist()).toEqual([]);
+  });
+});
+
+/**
+ * 收起后浮窗按钮的垂直位置。
+ *
+ * null 是**有意义的值**（= 交给 CSS 垂直居中），不是「没设置」——
+ * 所以存取两端都要能原样往返 null，脏值则一律退回 null
+ * （否则一个坏数据会把按钮钉到屏幕外找不回来）。
+ */
+describe("aiPrefs 收起浮窗位置", () => {
+  it("未设置过时为 null（走 CSS 垂直居中）", () => {
+    expect(loadReopenTabTop()).toBeNull();
+  });
+
+  it("写入后能原样读回", () => {
+    saveReopenTabTop(240);
+    expect(loadReopenTabTop()).toBe(240);
+    const persisted = JSON.parse(
+      readData(DataName.aiPrefs) ?? "{}"
+    ) as Record<string, unknown>;
+    expect(persisted.reopenTabTop).toBe(240);
+  });
+
+  it("null 也能往返：拖回中部后要真的存成 null", () => {
+    saveReopenTabTop(240);
+    saveReopenTabTop(null);
+    expect(loadReopenTabTop()).toBeNull();
+    // ⚠️ 不能被 undefined / 0 顶替：`undefined` 会让 JSON 里丢掉这个键，
+    // 下次读取又回到 null 看不出区别；0 则是合法位置别误伤
+    const persisted = JSON.parse(
+      readData(DataName.aiPrefs) ?? "{}"
+    ) as Record<string, unknown>;
+    expect(persisted.reopenTabTop).toBeNull();
+  });
+
+  it("0 是合法位置（贴窗口顶），不当成无效值", () => {
+    saveReopenTabTop(0);
+    expect(loadReopenTabTop()).toBe(0);
+  });
+
+  it("非法值退回 null：负数、NaN、非数字", () => {
+    const put = (value: unknown) => {
+      // 绕过类型直接写脏数据，模拟文件被外部改坏
+      writeData(
+        DataName.aiPrefs,
+        JSON.stringify({ reopenTabTop: value })
+      );
+      expect(loadReopenTabTop()).toBeNull();
+    };
+    put(-10);
+    put(Number.NaN);
+    put(Number.POSITIVE_INFINITY);
+    put("240");
+    put({});
+    put([]);
   });
 });
