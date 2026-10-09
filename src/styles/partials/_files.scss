@@ -1,3 +1,8 @@
+// 细滚动条 mixin 在 _scrollbar.scss —— 与终端区的系统/进程/网络信息抽屉
+// 同一套规格（SFTP 窗口此前漏了，用的是浏览器默认宽灰方角，与别处割裂）。
+// `as *` 不能省：scss 的 @use 按文件隔离命名空间，不加就得写全名。
+@use "scrollbar" as *;
+
 // 文件列表：表头 + 内容同处一个滚动容器，表头 sticky 吸顶。
 // 放在同一个容器里，列的可用宽度天然一致，不必手动补偿滚动条宽度。
 .sftp-file-list {
@@ -8,6 +13,8 @@
   background: var(--surface-secondary);
   border: 1px solid var(--border);
   border-radius: 10px;
+
+  @include thin-scrollbar;
 }
 
 // 列宽只定义一次，表头与行共用，保证逐列严格对齐

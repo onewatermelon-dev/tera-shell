@@ -1,6 +1,11 @@
 // ---- HeroUI Modal 对话框的少量补充样式 ----
 // 面板/字段/按钮外观全部交给 Modal + TextField + Button，
 // 这里只保留宽度、字段间距与文案色。
+// 细滚动条 mixin 在 _scrollbar.scss —— 下面几个滚动容器（传输列表、
+// 路径选择面板、底部窗口标签栏）统一用它，与终端区的系统/进程/网络信息
+// 抽屉同一套规格；此前 SFTP 漏了，用的是浏览器默认宽灰方角，与别处割裂。
+// `as *` 不能省：scss 的 @use 按文件隔离命名空间，不加就得写全名。
+@use "scrollbar" as *;
 
 .session-dialog {
   width: 430px;
@@ -79,6 +84,8 @@
   overflow-x: auto;
   background: var(--surface-secondary);
   border-top: 1px solid var(--border);
+
+  @include thin-scrollbar;
 }
 
 .sftp-dock-window {
@@ -297,6 +304,8 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+
+  @include thin-scrollbar;
 }
 
 .transfer-grid {
@@ -587,6 +596,8 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+
+  @include thin-scrollbar;
 }
 
 .picker-row {
