@@ -402,6 +402,10 @@ export function useTerminals(
           ) {
             return;
           }
+          // 记一下缓冲长度：resize 前后若它变短，说明 ConPTY 重发把
+          // 内容挤掉了（用户报「开合 AI 面板后内容变少」）
+          const before =
+            session.terminal.buffer.active.length;
           const sizeKey = `${session.terminal.rows}x${session.terminal.cols}`;
           if (
             syncedSizes.current.get(
@@ -425,6 +429,15 @@ export function useTerminals(
               // 这里**不要**再发 Ctrl+L 清屏重画：输出重复的根因是孤儿
               // 监听器（已修复），resize 本身的 ConPTY 重绘内容是完整的，
               // 每次都清屏反而把用户正在看的屏幕抹掉
+              const after =
+                session.terminal.buffer.active
+                  .length;
+              console.debug(
+                `[terminal] resize 后缓冲 ${before} → ${after} 行` +
+                  (after < before
+                    ? ` ⚠️ 少了 ${before - after} 行`
+                    : "")
+              );
             })
             .catch(reason => {
               // PTY 还没建立（start 未完成）时会走到这里。以前静默吞掉，
@@ -492,11 +505,17 @@ export function useTerminals(
           }
           session.fit.fit();
           session.terminal.scrollToBottom();
+          console.debug(
+            `[terminal] fit ${session.id} → ${session.terminal.cols}x${session.terminal.rows}` +
+              ` 缓冲 ${session.terminal.buffer.active.length} 行` +
+              ` 视口 ${session.terminal.buffer.active.viewportY}/${session.terminal.buffer.active.baseY}` +
+              ` 暂停=${ptyPausedRef.current ? "pty" : ""}${zoomSyncPausedRef.current ? "zoom" : ""}`
+          );
           // 抽屉打开期间暂停向 PTY 同步行高：ConPTY 收缩会丢掉屏幕
           // 上方内容，恢复时整屏重绘把历史打回空白；只缩本地视口即可，
           // 远端布局保持不变（见 setPtyResizePaused）
           if (ptyPausedRef.current) continue;
-          // Ctrl+滚轮缩放期间所有会话都挂起 PTY 同步（见 pausePtyForZoom）：
+          // Ctrl+滚轮缩放期间所有会话都挂起 PTY 同步（见 pausePtySync）：
           // SSH 会话里 ssh.exe 同样跑在 ConPTY 中，resize 会触发
           // 「ConPTY 整屏重绘 + 远端 readline 重绘 + xterm reflow」三方
           // 叠加，屏幕只剩一个提示符
@@ -508,6 +527,10 @@ export function useTerminals(
     },
     [schedulePtyResize]
   );
+
+  // resize 的 ref 镜像：给同步回调（pausePtySync 的收尾、ResizeObserver）
+  // 取最新值，避免把 resize 塞进它们的依赖数组导致定时器反复重置
+  const resizeRef = useRef(resize);
 
   /**
    * 暂停/恢复向 PTY 同步行高（系统信息抽屉开合时调用）。
@@ -525,36 +548,46 @@ export function useTerminals(
     [resize]
   );
 
-  /** Ctrl+滚轮缩放期间挂起 PTY 尺寸同步的标记与手势收尾定时器 */
+  /** Ctrl+滚轮缩放 / 面板开合期间挂起 PTY 尺寸同步的标记与收尾定时器 */
   const zoomSyncPausedRef = useRef(false);
   const zoomSettleTimer = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+
   /**
-   * 缩放手势开始：挂起**所有会话**的 PTY 尺寸同步，滚轮停止 600ms 后解除。
+   * 挂起**所有会话**的 PTY 尺寸同步，`settleMs` 毫秒后解除。
    *
-   * 每档字号都会改列数，而每次 resize 都会触发一轮三方重绘叠加：
-   * 本地 ConPTY 整屏重发视口（`\x1b[H` + 逐行覆盖）、SSH 会话里
-   * ssh.exe 同样跑在 ConPTY 中加上远端 readline 重绘、xterm 自身再做
-   * 一次 reflow —— 三者互相错位，屏幕上只剩一个提示符（实测：探针抓
-   * ConPTY 序列 + stub 回放）。因此缩放引发的尺寸变化**不同步给任何
-   * PTY**：本地 fit 照常执行（显示正确、缓冲不丢），各 PTY 保持原宽度，
-   * 直到下一次真实的容器 resize（拖窗口/开关面板）再重新对齐。
-   * ponytail: 600ms 挂起窗口内恰好拖动窗口的话，那一次尺寸变化也会被
-   * 跳过，下次拖窗口自动补齐 —— 权衡下来可接受。
+   * 为什么要挂起：尺寸变化一旦同步给 PTY，就会触发三方重绘叠加 ——
+   * 本地 ConPTY 整屏重发视口（`\x1b[H` + 逐行覆盖）、SSH 会话里 ssh.exe
+   * 同样跑在 ConPTY 中加上远端 readline 重绘、xterm 自身再做一次 reflow。
+   * 三者互相错位，**屏幕内容被整屏重发挤掉**（实测：探针抓 ConPTY 序列 +
+   * stub 回放；用户报「开合 AI 助手后内容变少」，且丢的是**中段**）。
+   *
+   * 因此这类「用户没在拖窗口、只是面板开合」引发的尺寸变化
+   * **一律不同步给任何 PTY**：本地 fit 照常执行（显示正确、缓冲不丢）。
+   *
+   * ⚠️ **`flush` 一律传 false**（本项目已连续踩坑两次）：
+   * 「等一会儿补一次同步」看着自然，但那次补同步本身就是丢内容的动作 ——
+   * 面板开合场景下远端根本不需要知道新列数（本地 fit 已让显示正确），
+   * 补同步只会白白招来一轮 ConPTY 重绘。真正需要 flush 的是字号变化：
+   * 字符尺寸变了以后远端必须按新列数排版，否则换行全错。
    */
-  const pausePtyForZoom = useCallback(() => {
-    // 定时器句柄是可变状态，规则按不可变数据对待属于误报，显式放行
-    /* eslint-disable react-hooks/immutability */
-    zoomSyncPausedRef.current = true;
-    if (zoomSettleTimer.current)
-      clearTimeout(zoomSettleTimer.current);
-    zoomSettleTimer.current = setTimeout(() => {
-      zoomSettleTimer.current = null;
-      zoomSyncPausedRef.current = false;
-    }, 600);
-    /* eslint-enable react-hooks/immutability */
-  }, []);
+  const pausePtySync = useCallback(
+    (settleMs = 600, flush = false) => {
+      // 定时器句柄是可变状态，规则按不可变数据对待属于误报，显式放行
+      /* eslint-disable react-hooks/immutability */
+      zoomSyncPausedRef.current = true;
+      if (zoomSettleTimer.current)
+        clearTimeout(zoomSettleTimer.current);
+      zoomSettleTimer.current = setTimeout(() => {
+        zoomSettleTimer.current = null;
+        zoomSyncPausedRef.current = false;
+        if (flush) resizeRef.current();
+      }, settleMs);
+      /* eslint-enable react-hooks/immutability */
+    },
+    []
+  );
 
   /**
    * 设置里的字体/字号变化后，同步到所有已打开的终端。
@@ -591,7 +624,10 @@ export function useTerminals(
     }
     // 字号变化（Ctrl+滚轮或设置页）必然改列数：挂起 PTY 同步，手势
     // 停止 600ms 后恢复，避免连续缩放触发一串 ConPTY 整屏重绘
-    pausePtyForZoom();
+    //（那会把屏幕内容挤掉）。
+    // 这里**要补一次同步**（flush=true），与面板开合不同：字符尺寸变了，
+    // 远端必须按新列数排版，否则换行会全错。
+    pausePtySync(600, true);
     resize();
   }, [
     appearance.fontFamily,
@@ -600,7 +636,7 @@ export function useTerminals(
     appearance.commandCompletion,
     appearance.cursorStyle,
     appearance.cursorBlink,
-    pausePtyForZoom,
+    pausePtySync,
     resize
   ]);
 
@@ -1690,7 +1726,6 @@ export function useTerminals(
   // 完成之前（此时列表还是空的），旧监听器成了孤儿：每个输出块被重复
   // 写进终端多次，表现为回显、提示符成双成对
   const searchRef = useRef(search);
-  const resizeRef = useRef(resize);
   const handleDisconnectRef = useRef(
     handleDisconnect
   );
@@ -1833,6 +1868,14 @@ export function useTerminals(
     close,
     closeMany,
     setPtyResizePaused,
+    /** 强制所有窗格重新按当前容器尺寸 fit。
+     *  AI 面板开合这类「宿主宽度突变」的场景要主动调 —— 见
+     *  TerminalWorkspace 里的补 fit effect。 */
+    resize,
+    /** 挂起 PTY 尺寸同步（默认 600ms 后解除并补一次全量同步）。
+     *  AI 面板开合时先调它：把尺寸变化挡在 ConPTY 重绘之外，
+     *  否则屏幕上方内容会被整屏重发挤掉。 */
+    pausePtySync,
     // ---- 窗格网格 ----
     panes,
     tree,

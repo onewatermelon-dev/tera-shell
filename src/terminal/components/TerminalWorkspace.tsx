@@ -68,6 +68,11 @@ type Props = {
   onOpenLocal: () => void;
   /** 把键盘焦点交回指定会话的终端（点标签/窗格后调用）。 */
   onFocusTerminal: (id: string) => void;
+  /** 强制所有窗格重新按当前容器尺寸 fit（AI 面板开合后要补一次）。 */
+  onResize: () => void;
+  /** 挂起 PTY 尺寸同步 600ms 且**不补同步**
+   *  （AI 面板开合时防 ConPTY 整屏重发丢内容）。 */
+  onPausePtySync: () => void;
   onSearch: (
     query: string,
     direction: "next" | "prev" | "input"
@@ -158,6 +163,8 @@ export default function TerminalWorkspace({
   searchCaseSensitive,
   searchRegex,
   onFocusTerminal,
+  onResize,
+  onPausePtySync,
   onClose,
   onCloseTabs,
   onCreate,
@@ -436,6 +443,7 @@ export default function TerminalWorkspace({
   useEffect(() => {
     setPtyResizePaused(drawerOpen);
   }, [drawerOpen, setPtyResizePaused]);
+
   const [aiWidth, setAiWidth] = useState<number>(
     () => {
       // 最小宽度 390：旧存档里更小的值一并抬回来
@@ -445,6 +453,43 @@ export default function TerminalWorkspace({
       );
     }
   );
+
+  /**
+   * AI 面板开合：先挂起 PTY 同步、再补一次全量 fit。
+   *
+   * 两个动作缺一不可：
+   *
+   * 1. **挂起 PTY 同步**（`onPausePtySync`）：面板开合只是本地容器宽度变了，
+   *    没必要惊动 ConPTY。一旦把新列数同步过去，会触发
+   *    「ConPTY 整屏重发视口 + 远端 readline 重绘 + xterm reflow」三方叠加，
+   *    屏幕内容被整屏重发挤掉 —— 表现为「开合 AI 助手后内容变少」（丢中段）。
+   *    挂起期间只做本地 fit：显示立刻正确，缓冲不丢。
+   *    ⚠️ 挂起**不补同步**（flush=false）：那次补同步本身就是丢内容的动作，
+   *    而远端不需要知道新列数（本地 fit 已让显示正确）。
+   *
+   * 2. **等两帧再 fit**：rAF 保证 DOM 已更新，第二帧保证 grid 布局落定。
+   *    面板收起时 `has-panel` 类被摘掉、面板整体卸载，列定义重排有中间态；
+   *    只靠 ResizeObserver 常会命中中间态，按过期宽度算出列数。
+   */
+  useEffect(() => {
+    onPausePtySync();
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        onResize();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      if (inner) cancelAnimationFrame(inner);
+    };
+  }, [
+    aiCollapsed,
+    aiWidth,
+    onResize,
+    onPausePtySync
+  ]);
+
   const aiHostRef = useRef<HTMLDivElement>(null);
   /** 拖拽开始时钉住容器矩形，避免拖动过程中重读布局 */
   const aiDragRef = useRef<DOMRect | null>(null);

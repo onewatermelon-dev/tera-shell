@@ -673,6 +673,8 @@ export default function App() {
           onFocusTerminal={
             terminals.focusTerminal
           }
+          onResize={terminals.resize}
+          onPausePtySync={terminals.pausePtySync}
           onClose={terminals.close}
           onCloseTabs={terminals.closeMany}
           panes={terminals.panes}
