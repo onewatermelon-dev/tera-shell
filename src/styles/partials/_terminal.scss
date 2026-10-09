@@ -157,23 +157,44 @@
   scrollbar-width: none;
   background: var(--surface-secondary);
   border-bottom: 1px solid var(--border);
+
+  // ⚠️ **每条标签条的左右上角都圆**（半径与 Card 的 rounded-xl 一致）。
+  // 原先没有任何标签条显式声明圆角 —— 第一格看起来是圆的纯属外层
+  // `.terminal-pane`（Card rounded-xl + overflow:hidden）**碰巧**裁出来的，
+  // 属于「碰巧」而非设计；上下拆分后下方那格在网格中间、不贴卡片边，
+  // 于是露成直角，看起来两个窗格不是一套（用户报「向下拆分的标签栏和
+  // 上面的样式不一样」）。显式给每条都加，靠自身的 `overflow: auto hidden`
+  // 裁切横向滚动内容，不再依赖外层 Card —— 网格一旦重排，Card 那层不一定
+  // 还盖得住。
+  // ⚠️ **别改成「只给左上角那一格加」**（试过，反而更不一致）：
+  // 用户要的「一致」是**每条标签条观感一致**，不是「与卡片圆角对齐」。
+  // 同理别只圆左边：右侧上方（贴「新建 / 更多」那侧）同样要圆。
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
 }
 
 .pane-tabs ::-webkit-scrollbar {
   display: none;
 }
 
-// 标签：在条内按内容收宽。高度 32px 与条同高，胶囊圆角复刻原 HeroUI
-// Tabs 的观感（h-8 + rounded-full + 11px 字号）
+// 标签：在条内按内容收宽。胶囊圆角复刻原 HeroUI Tabs 的观感
+// （h-8 + rounded-full + 11px 字号）
 .pane-tab {
   display: flex;
   flex: none;
   gap: 8px;
   align-items: center;
+  align-self: stretch;
   justify-content: center;
   min-width: 100px;
   max-width: 160px;
-  height: 32px;
+
+  // ⚠️ **胶囊高度由容器决定，不要写死 32px**：`.pane-tabs` 也是 32px，
+  // 两者刚好相等时看着没问题；但上下拆分后下方那格高度紧张、标签条被压矮，
+  // 胶囊仍按 32px 顶着 → 上边留出一段空隙，两个窗格的标签对不齐
+  // （用户报「向下拆分的标签栏和上面的不一样」）。
+  // `align-self: stretch` 让它填满标签条，任意窗格高度下间隙恒为 0。
+  height: auto;
   padding: 0 16px;
   font-size: 11px;
   font-weight: 500;

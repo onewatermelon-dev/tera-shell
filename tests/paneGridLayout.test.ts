@@ -108,4 +108,39 @@ describe("终端卡片行轨：窗格网格改造后不能退回三行", () => {
     // .pane-cell 是纵向 flex，宿主不给 flex:1 就不会撑开（高度塌成内容）
     expect(rule).toMatch(/flex:\s*1/);
   });
+
+  /**
+   * 每条标签条的左右上角都要圆。
+   *
+   * 之前没有任何 `.pane-tabs` 显式声明圆角 —— 第一格看起来是圆的纯属外层
+   * Card（`rounded-xl` + `overflow: hidden`）碰巧裁出来的。上下拆分后下方
+   * 那格在网格中间、不贴卡片边，就露成直角，两格观感不一致。
+   *
+   * ⚠️ 别改成「只给左上角那一格加」（试过，用户反馈更不一致）：这里要的
+   * 一致是**每条标签条观感一致**，不是「与卡片圆角对齐」。同理别只圆左边。
+   */
+  it("每条标签条的左右上角都圆", () => {
+    const rule = ruleOf(".pane-tabs");
+    expect(rule).toMatch(
+      /border-top-left-radius:\s*12px/
+    );
+    expect(rule).toMatch(
+      /border-top-right-radius:\s*12px/
+    );
+  });
+
+  it("圆角能被横向滚动裁切：标签条 overflow 仍是 auto hidden", () => {
+    const rule = ruleOf(".pane-tabs");
+    expect(rule).toMatch(
+      /overflow:\s*auto\s+hidden/
+    );
+  });
+
+  it("会话胶囊由容器高度决定，标签条上下不留缝", () => {
+    const rule = ruleOf(".pane-tab");
+    // 写死 height:32px 时，标签条被压矮的窗格（上下拆分后高度紧张的
+    // 下方那格）胶囊会与上边留出空隙，两个窗格的标签对不齐
+    expect(rule).toMatch(/align-self:\s*stretch/);
+    expect(rule).not.toMatch(/height:\s*32px/);
+  });
 });
