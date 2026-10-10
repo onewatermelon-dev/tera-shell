@@ -476,6 +476,50 @@
   color: var(--accent);
 }
 
+// 栏头右侧的目录过滤框：输入即实时筛选当前列表（纯前端）
+.pane-filter-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pane-filter {
+  box-sizing: border-box;
+  width: 150px;
+  height: 24px;
+  padding: 0 24px 0 8px;
+  font-size: 12px;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &::placeholder {
+    color: var(--muted);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+// 清除按钮嵌在输入框内右端，有过滤词时才出现
+.pane-filter-clear {
+  position: absolute;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 14px;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--border);
+  border: none;
+  border-radius: 50%;
+}
+
 // 当前路径：单行截断，完整路径走 title 悬浮提示
 // 路径行：可编辑输入框 +（仅本地栏）选择按钮，选择面板相对它定位
 .sftp-path-row {

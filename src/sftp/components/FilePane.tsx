@@ -141,6 +141,8 @@ const FilePane = memo(function FilePane({
   const [anchor, setAnchor] = useState<
     string | null
   >(null);
+  // 目录内过滤：实时筛选当前列表（纯前端），换目录时清空
+  const [filter, setFilter] = useState("");
 
   // 父级加载成功的目录纳入历史（首屏、外部改路径都走这里）。
   // 这是渲染期间依据 props 调整 state（React 允许的模式），不需要 effect。
@@ -149,9 +151,10 @@ const FilePane = memo(function FilePane({
     listing.path !== recorded
   ) {
     setRecorded(listing.path);
-    // 换了目录，旧选中已无意义
+    // 换了目录，旧选中与过滤词已无意义
     setSelected(new Set());
     setAnchor(null);
+    setFilter("");
     setTrail(previous => {
       const kept = previous.paths.slice(
         0,
@@ -267,6 +270,16 @@ const FilePane = memo(function FilePane({
     setAnchor(null);
   }
 
+  // 过滤后的可见条目：文件名大小写不敏感子串匹配。
+  // ".." 回上级不受过滤影响；选中集仍按完整列表解析
+  const keyword = filter.trim().toLowerCase();
+  const allEntries = listing?.entries ?? [];
+  const visibleEntries = keyword
+    ? allEntries.filter(entry =>
+        entry.name.toLowerCase().includes(keyword)
+      )
+    : allEntries;
+
   /** 当前菜单作用的完整条目集：右键落在多选里 = 整个选中，否则就它一个。 */
   const menuEntries =
     menu?.entry &&
@@ -300,6 +313,34 @@ const FilePane = memo(function FilePane({
             <em className="pane-busy">
               已选 {selected.size} 项
             </em>
+          )}
+        </span>
+        {/* 目录内过滤框：输入即筛选，Esc 或 × 清空 */}
+        <span className="pane-filter-wrap">
+          <input
+            className="pane-filter"
+            value={filter}
+            placeholder="过滤当前目录"
+            spellCheck={false}
+            onChange={event =>
+              setFilter(event.target.value)
+            }
+            onKeyDown={event => {
+              if (event.key === "Escape") {
+                setFilter("");
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          {filter && (
+            <button
+              type="button"
+              className="pane-filter-clear"
+              aria-label="清除过滤"
+              onClick={() => setFilter("")}
+            >
+              ×
+            </button>
           )}
         </span>
       </div>
@@ -392,22 +433,24 @@ const FilePane = memo(function FilePane({
         // 可聚焦：点击行后焦点落在这里，Ctrl+A / Delete / F2 才有落点
         tabIndex={0}
         onKeyDown={event => {
-          const entries = listing?.entries;
-          if (!entries?.length) return;
+          if (!allEntries.length) return;
           if (
             (event.ctrlKey || event.metaKey) &&
             event.key.toLowerCase() === "a"
           ) {
-            // 全选要拦下浏览器默认的文本选择
+            // 全选要拦下浏览器默认的文本选择；
+            // 过滤生效时只选可见的，别把看不见的一起带上
             event.preventDefault();
             setSelected(
-              new Set(entries.map(e => e.path))
+              new Set(
+                visibleEntries.map(e => e.path)
+              )
             );
           } else if (event.key === "Escape") {
             clearSelection();
           } else if (event.key === "Delete") {
             const picked = resolveSelected(
-              entries,
+              allEntries,
               selected
             );
             if (picked.length)
@@ -417,7 +460,7 @@ const FilePane = memo(function FilePane({
             selected.size === 1
           ) {
             const [only] = resolveSelected(
-              entries,
+              allEntries,
               selected
             );
             if (only) setRenameTarget(only);
@@ -484,8 +527,8 @@ const FilePane = memo(function FilePane({
                 </span>
               </div>
             )}
-            {listing?.entries.length ? (
-              listing.entries.map(entry => (
+            {visibleEntries.length ? (
+              visibleEntries.map(entry => (
                 <div
                   key={entry.path}
                   className={`file-row ${gridClass} ${
@@ -550,7 +593,7 @@ const FilePane = memo(function FilePane({
                   <span className="cell-name">
                     <EntryIcon
                       entry={entry}
-                      icons={listing.icons}
+                      icons={listing?.icons}
                     />
                     <span className="file-name">
                       {entry.name}
@@ -578,7 +621,11 @@ const FilePane = memo(function FilePane({
               ))
             ) : (
               <EmptyState className="pane-empty">
-                {busy ? "加载中…" : emptyText}
+                {keyword
+                  ? `无匹配「${filter.trim()}」`
+                  : busy
+                    ? "加载中…"
+                    : emptyText}
               </EmptyState>
             )}
           </>
