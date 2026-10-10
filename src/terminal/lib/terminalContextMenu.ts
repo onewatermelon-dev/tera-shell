@@ -59,6 +59,14 @@ export function createTerminalMenu({
   };
   let submenu: HTMLDivElement | undefined;
   let logPending = false;
+  /**
+   * 记下每个带键位的菜单项与它的动作 id，供 `refreshShortcuts` 刷新。
+   * 菜单 DOM 只构建一次，用户改键位后要靠它在每次弹出时更新文字。
+   */
+  const shortcutBindings: {
+    item: HTMLElement;
+    actionId: string;
+  }[] = [];
 
   function hide() {
     if (menu) menu.style.display = "none";
@@ -116,8 +124,7 @@ export function createTerminalMenu({
       icon: typeof FileTextOutlined,
       checked = false
     ) => {
-      // 日志子菜单的各项没有全局快捷键（第二参空串），
-      // 勾选标记走 `marker` 单独塞进同一个右侧槽位
+      // 子菜单各项传空串 id，不进 shortcutBindings —— 刷新时不会重复累积
       const item = makeItem(label, "", icon);
       if (checked) {
         const mark =
@@ -211,19 +218,46 @@ export function createTerminalMenu({
     );
     const name = document.createElement("span");
     name.textContent = label;
-    const key = document.createElement("kbd");
-    key.className = "menu-key";
-    key.textContent = shortcutId
+    const chord = shortcutId
       ? (shortcutOf(shortcutId) ?? "")
       : "";
-    // 没有键位时不渲染空的 <kbd>：空元素会在标签右侧留一段空隙，
-    // 让「有键位」和「无键位」两行看起来左边没对齐
-    if (!key.textContent) {
+    // ⚠️ **有键位才建 <kbd>**：空元素靠 `margin-left:auto` 占位，
+    // 会让「有键位」与「无键位」两行的标签起点看起来没对齐
+    if (chord) {
+      const key = document.createElement("kbd");
+      key.className = "menu-key";
+      key.textContent = chord;
+      item.append(iconElement, name, key);
+    } else {
       item.append(iconElement, name);
-      return item;
     }
-    item.append(iconElement, name, key);
+    // 记下「这一项的键位来自哪个动作」：菜单 DOM 只构建一次并复用，
+    // 用户改了键位后 show() 要靠它刷新 <kbd> 的文字
+    if (shortcutId)
+      shortcutBindings.push({
+        item,
+        actionId: shortcutId
+      });
     return item;
+  }
+
+  /**
+   * 每次弹出菜单前把 <kbd> 文字刷成**当前生效**的键位。
+   *
+   * ⚠️ 必须做：右键菜单的 DOM 在 `ensure()` 里只建一次，之后每次右键
+   * 都复用同一份。用户中途改了快捷键（设置页），不刷的话菜单上
+   * 一直写着旧键位，按新键又没反应 —— 典型的「界面在说谎」。
+   */
+  function refreshShortcuts() {
+    for (const {
+      item,
+      actionId
+    } of shortcutBindings) {
+      const key = item.querySelector("kbd");
+      if (!key) continue;
+      key.textContent =
+        shortcutOf(actionId) ?? "";
+    }
   }
 
   /** 首次调用时构建菜单 DOM 并挂到 body；之后复用同一份。 */
@@ -444,6 +478,8 @@ export function createTerminalMenu({
       })
       .catch(onError);
     const element = ensure();
+    // 用户可能中途改过快捷键，弹出前把 <kbd> 刷成当前生效值
+    refreshShortcuts();
     const fullscreenLabel =
       fullscreenItem?.children.item(1);
     if (fullscreenLabel)

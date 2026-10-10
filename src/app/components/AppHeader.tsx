@@ -17,10 +17,11 @@ import AppRail, {
 } from "@/app/components/AppRail";
 import { useT } from "@/settings/lib/i18n";
 import {
-  APP_SHORTCUTS,
   handledElsewhere,
   isEditableTarget,
-  matchAction
+  isRecordingShortcut,
+  matchAction,
+  useShortcuts
 } from "@/shared/lib/appShortcuts";
 import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import type { StatusMode } from "@/settings/lib/settings";
@@ -41,8 +42,6 @@ export type HeaderActions = {
   openLocal: () => void;
   closeActive: () => void;
   find: () => void;
-  toggleCaseSensitive: () => void;
-  toggleRegex: () => void;
   copy: () => void;
   paste: () => void;
   selectAll: () => void;
@@ -93,6 +92,13 @@ export default function AppHeader({
 }: Props) {
   const t = useT();
   const appWindow = useRef(getCurrentWindow());
+  /**
+   * 订阅生效快捷键表（默认 + 用户覆盖）。
+   *
+   * 键位循环要遍历它、菜单标签要读它 —— 两者都必须是**生效值**，
+   * 读默认表会出现「菜单写着 Ctrl+Shift+N，用户按自己设的键没反应」。
+   */
+  const shortcuts = useShortcuts();
   const [isMaximized, setIsMaximized] =
     useState(false);
   // 点击标题栏关闭钮先弹二次确认，确认后才真正关闭窗口
@@ -123,7 +129,10 @@ export default function AppHeader({
 
   const menus = useMemo(
     () => buildMenus(menuState, t),
-    [menuState, t]
+    // shortcuts 是订阅到的生效表：用户在设置页改了键位，
+    // 菜单标签要跟着变（读的是同一个 store）
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 显式列出 shortcuts 作依赖
+    [menuState, t, shortcuts]
   );
 
   // 窗口级动作（退出走二次确认、最大化走窗口 API）不经过 App 传入的 actions。
@@ -186,15 +195,16 @@ export default function AppHeader({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Shift") return;
+      // 设置页正在录制快捷键：那次按键属于「录入」而不是「执行」，
+      // 不让路的话用户按 Ctrl+Shift+N 会被菜单动作吃掉，录不进去
+      if (isRecordingShortcut()) return;
       // 可编辑元素聚焦时让路（AI 输入框里 Ctrl+Shift+A 应是选文字）
       if (isEditableTarget(event.target)) return;
       // 菜单已打开时不抢：方向键/回车要在菜单里正常导航
       const active = document.activeElement;
       if (active?.closest('[role="menu"]'))
         return;
-      for (const id of Object.keys(
-        APP_SHORTCUTS
-      )) {
+      for (const id of Object.keys(shortcuts)) {
         // find / devtools 已在 useTerminals 里实现，这里再绑会触发两遍
         if (handledElsewhere(id)) continue;
         if (!matchAction(event, id)) continue;
@@ -202,7 +212,7 @@ export default function AppHeader({
         if (!handler) {
           // 表里有键位但没有对应实现：不静默，菜单项与动作脱节要能查
           console.warn(
-            `[shortcut] ${id}（${APP_SHORTCUTS[id]}）没有对应实现`
+            `[shortcut] ${id}（${shortcuts[id]}）没有对应实现`
           );
           return;
         }
@@ -226,7 +236,9 @@ export default function AppHeader({
         onKeyDown,
         true
       );
-  }, []);
+    // ⚠️ 依赖里带 shortcuts：用户改键位后，循环要立刻按新表匹配。
+    // 它是模块级 store 的快照引用，只在覆盖变化时换新
+  }, [shortcuts]);
 
   return (
     <>

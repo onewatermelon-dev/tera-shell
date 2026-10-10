@@ -12,6 +12,7 @@ import {
   DesktopOutlined,
   FormatPainterOutlined,
   GlobalOutlined,
+  KeyOutlined,
   MoonOutlined,
   SunOutlined,
   TranslationOutlined
@@ -22,6 +23,7 @@ import DataDirRow from "@/settings/components/DataDirRow";
 import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
 import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
+import ShortcutSettings from "@/settings/components/ShortcutSettings";
 import SettingsSelect, {
   type SelectOption
 } from "@/settings/components/SettingsSelect";
@@ -46,7 +48,8 @@ type Section =
   | "general"
   | "terminal"
   | "colorScheme"
-  | "models";
+  | "models"
+  | "shortcuts";
 
 /** 主题下拉的三项。 */
 const themeOptions = (
@@ -296,6 +299,18 @@ export default function SettingsPage({
           <ApiOutlined />
           {t("settings.nav.models")}
         </button>
+        <button
+          type="button"
+          className={
+            section === "shortcuts"
+              ? "settings-nav-item is-active"
+              : "settings-nav-item"
+          }
+          onClick={() => setSection("shortcuts")}
+        >
+          <KeyOutlined />
+          {t("settings.nav.shortcuts")}
+        </button>
       </aside>
 
       <section className="settings-content">
@@ -309,7 +324,10 @@ export default function SettingsPage({
               colorScheme: t(
                 "settings.nav.colorScheme"
               ),
-              models: t("settings.nav.models")
+              models: t("settings.nav.models"),
+              shortcuts: t(
+                "settings.nav.shortcuts"
+              )
             }[section]
           }
         </h1>
@@ -517,6 +535,13 @@ export default function SettingsPage({
               }
             />
           </>
+        ) : section === "shortcuts" ? (
+          <ShortcutSettings
+            overrides={settings.shortcutOverrides}
+            onChange={shortcutOverrides =>
+              onChange({ shortcutOverrides })
+            }
+          />
         ) : section === "colorScheme" ? (
           <SettingsRow
             title={t(

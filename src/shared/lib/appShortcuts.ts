@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+
 /**
  * 应用级快捷键表：菜单项 id → 键位。
  *
@@ -12,17 +14,40 @@
  * 所以应用级动作一律退到 `Ctrl+Shift` 这个基本空着的命名空间，
  * 只保留三个例外（见 PLAIN_CTRL_OK）。`Ctrl+Shift+X` 是终端里少见的组合，
  * readline 基本不消费它。
+ *
+ * ============================ 用户自定义 ============================
+ *
+ * 下面的 `APP_SHORTCUTS` 是**默认表**（出厂键位）。用户改过的部分存
+ * `overrides`，两者合并成「生效表」—— 见本文件下半部分的 store。
+ * 三处消费方读的都是 `effectiveShortcuts()` / `shortcutOf()`，
+ * **不要再直接读 `APP_SHORTCUTS`**，否则用户改的键位不生效。
+ * 默认表本身仍要保持「无重复、无裸 Ctrl 占用 readline」的纪律，
+ * 有单测盯着（`tests/appShortcuts.test.ts`）。
  */
 
 /**
- * 这几个键位在别处已实现（`useTerminals` 的挂载期 window 捕获监听），
- * 不在 `AppHeader` 重复绑定 —— 否则同一次按键会触发两遍
- * （`openSearch` 被调两次）。它们仍留在表里，菜单要显示。
+ * 这几个动作在 `useTerminals` 里实现（`attachCustomKeyEventHandler`
+ * 与挂载期的 window 捕获监听），`AppHeader` 不重复绑定 —— 否则同一次
+ * 按键会触发两遍（`openSearch` 被调两次）。
+ *
+ * ⚠️ **「在别处实现」≠「不可自定义」**：那边读的是同一张生效表，
+ * 用户改键位照样生效。标记只用于「跳过重复绑定」。
+ * ⚠️ `Ctrl+Shift+I` 是 devtools 的**额外别名**（F12 之外的历史遗留），
+ * 不在表里、也不可自定义 —— 见 DEVTOOLS_ALT_CHORD。
  */
 const HANDLED_ELSEWHERE = new Set([
   "find",
   "devtools"
 ]);
+
+/**
+ * 开发者的额外别名（不可自定义，只用于命中即开 DevTools）。
+ *
+ * 为什么留：`Ctrl+Shift+I` 是浏览器与多数工具的惯用键，用户按惯了。
+ * 为什么不进表：它是 F12 的补充而非替代 —— 进表就意味着「用户可以把它
+ * 改掉」，那会破坏「F12 恒定能开 DevTools」这个预期。
+ */
+export const DEVTOOLS_ALT_CHORD = "Ctrl+Shift+I";
 
 /**
  * 菜单项 id → 键位显示串。
@@ -63,10 +88,12 @@ export const APP_SHORTCUTS: Record<
   // ---- 查看 ----
   // 已由 useTerminals 处理，菜单照常显示键位。
   find: "Ctrl+F",
-  // C = Case。⚠️ 不用裸 Ctrl+Shift+C：Linux 桌面习惯里那是「复制」。
-  toggleCaseSensitive: "Ctrl+Shift+C",
-  // G = reGex。Ctrl+Shift+G 常规上是「运行任务」，这里让给正则开关。
-  toggleRegex: "Ctrl+Shift+G",
+  // ⚠️ 这里曾有 `toggleCaseSensitive`（Ctrl+Shift+C）与 `toggleRegex`
+  // （Ctrl+Shift+G）两项，用户要求取消。它们的实现在查找面板里
+  // （面板上有「区分大小写 / 正则表达式」两个按钮，见 TerminalWorkspace），
+  // 作为**面板内的局部开关**本就不该有全局键位：正则开关在没打开查找
+  // 面板时按下去毫无意义，正则开着又去敲终端还会误判。
+  // 如需恢复，加回这里 + `HeaderActions` 的 handler + 设置页映射即可。
   // M = MaxiMize。
   toggleMaximize: "Ctrl+Shift+M",
 
@@ -92,13 +119,69 @@ export const APP_SHORTCUTS: Record<
 export function shortcutOf(
   actionId: string
 ): string | undefined {
-  return APP_SHORTCUTS[actionId];
+  return effectiveShortcuts()[actionId];
 }
+
+/**
+ * 动作 id 的展示名（设置页与冲突提示用）。
+ *
+ * ⚠️ 这里给英文 fallback：i18n 字典在 settings 域，而本文件在 shared 域
+ * —— shared 不该反向依赖 settings 的翻译表。设置页渲染时会用自己的
+ * i18n 键覆盖显示，这里的英文只用于冲突提示这类兜底文案。
+ */
+export const ACTION_LABELS: Record<
+  string,
+  string
+> = {
+  newSession: "New session",
+  openLocal: "Open local session",
+  exportSessions: "Export sessions",
+  importSessions: "Import sessions",
+  closeActive: "Close session",
+  quit: "Quit",
+  copy: "Copy",
+  paste: "Paste",
+  selectAll: "Select all",
+  clear: "Clear",
+  find: "Find",
+  toggleMaximize: "Maximize / restore",
+  openSftp: "Open SFTP",
+  devtools: "Developer tools",
+  reconnect: "Reconnect",
+  toggleFocusMode: "Fullscreen"
+};
+
+/**
+ * ⚠️ 这里曾有一个 `ACTION_GROUPS`（按「文件 / 编辑 / 查看 / 工具 /
+ * 终端右键菜单」分五段），快捷键设置页与右键菜单都按它渲染。用户要求
+ * **取消分版块**（理由：五个小标题把列表切碎，找一个动作要先判断它在
+ * 哪个版块，比平铺扫一遍更慢），已删除。
+ *
+ * 现在动作的展示顺序 = `Object.keys(APP_SHORTCUTS)` 的声明顺序，
+ * 顺序本身就是「会话 → 编辑 → 查找 → 工具 → 终端上下文」的顺序。
+ * 要再分组时，先想清楚是不是又在给查找加成本。
+ */
+
+/**
+ * **可重新分配的动作** = 默认表里的全部动作。
+ *
+ * ⚠️ 别再把 `find` / `devtools` 排除掉（曾经排除过，理由是它们在
+ * `useTerminals` 里硬编码）。现在 `useTerminals` 的两处硬编码都改成
+ * 读本表的**生效表**了，所以它们一样能改。
+ *
+ * 这里仍然只标记「谁在别处实现」——`HANDLED_ELSEWHERE` 管的是
+ * **别处实现**（防止同一次按键触发两遍），与**能不能改**是两件事，
+ * 别再混用。
+ */
+export const CUSTOMIZABLE_ACTIONS: Set<string> =
+  new Set(Object.keys(APP_SHORTCUTS));
 
 /**
  * 判断某个动作是不是由别处（`useTerminals`）处理的。
  *
  * `AppHeader` 的按键处理要跳过它们，否则一次按键触发两遍动作。
+ * ⚠️ 这**不代表不可自定义** —— `useTerminals` 读的是同一张生效表，
+ * 用户改了键位那边照样生效。
  */
 export function handledElsewhere(
   actionId: string
@@ -173,18 +256,305 @@ export function matchChord(
   return actual === target;
 }
 
-/** 便捷入口：事件命中该动作的键位则返回动作 id，否则 null。 */
+/** 便捷入口：事件命中该动作的**生效**键位则返回动作 id，否则 null。 */
 export function matchAction(
   event: KeyEventLike,
   actionId: string
 ): string | null {
-  const chord = APP_SHORTCUTS[actionId];
+  const chord = effectiveShortcuts()[actionId];
   if (!chord) return null;
   const parsed = parseChord(chord);
   if (!parsed) return null;
   return matchChord(event, parsed)
     ? actionId
     : null;
+}
+
+// ---------------------------------------------------------------------------
+// 用户覆盖：默认表 + 用户改过的部分 = 生效表
+// ---------------------------------------------------------------------------
+
+/**
+ * 用户自定义的键位：`动作 id → 键位串`。只存**与默认不同的**那些。
+ *
+ * 存差异而不是全量，是为了以后给某个动作换默认键位时，老用户不会被
+ * 静默改回去 —— 他没主动设过就跟随新默认，设过的一直按自己那套。
+ */
+export type ShortcutOverrides = Record<
+  string,
+  string
+>;
+
+/** 模块级 store：生效键位。与 i18n 同一套订阅模式。 */
+let overrides: ShortcutOverrides = {};
+let effective: Record<string, string> = {
+  ...APP_SHORTCUTS
+};
+const listeners = new Set<() => void>();
+
+/**
+ * 取当前生效的键位表（默认 + 用户覆盖）。
+ *
+ * ⚠️ 返回的是**模块级同一个对象引用**，只在覆盖变化时换新。
+ * `matchChord` 每次按键都要查表，热点路径上不能每次新建对象。
+ */
+export function effectiveShortcuts(): Record<
+  string,
+  string
+> {
+  return effective;
+}
+
+/** 取用户覆盖的原样副本（落盘用）。 */
+export function getShortcutOverrides(): ShortcutOverrides {
+  return { ...overrides };
+}
+
+/**
+ * 写入用户覆盖并通知订阅者。
+ *
+ * 传空对象 = 全部恢复默认。非法键位串（解析不出主键）在读入时就该
+ * 被 `sanitizeOverrides` 剔掉，这里再做一次是防手改设置文件。
+ */
+export function setShortcutOverrides(
+  next: ShortcutOverrides
+): void {
+  const clean = sanitizeOverrides(next);
+  if (
+    JSON.stringify(clean) ===
+    JSON.stringify(overrides)
+  )
+    return;
+  overrides = clean;
+  const merged: Record<string, string> = {
+    ...APP_SHORTCUTS
+  };
+  for (const [id, chord] of Object.entries(
+    overrides
+  )) {
+    // 只覆盖「可自定义且默认表里有」的动作：
+    // 顺手挡掉手改文件塞进来的未知 id
+    if (
+      CUSTOMIZABLE_ACTIONS.has(id) &&
+      APP_SHORTCUTS[id]
+    )
+      merged[id] = chord;
+  }
+  effective = merged;
+  for (const listener of listeners) listener();
+}
+
+/**
+ * 清洗用户覆盖：丢掉不可自定义的动作、解析不了的键位串、
+ * 以及与其它动作撞车的（保留先出现的那个）。
+ *
+ * 撞车必须在读入时就解决：两个动作共用一个键位时，按键处理按表序
+ * 只触发第一个，第二个就成了「按了没反应」的假功能。
+ */
+export function sanitizeOverrides(
+  raw: unknown
+): ShortcutOverrides {
+  if (
+    !raw ||
+    typeof raw !== "object" ||
+    Array.isArray(raw)
+  )
+    return {};
+  const result: ShortcutOverrides = {};
+  const taken = new Set<string>();
+  for (const [id, chord] of Object.entries(
+    raw as Record<string, unknown>
+  )) {
+    if (!CUSTOMIZABLE_ACTIONS.has(id)) continue;
+    if (typeof chord !== "string") continue;
+    // 归一化后再比较：`ctrl+shift+n` 与 `Ctrl+Shift+N` 是同一个键
+    const normalized = normalizeChord(chord);
+    if (!normalized) continue;
+    if (taken.has(normalized)) continue;
+    // ⚠️ 别名也占位：用户把某动作设成 `Ctrl+Shift+I`，devtools 的
+    // 历史别名仍会先命中（它不在表里、不可改），那个动作就永远
+    // 按不出来。宁可存不下，也不能让用户拿到一个假键位。
+    if (
+      normalized ===
+      normalizeChord(DEVTOOLS_ALT_CHORD)
+    )
+      continue;
+    taken.add(normalized);
+    result[id] = normalized;
+  }
+  return result;
+}
+
+/**
+ * 把键位串归一化成表里统一的写法（`Ctrl+Shift+N`）。
+ *
+ * 用户在设置页录的是按键事件，转出来的串可能是 `Ctrl+Shift+n`；
+ * 手改设置文件也可能大小写混乱。统一后再存，冲突检查才准确。
+ * 解析不出来（空串、只有修饰键）返回 null。
+ */
+export function normalizeChord(
+  chord: string
+): string | null {
+  const parsed = parseChord(chord);
+  if (!parsed) return null;
+  const parts: string[] = [];
+  if (parsed.ctrl) parts.push("Ctrl");
+  if (parsed.alt) parts.push("Alt");
+  if (parsed.shift) parts.push("Shift");
+  // 功能键保留 F12 的大写 F，字母键统一大写显示
+  parts.push(
+    /^f\d{1,2}$/i.test(parsed.key)
+      ? parsed.key.toUpperCase()
+      : parsed.key.toUpperCase()
+  );
+  // 光按修饰键（Ctrl+Shift+）没有主键，不成其为一个组合
+  const key = parts.pop() ?? "";
+  if (!key || key === "SHIFT") return null;
+  parts.push(key);
+  return parts.join("+");
+}
+
+/**
+ * 找出与 `chord` 撞车的动作 id（可排除某个 id 自身）。
+ *
+ * 设置页改键位时实时提示「已被 XX 占用」；落盘前的最后一道防线
+ * 也靠它 —— 见 `sanitizeOverrides`。
+ */
+export function findConflict(
+  chord: string,
+  exceptId?: string
+): string | null {
+  const normalized = normalizeChord(chord);
+  if (!normalized) return null;
+  const table = effectiveShortcuts();
+  for (const [id, value] of Object.entries(
+    table
+  )) {
+    if (id === exceptId) continue;
+    if (normalizeChord(value) === normalized)
+      return id;
+  }
+  // ⚠️ 表外的别名也要算：devtools 的 `Ctrl+Shift+I` 不在表里、不可改，
+  // 用户把某个动作设成它，那个动作就永远按不出来（别名会先命中）。
+  // 返回 "devtools" 让设置页照常提示「已被开发者工具占用」。
+  if (
+    exceptId !== "devtools" &&
+    normalized ===
+      normalizeChord(DEVTOOLS_ALT_CHORD)
+  )
+    return "devtools";
+  return null;
+}
+
+/**
+ * 快捷键录制中（设置页正在等用户按下一个组合）。
+ *
+ * 用**模块级计数**而不是组件状态：`AppHeader` 的按键监听挂在 window
+ * 捕获阶段，根本不知道设置页里有个输入框聚焦着。录制期间用户按
+ * `Ctrl+Shift+N`，那次按键必须被当成「录入」而不是「执行新建会话」。
+ */
+let recordingDepth = 0;
+
+/** 标记进入 / 退出录制态（成对调用，返回值可直接给 finally 用）。 */
+export function beginShortcutRecording(): () => void {
+  recordingDepth += 1;
+  let released = false;
+  return () => {
+    // 幂等：同一个 token 被 release 两次不会把计数减到负数
+    if (released) return;
+    released = true;
+    recordingDepth = Math.max(
+      0,
+      recordingDepth - 1
+    );
+  };
+}
+
+/** 当前是否处于录制态（按键处理要让它让路）。 */
+export function isRecordingShortcut(): boolean {
+  return recordingDepth > 0;
+}
+
+function subscribeShortcuts(
+  listener: () => void
+): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getEffectiveSnapshot(): Record<
+  string,
+  string
+> {
+  return effective;
+}
+
+/**
+ * 订阅生效键位表。
+ *
+ * 用 `useSyncExternalStore`（与项目里 i18n / 终端选区状态一致）：
+ * 菜单标签、设置页、以及按键处理读的都是同一份，订阅者自动重渲染。
+ */
+export function useShortcuts(): Record<
+  string,
+  string
+> {
+  return useSyncExternalStore(
+    subscribeShortcuts,
+    getEffectiveSnapshot,
+    getEffectiveSnapshot
+  );
+}
+
+/**
+ * 按键事件 → 键位串（设置页的录制输入用）。
+ *
+ * ⚠️ 只认「至少带一个 Ctrl/Alt」的组合，或功能键 —— 裸字母/数字键
+ * 不能作为应用级快捷键（用户没法在终端里单敲一个字母不输字）。
+ * 返回 null 表示这次按键不该被记下来。
+ */
+export function chordFromEvent(
+  event: KeyEventLike
+): string | null {
+  // 单按修饰键是「用户正在凑组合」，不是一次完整输入
+  if (
+    ["Control", "Alt", "Shift", "Meta"].includes(
+      event.key
+    )
+  )
+    return null;
+  const ctrl = event.ctrlKey || !!event.metaKey;
+  const isFunction = /^f\d{1,2}$/i.test(
+    event.key
+  );
+  if (!ctrl && !event.altKey && !isFunction)
+    return null;
+  return normalizeChord(
+    buildChordString(
+      event.key,
+      ctrl,
+      event.shiftKey,
+      event.altKey
+    )
+  );
+}
+
+function buildChordString(
+  key: string,
+  ctrl: boolean,
+  shift: boolean,
+  alt: boolean
+): string {
+  const parts: string[] = [];
+  if (ctrl) parts.push("Ctrl");
+  if (alt) parts.push("Alt");
+  if (shift) parts.push("Shift");
+  // 按 ctrl 时浏览器报的 key 往往已是大写（Ctrl+Shift+N → "N"），
+  // 但不是所有布局都如此，统一大写存
+  parts.push(key.toUpperCase());
+  return parts.join("+");
 }
 
 /**

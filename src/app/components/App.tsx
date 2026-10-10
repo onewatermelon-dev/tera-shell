@@ -541,9 +541,6 @@ export default function App() {
         terminals.close(terminals.active.id);
     },
     find: terminals.openSearch,
-    toggleCaseSensitive:
-      terminals.toggleCaseSensitive,
-    toggleRegex: terminals.toggleRegex,
     copy: () => {
       const terminal = terminals.active?.terminal;
       if (!terminal?.hasSelection()) return;

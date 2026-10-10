@@ -160,6 +160,195 @@
   flex: none;
 }
 
+// ---- 快捷键自定义 ----
+// 一行一个动作：左边名称（+「已自定义」角标），右边键位格 + 恢复按钮。
+// 键位格是「录制入口」而非静态文本 —— 点一下就进入等按键状态。
+.shortcut-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.shortcut-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.shortcut-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 8px 16px;
+
+  // 行分隔线用 inset box-shadow 而不是 border-bottom：
+  // 这样最后一行不会多出一条边（列表已有外框）
+  border-bottom: 1px solid var(--border);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.shortcut-name {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.shortcut-label {
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.shortcut-custom {
+  flex: none;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--surface-secondary);
+  border-radius: 4px;
+}
+
+.shortcut-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+}
+
+// 键位格：同时是「当前键位」与「录制入口」
+.shortcut-key {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+
+  // 放得下最长的键位串（Ctrl+Shift+Alt+Delete 之类）
+  min-width: 132px;
+  height: 28px;
+  padding: 0 10px;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+
+  &:hover {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+  }
+
+  // ⚠️ 半透明的「已自定义」提示必须给 :focus-visible，
+  // 否则 Tab 聚焦过去看着像没焦点
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  &.is-recording {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+.shortcut-recording {
+  font-family: inherit;
+}
+
+.shortcut-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+
+  &:hover:not(:disabled) {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  // 已经是默认值就没得恢复：置灰而不是点了没反应
+  &:disabled {
+    cursor: default;
+    opacity: 0.35;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
+
+.shortcut-conflict {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.shortcut-footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.shortcut-reset-all {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.35;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
+
+.shortcut-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 // ---- 控件 ----
 
 // 设置页通用下拉的触发器：自绘替代原生 select（原生 option 由系统绘制，

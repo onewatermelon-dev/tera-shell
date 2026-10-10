@@ -3,6 +3,10 @@ import {
   readData,
   writeData
 } from "@/settings/lib/storage";
+import {
+  sanitizeOverrides,
+  type ShortcutOverrides
+} from "@/shared/lib/appShortcuts";
 
 /**
  * 应用设置：界面语言、终端字体、字号与界面主题。
@@ -60,6 +64,15 @@ export type AppSettings = {
    * 换目录时整批迁移。
    */
   dataDir: string;
+  /**
+   * 用户自定义的快捷键：`动作 id → 键位串`，只存与默认值不同的。
+   *
+   * ⚠️ 放在 settings 里而不是单独一个数据文件：单独开文件要同时改
+   * `storage.ts` 的 `DataName` 与后端 `data/mod.rs` 的 `ALLOWED`
+   * （两个定长数组，长度要同步），为这一个字段不值得。
+   * 校验交给 `appShortcuts` 的 `sanitizeOverrides`（见 setShortcutOverrides）。
+   */
+  shortcutOverrides: ShortcutOverrides;
 };
 
 /** 终端字体的内置默认值：与创建 Terminal 时的取值保持一致。 */
@@ -106,7 +119,8 @@ export const defaultSettings: AppSettings = {
   cursorStyle: "block",
   cursorBlink: true,
   scrollback: DEFAULT_SCROLLBACK,
-  dataDir: ""
+  dataDir: "",
+  shortcutOverrides: {}
 };
 
 /** 把任意输入夹到合法字号；非法值一律退回默认。 */
@@ -191,7 +205,12 @@ export function loadSettings(): AppSettings {
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir
-          : ""
+          : "",
+      // 快捷键覆盖：手改过设置文件的话这里可能有未知 id / 撞车键位，
+      // sanitizeOverrides 会剔掉（见 appShortcuts）
+      shortcutOverrides: sanitizeOverrides(
+        parsed.shortcutOverrides
+      )
     };
   } catch {
     return defaultSettings;

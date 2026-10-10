@@ -27,6 +27,12 @@ import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
+import {
+  DEVTOOLS_ALT_CHORD,
+  effectiveShortcuts,
+  matchChord,
+  parseChord
+} from "@/shared/lib/appShortcuts";
 import { attachFontZoom } from "@/terminal/lib/fontZoom";
 import { useTerminalSearch } from "@/terminal/lib/useTerminalSearch";
 import { useTerminalReconnect } from "@/terminal/lib/useTerminalReconnect";
@@ -116,6 +122,28 @@ function waitForStableSize(
     };
     requestAnimationFrame(check);
   });
+}
+
+/**
+ * 事件是否命中某个「由终端层实现」的动作的**生效**键位。
+ *
+ * `find` / `devtools` 由这里执行（AppHeader 的按键循环因
+ * `handledElsewhere` 跳过它们，避免触发两遍），所以这是它们**唯一**
+ * 的执行路径 —— 必须读 `effectiveShortcuts()` 而不是硬编码键位，
+ * 否则用户在设置页改的键位不会生效。
+ *
+ * 用 `matchChord` 而不是 `matchAction`：后者是给 AppHeader 用的
+ * （遍历整表找命中项），这里要的是「指定动作命中了吗」。
+ */
+function matchTerminalShortcut(
+  event: KeyboardEvent,
+  actionId: "find" | "devtools"
+): boolean {
+  const chord = parseChord(
+    effectiveShortcuts()[actionId] ?? ""
+  );
+  if (!chord) return false;
+  return matchChord(event, chord);
 }
 
 export function useTerminals(
@@ -1083,18 +1111,26 @@ export function useTerminals(
             event.preventDefault();
             return false;
           }
+          // ⚠️ **查找的键位从生效表读**（不是硬编码 Ctrl+F）：
+          // 用户在设置页改过之后，这里必须跟着变，否则菜单上写着新键位、
+          // 按新键位却只在 AppHeader 那条路径生效（而那条被 handledElsewhere
+          // 跳过了），表现为「改了完全没用」。
+          if (
+            event.type === "keydown" &&
+            matchTerminalShortcut(event, "find")
+          ) {
+            event.preventDefault();
+            search.openSearch();
+            return false;
+          }
           if (
             event.type !== "keydown" ||
             !event.ctrlKey
           )
             return true;
           const key = event.key.toLowerCase();
+          // Ctrl+V 交给浏览器原生粘贴（return false 让 xterm 别处理）
           if (key === "v") return false;
-          if (key === "f") {
-            event.preventDefault();
-            search.openSearch();
-            return false;
-          }
           if (
             key === "c" &&
             terminal.hasSelection()
@@ -1855,17 +1891,26 @@ export function useTerminals(
       documentShortcutHandler.current = (
         event: KeyboardEvent
       ) => {
-        const key = event.key.toLowerCase();
-        const ctrl =
-          event.ctrlKey || event.metaKey;
-        if (ctrl && key === "f") {
+        // ⚠️ **键位全部从生效表读**：这两个动作不在 AppHeader 的绑定
+        // 范围里（handledElsewhere 跳过），这里是它们唯一的执行路径 ——
+        // 硬编码会让用户在设置页的改动完全失效。
+        if (
+          matchTerminalShortcut(event, "find")
+        ) {
           event.preventDefault();
           searchRef.current.openSearch();
           return;
         }
+        // devtools 除生效键位（F12）外还认一个历史别名
         if (
-          event.key === "F12" ||
-          (ctrl && event.shiftKey && key === "i")
+          matchTerminalShortcut(
+            event,
+            "devtools"
+          ) ||
+          matchChord(
+            event,
+            parseChord(DEVTOOLS_ALT_CHORD)!
+          )
         ) {
           event.preventDefault();
           invoke("open_devtools").catch(() => {});

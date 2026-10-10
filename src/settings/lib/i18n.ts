@@ -55,8 +55,10 @@ const zhCN = {
   "app.action.minimize": "最小化",
   "app.action.maximize": "最大化",
   "app.action.close": "关闭",
-  "app.action.toggleCaseSensitive": "区分大小写",
-  "app.action.toggleRegex": "正则表达式",
+  // ⚠️ 这里曾有 app.action.toggleCaseSensitive / app.action.toggleRegex：
+  // 查找面板的「区分大小写 / 正则」两个开关原本各有一个全局快捷键，
+  // 用户要求取消（作为面板内的局部开关，本就不该有全局键位）。查找面板
+  // 自己用的是 terminal.find.caseSensitive / terminal.find.regex。
 
   "sidebar.title": "会话",
   "sidebar.newSsh": "新建 SSH 会话",
@@ -375,6 +377,9 @@ const zhCN = {
     "自动重连已放弃，可在终端右键菜单里手动重新连接",
   "terminal.confirmClose": "确定关闭这个会话吗？",
   "terminal.needSession": "请先打开一个会话",
+  // 快捷键设置页里的动作名（与右键菜单同义，单独成键便于改文案）
+  "terminal.reconnect.action": "重新连接",
+  "terminal.fullscreen.action": "全屏",
 
   "macro.title": "快捷宏",
   "macro.add": "新增快捷宏",
@@ -395,6 +400,7 @@ const zhCN = {
   "settings.nav.terminal": "终端",
   "settings.nav.colorScheme": "配色方案",
   "settings.nav.models": "模型设置",
+  "settings.nav.shortcuts": "快捷键",
   "models.desc":
     "管理自定义模型供应商，配置后可在聊天时选择使用。",
   "models.addProvider": "添加供应商",
@@ -472,6 +478,18 @@ const zhCN = {
   "settings.back": "返回工作区",
   "settings.subtitle":
     "修改后立即写入本地，仅对本机生效",
+  // ---- 快捷键自定义 ----
+  "shortcuts.hint":
+    "点击键位后按下想要的组合键，Esc 取消。建议保留 Ctrl+Shift 前缀 —— 裸 Ctrl+字母 在终端里多为 shell 的行编辑键。",
+  "shortcuts.record": "录制快捷键",
+  "shortcuts.listening": "按下组合键…",
+  "shortcuts.custom": "已自定义",
+  "shortcuts.resetOne": "恢复默认键位",
+  "shortcuts.resetAll": "全部恢复默认",
+  "shortcuts.customizedCount":
+    "已自定义 {count} 项",
+  "shortcuts.conflict":
+    "该组合键已被「{name}」占用，请换一个",
   "settings.locale.title": "界面语言",
   "settings.locale.desc":
     "选择应用界面的显示语言；跟随系统时读取操作系统的语言设置。",
@@ -560,9 +578,6 @@ const enUS: Record<MessageKey, string> = {
   "app.action.minimize": "Minimize",
   "app.action.maximize": "Maximize",
   "app.action.close": "Close",
-  "app.action.toggleCaseSensitive": "Match case",
-  "app.action.toggleRegex":
-    "Use regular expression",
 
   "sidebar.title": "Sessions",
   "sidebar.newSsh": "New SSH session",
@@ -889,6 +904,8 @@ const enUS: Record<MessageKey, string> = {
     "Auto-reconnect gave up. Use the terminal context menu to reconnect manually",
   "terminal.confirmClose": "Close this session?",
   "terminal.needSession": "Open a session first",
+  "terminal.reconnect.action": "Reconnect",
+  "terminal.fullscreen.action": "Fullscreen",
 
   "macro.title": "Quick macros",
   "macro.add": "Add macro",
@@ -909,6 +926,7 @@ const enUS: Record<MessageKey, string> = {
   "settings.nav.terminal": "Terminal",
   "settings.nav.colorScheme": "Color scheme",
   "settings.nav.models": "Model providers",
+  "settings.nav.shortcuts": "Keyboard shortcuts",
   "models.desc":
     "Manage custom model providers; enabled models can be picked when chatting.",
   "models.addProvider": "Add provider",
@@ -988,6 +1006,18 @@ const enUS: Record<MessageKey, string> = {
   "settings.back": "Back to workspace",
   "settings.subtitle":
     "Saved locally and applied to this machine only",
+  // ---- 快捷键自定义 ----
+  "shortcuts.hint":
+    "Click a shortcut then press the key combination. Esc cancels. Keeping the Ctrl+Shift prefix is recommended — bare Ctrl+letter is mostly shell line editing in the terminal.",
+  "shortcuts.record": "Record shortcut",
+  "shortcuts.listening": "Press keys…",
+  "shortcuts.custom": "Custom",
+  "shortcuts.resetOne": "Reset to default",
+  "shortcuts.resetAll": "Reset all",
+  "shortcuts.customizedCount":
+    "{count} customized",
+  "shortcuts.conflict":
+    "Already used by “{name}”, pick another one",
   "settings.locale.title": "Interface language",
   "settings.locale.desc":
     "Language used by the app UI. Follows the system setting when set to that.",
