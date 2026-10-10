@@ -67,6 +67,8 @@ type Props = {
   transfers: TransferTask[];
   /** 清空已结束的传输记录 */
   onClearTransfers: () => void;
+  /** 删除单条已结束的传输记录 */
+  onRemoveTransfers: (id: string) => void;
   /** 暂停 / 恢复 / 取消传输任务 */
   onTransferControl: (
     id: string,
@@ -114,6 +116,7 @@ export default function SftpDialog({
   onChmodEntry,
   transfers,
   onClearTransfers,
+  onRemoveTransfers,
   onTransferControl,
   onDropEntries,
   windowTabs,
@@ -336,6 +339,7 @@ export default function SftpDialog({
               <TransferPanel
                 tasks={transfers}
                 onClear={onClearTransfers}
+                onRemove={onRemoveTransfers}
                 onControl={onTransferControl}
               />
             </Modal.Body>

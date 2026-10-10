@@ -5,6 +5,7 @@ import type {
   TransferStatus,
   TransferTask
 } from "@/sftp/lib/useSftp";
+import { activeElapsedMs } from "@/sftp/lib/sftpUtils";
 
 const STATUS_TEXT: Record<
   TransferStatus,
@@ -126,7 +127,8 @@ function formatSpeed(
 function TransferRow({
   task,
   now,
-  onControl
+  onControl,
+  onRemove
 }: {
   task: TransferTask;
   now: number;
@@ -134,10 +136,11 @@ function TransferRow({
     id: string,
     action: TransferControlAction
   ) => void;
+  onRemove: (id: string) => void;
 }) {
-  // 速度按平均速度算：进度事件只给字节数与时间戳，够用且不用额外维护状态
-  const elapsedMs =
-    (task.endedAt ?? now) - task.startedAt;
+  // 速度按平均速度算：进度事件只给字节数与时间戳，够用且不用额外维护状态；
+  // 分母是扣除暂停的活跃时长，暂停时定格、恢复后不把暂停时间摊进速度
+  const elapsedMs = activeElapsedMs(task, now);
   const speed =
     elapsedMs > 0
       ? (task.bytes / elapsedMs) * 1000
@@ -239,6 +242,18 @@ function TransferRow({
             取消
           </button>
         )}
+        {/* 已结束（完成/失败/已取消）的行：删除=把这条记录移出列表 */}
+        {(task.status === "done" ||
+          task.status === "failed" ||
+          task.status === "cancelled") && (
+          <button
+            type="button"
+            className="transfer-action"
+            onClick={() => onRemove(task.id)}
+          >
+            删除
+          </button>
+        )}
       </span>
     </div>
   );
@@ -253,6 +268,8 @@ type TransferPanelProps = {
     id: string,
     action: TransferControlAction
   ) => void;
+  /** 删除单条已结束的任务记录 */
+  onRemove: (id: string) => void;
 };
 
 /**
@@ -265,7 +282,8 @@ type TransferPanelProps = {
 export default function TransferPanel({
   tasks,
   onClear,
-  onControl
+  onControl,
+  onRemove
 }: TransferPanelProps) {
   // 当前时间：首帧为 0，时间列先显示"—"，1 秒内即对齐
   const [now, setNow] = useState(0);
@@ -322,6 +340,7 @@ export default function TransferPanel({
               task={task}
               now={now}
               onControl={onControl}
+              onRemove={onRemove}
             />
           ))
         ) : (

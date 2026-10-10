@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   TRANSFER_LIMIT,
+  applyTransferEvent,
   newTransferId,
   type TransferControlAction,
   type TransferDirection,
@@ -35,23 +36,14 @@ export function useTransferTasks() {
     void listen<TransferEvent>(
       "sftp-transfer",
       event => {
-        const { id, bytes, total, done } =
-          event.payload;
+        const { id } = event.payload;
         setTransfers(previous =>
           previous.map(task =>
             task.id === id
-              ? {
-                  ...task,
-                  bytes,
-                  // 事件里的总量可能比列表里更准，非 0 时覆盖
-                  total: total || task.total,
-                  status: done
-                    ? "done"
-                    : "running",
-                  endedAt: done
-                    ? Date.now()
-                    : task.endedAt
-                }
+              ? applyTransferEvent(
+                  task,
+                  event.payload
+                )
               : task
           )
         );
@@ -140,6 +132,13 @@ export function useTransferTasks() {
     );
   }, []);
 
+  /** 删除单条已结束的记录（行内"删除"按钮）。 */
+  const removeTask = useCallback((id: string) => {
+    setTransfers(previous =>
+      previous.filter(task => task.id !== id)
+    );
+  }, []);
+
   /** 暂停 / 恢复 / 取消某个传输任务。 */
   const controlTransfer = useCallback(
     async (
@@ -172,7 +171,21 @@ export function useTransferTasks() {
                 endedAt:
                   action === "cancel"
                     ? Date.now()
-                    : task.endedAt
+                    : task.endedAt,
+                // 暂停记下时刻，恢复时折算成累计暂停时长：
+                // 经过时间与速度只统计活跃传输的时间
+                pausedAt:
+                  action === "pause"
+                    ? Date.now()
+                    : undefined,
+                pausedMs:
+                  action === "resume"
+                    ? (task.pausedMs ?? 0) +
+                      (task.pausedAt
+                        ? Date.now() -
+                          task.pausedAt
+                        : 0)
+                    : task.pausedMs
               }
             : task
         )
@@ -188,6 +201,7 @@ export function useTransferTasks() {
       finishTask,
       failTask,
       clearTransfers,
+      removeTask,
       controlTransfer
     }),
     [
@@ -196,6 +210,7 @@ export function useTransferTasks() {
       finishTask,
       failTask,
       clearTransfers,
+      removeTask,
       controlTransfer
     ]
   );

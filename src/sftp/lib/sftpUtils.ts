@@ -60,6 +60,10 @@ export type TransferTask = {
   startedAt: number;
   /** 结束时间（毫秒时间戳） */
   endedAt?: number;
+  /** 暂停时刻（毫秒时间戳）；恢复时清空并折算进 pausedMs */
+  pausedAt?: number;
+  /** 累计暂停时长（毫秒）：经过时间与速度都要扣除它 */
+  pausedMs?: number;
   /** 失败原因 */
   error?: string;
 };
@@ -74,6 +78,61 @@ export type TransferEvent = {
 
 /** 任务面板最多保留的记录条数，超出丢弃最早的。 */
 export const TRANSFER_LIMIT = 50;
+
+/**
+ * 把一条后端进度事件并进任务状态，返回新任务对象。
+ *
+ * 两条规则：
+ * - 暂停是用户手势：暂停生效前发出的进度事件仍在途中，到达时不能把
+ *   刚点下的暂停冲回"传输中"——否则按钮弹回"暂停"、看起来要点两次
+ *   才真的停。
+ * - 终态（完成/失败/已取消）不被迟到事件复活：取消后残留的进度事件
+ *   若把行翻回"传输中"，再点取消会因后端任务已注销而报错，行就
+ *   永远卡死在"传输中"。
+ */
+export function applyTransferEvent(
+  task: TransferTask,
+  event: TransferEvent
+): TransferTask {
+  const terminal =
+    task.status === "done" ||
+    task.status === "failed" ||
+    task.status === "cancelled";
+  return {
+    ...task,
+    bytes: event.bytes,
+    // 事件里的总量可能比列表里更准，非 0 时覆盖
+    total: event.total || task.total,
+    status: terminal
+      ? task.status
+      : event.done
+        ? "done"
+        : task.status === "paused"
+          ? "paused"
+          : "running",
+    endedAt: event.done
+      ? (task.endedAt ?? Date.now())
+      : task.endedAt
+  };
+}
+
+/**
+ * 任务的"活跃"经过时长（毫秒）：扣除累计暂停时间。
+ *
+ * 暂停中定格在暂停时刻（不再随 now 增长），运行中随 now 走，
+ * 结束后用 endedAt 收口——速度用它做分母，暂停时也会跟着定格。
+ */
+export function activeElapsedMs(
+  task: TransferTask,
+  now: number
+): number {
+  return Math.max(
+    0,
+    (task.endedAt ?? task.pausedAt ?? now) -
+      task.startedAt -
+      (task.pausedMs ?? 0)
+  );
+}
 
 /**
  * 生成传输任务 id：前后端共用，进度事件靠它找到面板里的那一行。

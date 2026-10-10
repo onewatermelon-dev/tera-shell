@@ -53,6 +53,8 @@ type SftpPanelProps = {
   ) => void;
   transfers: TransferTask[];
   onClearTransfers: () => void;
+  /** 删除单条已结束的传输记录 */
+  onRemoveTransfers: (id: string) => void;
   onTransferControl: (
     id: string,
     action: TransferControlAction
@@ -100,6 +102,7 @@ export default function SftpPanel({
   onChmodEntry,
   transfers,
   onClearTransfers,
+  onRemoveTransfers,
   onTransferControl,
   onDropEntries
 }: SftpPanelProps) {
@@ -246,6 +249,7 @@ export default function SftpPanel({
         <TransferPanel
           tasks={transfers}
           onClear={onClearTransfers}
+          onRemove={onRemoveTransfers}
           onControl={onTransferControl}
         />
       </div>

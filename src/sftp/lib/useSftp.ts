@@ -347,6 +347,9 @@ export function useSftp(
   /** 清空已结束的传输记录；正在传输的保留。 */
   const clearTransfers = tasks.clearTransfers;
 
+  /** 删除单条已结束的传输记录。 */
+  const removeTransfer = tasks.removeTask;
+
   /** 暂停 / 恢复 / 取消某个传输任务。 */
   const controlTransfer = useCallback(
     async (
@@ -618,6 +621,7 @@ export function useSftp(
       copyToClipboard,
       pasteInto,
       clearTransfers,
+      removeTransfer,
       controlTransfer
     }),
     [
@@ -641,6 +645,7 @@ export function useSftp(
       copyToClipboard,
       pasteInto,
       clearTransfers,
+      removeTransfer,
       controlTransfer
     ]
   );

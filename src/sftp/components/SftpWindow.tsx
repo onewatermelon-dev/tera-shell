@@ -204,6 +204,7 @@ export default function SftpWindow({
       onChmodEntry={handleChmodEntry}
       transfers={sftp.transfers}
       onClearTransfers={sftp.clearTransfers}
+      onRemoveTransfers={sftp.removeTransfer}
       onTransferControl={handleTransferControl}
       onDropEntries={handleDropEntries}
     />
