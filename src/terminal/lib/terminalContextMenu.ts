@@ -2,6 +2,7 @@ import type { Terminal } from "@xterm/xterm";
 import { invoke } from "@tauri-apps/api/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { shortcutOf } from "@/shared/lib/appShortcuts";
 import {
   ClearOutlined,
   CodeOutlined,
@@ -115,11 +116,16 @@ export function createTerminalMenu({
       icon: typeof FileTextOutlined,
       checked = false
     ) => {
-      const item = makeItem(
-        label,
-        checked ? "✓" : "",
-        icon
-      );
+      // 日志子菜单的各项没有全局快捷键（第二参空串），
+      // 勾选标记走 `marker` 单独塞进同一个右侧槽位
+      const item = makeItem(label, "", icon);
+      if (checked) {
+        const mark =
+          document.createElement("kbd");
+        mark.className = "menu-key";
+        mark.textContent = "✓";
+        item.append(mark);
+      }
       item.classList.toggle("disabled", !enabled);
       item.addEventListener("click", event => {
         event.stopPropagation();
@@ -180,9 +186,19 @@ export function createTerminalMenu({
     );
   }
 
+  /**
+   * 造一个菜单项。
+   *
+   * ⚠️ **`shortcut` 一律走 `shortcutOf(actionId)` 从快捷键表取**，
+   * 不要在这里手写字符串：应用菜单（`AppRail`）与按键处理（`AppHeader`）
+   * 读的是同一张表，这里再写一份就是第三份 —— 改键位必漂移。
+   *
+   * @param shortcutId 快捷键表里的动作 id；传 `""` 表示该项无快捷键
+   *   （日志子菜单的各项、以及指向子菜单的「日志」本身）
+   */
   function makeItem(
     label: string,
-    shortcut: string,
+    shortcutId: string,
     icon: typeof FileTextOutlined
   ) {
     const item = document.createElement("div");
@@ -197,7 +213,15 @@ export function createTerminalMenu({
     name.textContent = label;
     const key = document.createElement("kbd");
     key.className = "menu-key";
-    key.textContent = shortcut;
+    key.textContent = shortcutId
+      ? (shortcutOf(shortcutId) ?? "")
+      : "";
+    // 没有键位时不渲染空的 <kbd>：空元素会在标签右侧留一段空隙，
+    // 让「有键位」和「无键位」两行看起来左边没对齐
+    if (!key.textContent) {
+      item.append(iconElement, name);
+      return item;
+    }
     item.append(iconElement, name, key);
     return item;
   }
@@ -208,11 +232,19 @@ export function createTerminalMenu({
     const element = document.createElement("div");
     element.className = "terminal-context-menu";
 
+    // ⚠️ `makeItem` 第二参现在是**动作 id**（不是键位串），空串表示
+    // 「无快捷键」。但「日志」这一项要显示子菜单箭头 `›` —— 它是
+    // affordance 不是键位，所以走快捷键表查不到就手动填。
     const log = makeItem(
       "日志",
-      "›",
+      "",
       FileTextOutlined
     );
+    const logArrow =
+      document.createElement("kbd");
+    logArrow.className = "menu-key";
+    logArrow.textContent = "›";
+    log.append(logArrow);
     log.addEventListener("mouseenter", () => {
       if (!submenu) return;
       refreshLogMenu();
@@ -250,7 +282,7 @@ export function createTerminalMenu({
 
     const copy = makeItem(
       "复制",
-      "Ctrl+C",
+      "copy",
       CopyOutlined
     );
     copy.addEventListener("click", () => {
@@ -266,7 +298,7 @@ export function createTerminalMenu({
 
     const paste = makeItem(
       "粘贴",
-      "Ctrl+V",
+      "paste",
       SnippetsOutlined
     );
     paste.addEventListener("click", () => {
@@ -282,7 +314,7 @@ export function createTerminalMenu({
 
     const find = makeItem(
       "查找",
-      "Ctrl+F",
+      "find",
       SearchOutlined
     );
     find.addEventListener("click", () => {
@@ -293,7 +325,7 @@ export function createTerminalMenu({
     // 断线后自动重连放弃时的兜底入口：未断线时点了也只是重新连一次
     const reconnect = makeItem(
       "重新连接",
-      "",
+      "reconnect",
       ReloadOutlined
     );
     reconnect.addEventListener("click", () => {
@@ -304,7 +336,7 @@ export function createTerminalMenu({
 
     const clear = makeItem(
       "清屏",
-      "",
+      "clear",
       ClearOutlined
     );
     clear.addEventListener("click", () => {
@@ -315,7 +347,7 @@ export function createTerminalMenu({
 
     const fullscreen = makeItem(
       "全屏",
-      "",
+      "toggleFocusMode",
       FullscreenOutlined
     );
     fullscreenItem = fullscreen;

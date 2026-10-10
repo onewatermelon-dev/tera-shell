@@ -525,17 +525,9 @@ export default function App() {
   const menuState = useMemo(
     () => ({
       hasActive: Boolean(terminals.active),
-      hasSelection,
-      caseSensitive:
-        terminals.searchCaseSensitive,
-      regex: terminals.searchRegex
+      hasSelection
     }),
-    [
-      terminals.active,
-      hasSelection,
-      terminals.searchCaseSensitive,
-      terminals.searchRegex
-    ]
+    [terminals.active, hasSelection]
   );
 
   // 标题栏菜单动作：读写剪贴板失败统一走右下角错误提示
@@ -575,6 +567,25 @@ export default function App() {
       terminals.active?.terminal.clear(),
     devtools: () => {
       invoke("open_devtools").catch(fail);
+    },
+    // 右键菜单里点「重新连接」传的是会话自己的 id；全局键位只能作用于
+    // 活动会话（快捷键没有「鼠标指哪儿」的上下文）
+    reconnect: () => {
+      const active = terminals.active;
+      if (!active) {
+        setError("请先打开一个会话");
+        return;
+      }
+      terminals.reconnect(active.id);
+    },
+    toggleFocusMode: () => {
+      // 专注模式切的是 body 上的类，样式与 CSS 钩子共用；
+      // 切完要重新 fit —— 见 useTerminals 的 resize 里对
+      // terminal-focus 的特判（专注模式只扩高，不动列数）
+      document.body.classList.toggle(
+        "terminal-focus"
+      );
+      terminals.resize();
     },
     openSftp: () => {
       const active = terminals.active;

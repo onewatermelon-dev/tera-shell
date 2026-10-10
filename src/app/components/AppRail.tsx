@@ -14,6 +14,7 @@ import {
   type Translator
 } from "@/settings/lib/i18n";
 import type { StatusMode } from "@/settings/lib/settings";
+import { shortcutOf } from "@/shared/lib/appShortcuts";
 
 /**
  * 菜单项定义。
@@ -24,6 +25,7 @@ import type { StatusMode } from "@/settings/lib/settings";
 export type MenuItemDef = {
   id: string;
   label: string;
+  /** 键位：留空则由 buildMenus 从 appShortcuts 表按 id 填。 */
   shortcut?: string;
   disabled?: boolean;
   checked?: boolean;
@@ -38,14 +40,16 @@ export type MenuDef = {
 
 /**
  * 菜单项的可用状态：由标题栏按当前会话状态传入。
- * 终端未打开时编辑类操作禁用，查找开关按当前搜索设置回显勾选。
+ * 终端未打开时编辑类操作禁用，无选区时复制禁用。
+ *
+ * ⚠️ 这里只放**菜单真的读**的字段。查看菜单精简到只剩「查找」后，
+ * `caseSensitive` / `regex`（查找面板自己的开关）与 `maximized`
+ * （标题栏的窗口按钮）都不再是菜单项，字段一并删掉 ——
+ * 留着会让 `menuState` 的 useMemo 白跑两次重渲染。
  */
 export type MenuState = {
   hasActive: boolean;
   hasSelection: boolean;
-  caseSensitive: boolean;
-  regex: boolean;
-  maximized: boolean;
 };
 
 /**
@@ -53,99 +57,98 @@ export type MenuState = {
  *
  * 只罗列已有实现支撑的项：尚未落地的能力保留入口但置灰，
  * 避免点了没反应。快捷键同理，只有全局已绑定的才显示。
+ *
+ * ⚠️ **键位不在这里手写**：统一由 `shortcutOf(id)` 从
+ * `appShortcuts` 表按动作 id 取（真正的按键处理在 AppHeader，
+ * 也读同一张表）。菜单里手写一份、处理里再写一份必然漂移。
  */
 export function buildMenus(
   state: MenuState,
   t: Translator
 ): MenuDef[] {
   const terminalReady = state.hasActive;
+  /** 给菜单项补上键位（表里没有的留空，菜单就不显示那一列） */
+  const withKey = (
+    item: Omit<MenuItemDef, "shortcut"> & {
+      shortcut?: string;
+    }
+  ): MenuItemDef => ({
+    ...item,
+    shortcut: item.shortcut ?? shortcutOf(item.id)
+  });
   return [
     {
       id: "file",
       label: t("app.menu.file"),
       items: [
-        {
+        withKey({
           id: "newSession",
           label: t("app.menu.newSsh")
-        },
-        {
+        }),
+        withKey({
           id: "openLocal",
           label: t("app.menu.openLocal")
-        },
+        }),
         // 导入/导出走当前会话库：没有可导出内容时不置灰，
         // 点击后由 App 给出"没有可导出的会话"的提示。
         // 文案复用 transfer.* —— 同一件事，菜单与确认框不该有两种说法
-        {
+        withKey({
           id: "exportSessions",
           label: t("transfer.export")
-        },
-        {
+        }),
+        withKey({
           id: "importSessions",
           label: t("transfer.import")
-        },
-        {
+        }),
+        withKey({
           id: "closeActive",
           label: t("app.menu.closeActive"),
           disabled: !terminalReady
-        },
-        { id: "quit", label: t("app.menu.quit") }
+        }),
+        withKey({
+          id: "quit",
+          label: t("app.menu.quit")
+        })
       ]
     },
     {
       id: "edit",
       label: t("app.menu.edit"),
       items: [
-        {
+        withKey({
           id: "copy",
           label: t("app.action.copy"),
-          shortcut: "Ctrl+C",
           disabled: !state.hasSelection
-        },
-        {
+        }),
+        withKey({
           id: "paste",
           label: t("app.action.paste"),
-          shortcut: "Ctrl+V",
           disabled: !terminalReady
-        },
-        {
+        }),
+        withKey({
           id: "selectAll",
           label: t("app.action.selectAll"),
           disabled: !terminalReady
-        },
-        {
+        }),
+        withKey({
           id: "clear",
           label: t("app.action.clear"),
           disabled: !terminalReady
-        }
+        })
       ]
     },
     {
       id: "view",
       label: t("app.menu.view"),
+      // ⚠️ **这里只留「查找」**：区分大小写 / 正则两个开关在查找面板
+      // 里各有一个按钮（`terminal.find.caseSensitive` 等），最大化走
+      // 标题栏的窗口按钮 —— 菜单里再挂一遍是重复入口。
+      // 它们的快捷键仍保留（`Ctrl+Shift+C` / `G` / `M`），见 appShortcuts。
       items: [
-        {
+        withKey({
           id: "find",
-          label: t("app.menu.find"),
-          shortcut: "Ctrl+F"
-        },
-        {
-          id: "toggleCaseSensitive",
-          label: t(
-            "app.action.toggleCaseSensitive"
-          ),
-          checked: state.caseSensitive
-        },
-        {
-          id: "toggleRegex",
-          label: t("app.action.toggleRegex"),
-          checked: state.regex
-        },
-        {
-          id: "toggleMaximize",
-          label: state.maximized
-            ? t("app.menu.restore")
-            : t("app.menu.maximize")
-        }
+          label: t("app.menu.find")
+        })
       ]
     },
     {
@@ -154,15 +157,14 @@ export function buildMenus(
       items: [
         // SFTP 以当前活动会话为连接目标；没有会话时不置灰，
         // 点击后给出"请先打开一个会话"的提示（置灰会让人以为菜单坏了）
-        {
+        withKey({
           id: "openSftp",
           label: t("app.action.openSftp")
-        },
-        {
+        }),
+        withKey({
           id: "devtools",
-          label: t("app.action.devtools"),
-          shortcut: "F12"
-        }
+          label: t("app.action.devtools")
+        })
         // 设置入口固定在竖条底部的齿轮按钮，不在菜单里重复
       ]
     }

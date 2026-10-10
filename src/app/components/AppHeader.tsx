@@ -16,6 +16,12 @@ import AppRail, {
   type MenuState
 } from "@/app/components/AppRail";
 import { useT } from "@/settings/lib/i18n";
+import {
+  APP_SHORTCUTS,
+  handledElsewhere,
+  isEditableTarget,
+  matchAction
+} from "@/shared/lib/appShortcuts";
 import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import type { StatusMode } from "@/settings/lib/settings";
 import {
@@ -42,6 +48,10 @@ export type HeaderActions = {
   selectAll: () => void;
   clear: () => void;
   devtools: () => void;
+  /** 重连当前活动会话（终端右键菜单「重新连接」的全局键位）。 */
+  reconnect: () => void;
+  /** 切换终端专注模式（隐藏侧栏/标签条/状态栏）。 */
+  toggleFocusMode: () => void;
   /** 打开 SFTP 窗口，连接目标取当前活动会话。 */
   openSftp: () => void;
   /** 把当前会话与分组导出到 JSON 文件（文件菜单）。 */
@@ -57,7 +67,7 @@ export type HeaderActions = {
 type Props = {
   actions: HeaderActions;
   /** 菜单项可用性：无活动终端、无选区时对应项置灰。 */
-  menuState: Omit<MenuState, "maximized">;
+  menuState: MenuState;
   /** 会话栏展开态与切换动作：透传给左侧竖条上的开关图标。 */
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
@@ -112,15 +122,8 @@ export default function AppHeader({
   }, []);
 
   const menus = useMemo(
-    () =>
-      buildMenus(
-        {
-          ...menuState,
-          maximized: isMaximized
-        },
-        t
-      ),
-    [menuState, isMaximized, t]
+    () => buildMenus(menuState, t),
+    [menuState, t]
   );
 
   // 窗口级动作（退出走二次确认、最大化走窗口 API）不经过 App 传入的 actions。
@@ -146,6 +149,84 @@ export default function AppHeader({
       `[menu] 未实现的菜单动作：${id}`
     );
   }
+
+  /**
+   * 应用级快捷键。
+   *
+   * 键位与菜单标签读同一张表（`APP_SHORTCUTS`），所以改了表两边同步生效。
+   *
+   * 三条约束：
+   *
+   * 1. **在捕获阶段监听**（`capture: true`）：xterm 会吞掉一部分冒泡到
+   *    窗口的按键，`Ctrl+F` 这类必须先于 xterm 拿到。
+   *
+   * 2. **`find` / `devtools` 跳过**（`handledElsewhere`）：它们在
+   *    `useTerminals` 的挂载期监听里已经实现，这里再绑一次会触发两遍
+   *    （`openSearch` 调两次、DevTools 开两个窗口）。
+   *
+   * 3. **可编辑元素聚焦时让路**（`isEditableTarget`）：AI 助手输入框里按
+   *    `Ctrl+Shift+A` 应该是选文字，不是「终端全选」。终端（xterm 的辅助
+   *    textarea）被显式排除在判断之外，它的键位另有一套。
+   */
+  const shortcutActionsRef = useRef(actions);
+  /**
+   * 完整 handlers（含本文件的 quit / toggleMaximize 两个窗口级动作）
+   * 的 ref 镜像。经 ref 取，闭包只在挂载时建一次也不会拿到旧值。
+   */
+  const handlersRef = useRef(handlers);
+
+  // ⚠️ **ref 只能在 effect 里同步，不能渲染期写**（react-hooks/refs 会报
+  // "Cannot update ref during render"）：按键回调只在挂载时建一次，
+  // 但要拿到最新的 handlers，就靠这里每次渲染后同步一次。
+  useEffect(() => {
+    shortcutActionsRef.current = actions;
+    handlersRef.current = handlers;
+  });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Shift") return;
+      // 可编辑元素聚焦时让路（AI 输入框里 Ctrl+Shift+A 应是选文字）
+      if (isEditableTarget(event.target)) return;
+      // 菜单已打开时不抢：方向键/回车要在菜单里正常导航
+      const active = document.activeElement;
+      if (active?.closest('[role="menu"]'))
+        return;
+      for (const id of Object.keys(
+        APP_SHORTCUTS
+      )) {
+        // find / devtools 已在 useTerminals 里实现，这里再绑会触发两遍
+        if (handledElsewhere(id)) continue;
+        if (!matchAction(event, id)) continue;
+        const handler = handlersRef.current[id];
+        if (!handler) {
+          // 表里有键位但没有对应实现：不静默，菜单项与动作脱节要能查
+          console.warn(
+            `[shortcut] ${id}（${APP_SHORTCUTS[id]}）没有对应实现`
+          );
+          return;
+        }
+        event.preventDefault();
+        handler();
+        refocusAfterAction(
+          shortcutActionsRef.current
+            .refocusTerminal
+        );
+        return;
+      }
+    };
+    window.addEventListener(
+      "keydown",
+      onKeyDown,
+      true
+    );
+    return () =>
+      window.removeEventListener(
+        "keydown",
+        onKeyDown,
+        true
+      );
+  }, []);
 
   return (
     <>
