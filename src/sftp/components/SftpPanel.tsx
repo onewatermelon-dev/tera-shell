@@ -35,7 +35,8 @@ type SftpPanelProps = {
   onFileAction: (
     pane: PaneSide,
     action: FileAction,
-    entry: PaneEntry | null
+    entry: PaneEntry | null,
+    entries: PaneEntry[]
   ) => void;
   onCreateEntry: (
     pane: PaneSide,
@@ -48,7 +49,7 @@ type SftpPanelProps = {
     name: string
   ) => void;
   onChmodEntry: (
-    entry: PaneEntry,
+    entries: PaneEntry[],
     mode: number
   ) => void;
   transfers: TransferTask[];
@@ -194,8 +195,17 @@ export default function SftpPanel({
             canPickPath
             isLocal
             canPaste={canPaste}
-            onContextAction={(action, entry) =>
-              onFileAction("local", action, entry)
+            onContextAction={(
+              action,
+              entry,
+              entries
+            ) =>
+              onFileAction(
+                "local",
+                action,
+                entry,
+                entries
+              )
             }
             onCreate={(isDir, name) =>
               onCreateEntry("local", isDir, name)
@@ -223,11 +233,16 @@ export default function SftpPanel({
             onRefresh={onRefreshRemote}
             isLocal={false}
             canPaste={canPaste}
-            onContextAction={(action, entry) =>
+            onContextAction={(
+              action,
+              entry,
+              entries
+            ) =>
               onFileAction(
                 "remote",
                 action,
-                entry
+                entry,
+                entries
               )
             }
             onCreate={(isDir, name) =>
@@ -236,8 +251,8 @@ export default function SftpPanel({
             onRename={(entry, name) =>
               onRenameEntry("remote", entry, name)
             }
-            onChmod={(entry, mode) =>
-              onChmodEntry(entry, mode)
+            onChmod={(entries, mode) =>
+              onChmodEntry(entries, mode)
             }
             side="remote"
             onDragStart={startDrag}

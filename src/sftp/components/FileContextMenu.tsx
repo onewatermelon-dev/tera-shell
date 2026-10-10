@@ -22,6 +22,8 @@ type FileContextMenuProps = {
   y: number;
   /** 右键点中的条目；空白处右键为 null */
   entry: PaneEntry | null;
+  /** 本次菜单作用的条目数：右键落在选中集合里时等于选中数，否则 1 */
+  count?: number;
   /** 是否本地栏：用关联程序 / 记事本打开只对本地文件有效 */
   isLocal: boolean;
   /** 剪贴板里是否有可粘贴的内容 */
@@ -40,6 +42,7 @@ export default function FileContextMenu({
   x,
   y,
   entry,
+  count = 1,
   isLocal,
   canPaste,
   onAction,
@@ -117,6 +120,8 @@ export default function FileContextMenu({
   function isDisabled(
     action: FileAction
   ): boolean {
+    // 多选时只保留批量有意义的操作：打开 / 重命名只对单条有效
+    const single = entry && count <= 1;
     switch (action) {
       // 目录也能传（后端递归处理）
       case "transfer":
@@ -124,11 +129,11 @@ export default function FileContextMenu({
       // 远程文件会先拉到临时目录再打开；远程目录没法整体落地，故禁用
       case "open":
         return (
-          !entry || (!isLocal && entry.isDir)
+          !single || (!isLocal && entry.isDir)
         );
       // 记事本只用来看文件内容
       case "openNotepad":
-        return !entry || entry.isDir;
+        return !single || entry.isDir;
       case "copy":
         return !entry;
       case "paste":
@@ -137,7 +142,7 @@ export default function FileContextMenu({
       case "chmod":
         return !entry;
       case "rename":
-        return !entry;
+        return !single;
       // 新建不需要选中条目，删到当前目录下即可
       case "create":
         return false;

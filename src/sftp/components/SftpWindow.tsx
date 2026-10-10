@@ -54,12 +54,14 @@ export default function SftpWindow({
       );
   }, [sftp.remote, handleNavigateRemote]);
 
-  /** 右键菜单动作：转发给 useSftp，失败统一走提示条。 */
+  /** 右键菜单动作：转发给 useSftp，失败统一走提示条。
+   *  entries 是本次作用的完整条目集（多选整批，单项时只含 entry）。 */
   const handleFileAction = useCallback(
     async (
       pane: PaneSide,
       action: FileAction,
-      entry: PaneEntry | null
+      entry: PaneEntry | null,
+      entries: PaneEntry[]
     ) => {
       try {
         switch (action) {
@@ -80,23 +82,43 @@ export default function SftpWindow({
               );
             break;
           case "copy":
-            if (entry)
-              sftp.copyToClipboard(pane, entry);
+            if (entries.length)
+              sftp.copyToClipboard(pane, entries);
             break;
           case "paste":
             await sftp.pasteInto(pane);
             break;
           case "delete":
             // 二次确认已在 FilePane 的确认对话框里完成
-            if (entry)
+            if (entries.length > 1) {
+              await sftp.removeEntries(
+                pane,
+                entries
+              );
+            } else if (entry) {
               await sftp.removeEntry(pane, entry);
+            }
             break;
           case "transfer":
-            if (entry)
-              await sftp.transferFile(
+            // 单项也走批量通道：目标目录与逐条任务逻辑同源
+            if (entries.length) {
+              const directory =
+                pane === "local"
+                  ? sftp.remote?.path
+                  : sftp.local?.path;
+              if (!directory) {
+                throw new Error(
+                  pane === "local"
+                    ? "远程目录尚未加载，无法上传"
+                    : "本地目录尚未加载，无法下载"
+                );
+              }
+              await sftp.transferEntries(
                 pane,
-                entry
+                entries,
+                directory
               );
+            }
             break;
         }
       } catch (reason) {
@@ -122,11 +144,14 @@ export default function SftpWindow({
     [sftp, onError]
   );
 
-  /** 权限修改确认（仅远程栏）。 */
+  /** 权限修改确认（仅远程栏；多选整批生效）。 */
   const handleChmodEntry = useCallback(
-    async (entry: PaneEntry, mode: number) => {
+    async (
+      entries: PaneEntry[],
+      mode: number
+    ) => {
       try {
-        await sftp.changeMode(entry, mode);
+        await sftp.changeModes(entries, mode);
       } catch (reason) {
         onError(String(reason));
       }

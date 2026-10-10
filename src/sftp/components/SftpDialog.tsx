@@ -40,11 +40,12 @@ type Props = {
   onClose: () => void;
   /** 剪贴板里是否有可粘贴的内容 */
   canPaste: boolean;
-  /** 右键菜单动作；pane 指明发生在哪一栏 */
+  /** 右键菜单动作；pane 指明发生在哪一栏，entries 为完整作用条目集 */
   onFileAction: (
     pane: PaneSide,
     action: FileAction,
-    entry: PaneEntry | null
+    entry: PaneEntry | null,
+    entries: PaneEntry[]
   ) => void;
   /** 新建文件夹 / 文件（对话框确认后触发） */
   onCreateEntry: (
@@ -58,9 +59,9 @@ type Props = {
     entry: PaneEntry,
     name: string
   ) => void;
-  /** 权限修改确认（仅远程栏） */
+  /** 权限修改确认（仅远程栏；多选整批生效） */
   onChmodEntry: (
-    entry: PaneEntry,
+    entries: PaneEntry[],
     mode: number
   ) => void;
   /** 传输任务（底部面板展示） */
@@ -256,12 +257,14 @@ export default function SftpDialog({
                   canPaste={canPaste}
                   onContextAction={(
                     action,
-                    entry
+                    entry,
+                    entries
                   ) =>
                     onFileAction(
                       "local",
                       action,
-                      entry
+                      entry,
+                      entries
                     )
                   }
                   onCreate={(isDir, name) =>
@@ -302,12 +305,14 @@ export default function SftpDialog({
                   canPaste={canPaste}
                   onContextAction={(
                     action,
-                    entry
+                    entry,
+                    entries
                   ) =>
                     onFileAction(
                       "remote",
                       action,
-                      entry
+                      entry,
+                      entries
                     )
                   }
                   onCreate={(isDir, name) =>
@@ -324,8 +329,8 @@ export default function SftpDialog({
                       name
                     )
                   }
-                  onChmod={(entry, mode) =>
-                    onChmodEntry(entry, mode)
+                  onChmod={(entries, mode) =>
+                    onChmodEntry(entries, mode)
                   }
                   side="remote"
                   onDragStart={startDrag}

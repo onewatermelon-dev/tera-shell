@@ -33,6 +33,10 @@ import {
   formatSize,
   formatTime
 } from "@/sftp/lib/fileFormat";
+import {
+  nextSelection,
+  resolveSelected
+} from "@/sftp/lib/sftpUtils";
 
 type FilePaneProps = {
   label: string;
@@ -50,10 +54,12 @@ type FilePaneProps = {
   isLocal: boolean;
   /** 剪贴板里是否有可粘贴的内容 */
   canPaste: boolean;
-  /** 右键菜单动作；entry 为 null 表示点在空白处 */
+  /** 右键菜单动作；entry 为右键点中的条目（空白处 null），entries
+   * 是本次作用的完整条目集（多选时为整个选中，否则只含 entry 一项） */
   onContextAction: (
     action: FileAction,
-    entry: PaneEntry | null
+    entry: PaneEntry | null,
+    entries: PaneEntry[]
   ) => void;
   /** 新建对话框确认后创建文件夹 / 文件 */
   onCreate: (
@@ -65,9 +71,9 @@ type FilePaneProps = {
     entry: PaneEntry,
     name: string
   ) => void;
-  /** 权限修改确认（菜单里只有远程栏会出现该项，本地栏不传） */
+  /** 权限修改确认（菜单里只有远程栏会出现该项，本地栏不传）；多选时整批生效 */
   onChmod?: (
-    entry: PaneEntry,
+    entries: PaneEntry[],
     mode: number
   ) => void;
   /** 本栏是哪一侧 —— 拖拽跨栏判定与 DOM 属性都要用 */
@@ -127,6 +133,14 @@ const FilePane = memo(function FilePane({
   const [recorded, setRecorded] = useState<
     string | null
   >(null);
+  // 多选：选中路径集合 + Shift 范围选择的锚点。
+  // 只存路径，动作时映射回当前列表（自动滤掉已消失的路径）
+  const [selected, setSelected] = useState<
+    Set<string>
+  >(new Set());
+  const [anchor, setAnchor] = useState<
+    string | null
+  >(null);
 
   // 父级加载成功的目录纳入历史（首屏、外部改路径都走这里）。
   // 这是渲染期间依据 props 调整 state（React 允许的模式），不需要 effect。
@@ -135,6 +149,9 @@ const FilePane = memo(function FilePane({
     listing.path !== recorded
   ) {
     setRecorded(listing.path);
+    // 换了目录，旧选中已无意义
+    setSelected(new Set());
+    setAnchor(null);
     setTrail(previous => {
       const kept = previous.paths.slice(
         0,
@@ -184,23 +201,25 @@ const FilePane = memo(function FilePane({
     }
   }
 
-  // 右键菜单：坐标 + 点中的条目（空白处为 null）
+  // 右键菜单：坐标 + 点中的条目（空白处为 null）+ 作用条数
   const [menu, setMenu] = useState<{
     x: number;
     y: number;
     entry: PaneEntry | null;
+    count: number;
   } | null>(null);
   // 新建对话框：点菜单里的"新建"时打开
   const [creating, setCreating] = useState(false);
-  // 待删除的条目：非空时弹出二次确认
+  // 待删除的条目：非空时弹出二次确认（多选时为整批）
   const [pendingDelete, setPendingDelete] =
-    useState<PaneEntry | null>(null);
-  // 待重命名的条目：非空时弹出重命名对话框
+    useState<PaneEntry[] | null>(null);
+  // 待重命名的条目：非空时弹出重命名对话框（只对单条有效）
   const [renameTarget, setRenameTarget] =
     useState<PaneEntry | null>(null);
-  // 待改权限的条目：非空时弹出权限对话框（仅远程栏会出现）
-  const [chmodTarget, setChmodTarget] =
-    useState<PaneEntry | null>(null);
+  // 待改权限的条目：非空时弹出权限对话框（仅远程栏会出现；多选整批）
+  const [chmodTarget, setChmodTarget] = useState<
+    PaneEntry[] | null
+  >(null);
 
   // 上级目录：列表顶部固定一项 ".." 用于回到它
   const parent = listing?.parent ?? null;
@@ -208,6 +227,58 @@ const FilePane = memo(function FilePane({
   const gridClass = isLocal
     ? "file-grid--local"
     : "file-grid--remote";
+
+  /** 行主键按下后的选中集合变化（普通 / Ctrl / Shift 三种语义）。 */
+  function selectOnPointerDown(
+    entry: PaneEntry,
+    event: React.PointerEvent
+  ) {
+    if (event.button !== 0) return;
+    const paths =
+      listing?.entries.map(e => e.path) ?? [];
+    setSelected(
+      nextSelection(selected, paths, entry.path, {
+        ctrl: event.ctrlKey || event.metaKey,
+        shift: event.shiftKey,
+        anchor
+      })
+    );
+    // Shift 保持锚点不动，普通 / Ctrl 点击把锚点挪到当前行
+    if (!event.shiftKey) setAnchor(entry.path);
+  }
+
+  /** 拖拽要带的条目：按住已选中的一行拖走 = 拖整个选中。 */
+  function dragEntries(
+    entry: PaneEntry
+  ): PaneEntry[] {
+    const picked = resolveSelected(
+      listing?.entries ?? [],
+      selected
+    );
+    return selected.has(entry.path) &&
+      picked.length > 1
+      ? picked
+      : [entry];
+  }
+
+  /** 清空选中（点空白 / Esc / 导航 / 批量动作派发后）。 */
+  function clearSelection() {
+    setSelected(new Set());
+    setAnchor(null);
+  }
+
+  /** 当前菜单作用的完整条目集：右键落在多选里 = 整个选中，否则就它一个。 */
+  const menuEntries =
+    menu?.entry &&
+    menu.count > 1 &&
+    selected.has(menu.entry.path)
+      ? resolveSelected(
+          listing?.entries ?? [],
+          selected
+        )
+      : menu?.entry
+        ? [menu.entry]
+        : [];
 
   return (
     <Surface
@@ -224,6 +295,11 @@ const FilePane = memo(function FilePane({
           {label}
           {busy && (
             <em className="pane-busy">载入中…</em>
+          )}
+          {selected.size > 1 && (
+            <em className="pane-busy">
+              已选 {selected.size} 项
+            </em>
           )}
         </span>
       </div>
@@ -313,13 +389,58 @@ const FilePane = memo(function FilePane({
       </div>
       <div
         className="sftp-file-list"
+        // 可聚焦：点击行后焦点落在这里，Ctrl+A / Delete / F2 才有落点
+        tabIndex={0}
+        onKeyDown={event => {
+          const entries = listing?.entries;
+          if (!entries?.length) return;
+          if (
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "a"
+          ) {
+            // 全选要拦下浏览器默认的文本选择
+            event.preventDefault();
+            setSelected(
+              new Set(entries.map(e => e.path))
+            );
+          } else if (event.key === "Escape") {
+            clearSelection();
+          } else if (event.key === "Delete") {
+            const picked = resolveSelected(
+              entries,
+              selected
+            );
+            if (picked.length)
+              setPendingDelete(picked);
+          } else if (
+            event.key === "F2" &&
+            selected.size === 1
+          ) {
+            const [only] = resolveSelected(
+              entries,
+              selected
+            );
+            if (only) setRenameTarget(only);
+          }
+        }}
+        onClick={event => {
+          // 点在行外（空白 / 滚动条）：清空选中
+          if (
+            !(
+              event.target as HTMLElement
+            ).closest(".file-row")
+          ) {
+            clearSelection();
+          }
+        }}
         onContextMenu={event => {
           // 空白处右键：菜单里只有"新建 / 粘贴"可用
           event.preventDefault();
           setMenu({
             x: event.clientX,
             y: event.clientY,
-            entry: null
+            entry: null,
+            count: 1
           });
         }}
       >
@@ -367,7 +488,11 @@ const FilePane = memo(function FilePane({
               listing.entries.map(entry => (
                 <div
                   key={entry.path}
-                  className={`file-row ${gridClass}`}
+                  className={`file-row ${gridClass} ${
+                    selected.has(entry.path)
+                      ? "is-selected"
+                      : ""
+                  }`}
                   // 落点判定只读这两个属性：路径用于配对，isDir 决定
                   // "落进这个目录"还是"落到所在目录"。刻意不把整条
                   // listing 塞进属性里 —— 大目录下那会撑爆 DOM。
@@ -381,25 +506,44 @@ const FilePane = memo(function FilePane({
                     isTarget?.(entry.path) ||
                     undefined
                   }
-                  onPointerDown={event =>
+                  onPointerDown={event => {
+                    selectOnPointerDown(
+                      entry,
+                      event
+                    );
                     onDragStart(
                       side,
-                      [entry],
+                      dragEntries(entry),
                       event
-                    )
-                  }
+                    );
+                  }}
                   onDoubleClick={() => {
                     if (entry.isDir)
                       onOpen(entry.path);
                   }}
                   onContextMenu={event => {
-                    // 行上右键：菜单针对这个条目；阻止冒泡避免被当成空白处
+                    // 行上右键：菜单针对这个条目；阻止冒泡避免被当成空白处。
+                    // 点中的行不在选中里时，选中整体换成它（资源管理器语义）
                     event.preventDefault();
                     event.stopPropagation();
+                    const inSelection =
+                      selected.has(entry.path);
+                    if (!inSelection) {
+                      setSelected(
+                        new Set([entry.path])
+                      );
+                      setAnchor(entry.path);
+                    }
                     setMenu({
                       x: event.clientX,
                       y: event.clientY,
-                      entry
+                      entry,
+                      count: inSelection
+                        ? Math.max(
+                            1,
+                            selected.size
+                          )
+                        : 1
                     });
                   }}
                 >
@@ -445,6 +589,7 @@ const FilePane = memo(function FilePane({
           x={menu.x}
           y={menu.y}
           entry={menu.entry}
+          count={menu.count}
           isLocal={isLocal}
           canPaste={canPaste}
           onAction={action => {
@@ -453,25 +598,36 @@ const FilePane = memo(function FilePane({
               setCreating(true);
               return;
             }
-            // 删除是不可逆操作，先弹二次确认
+            // 删除是不可逆操作，先弹二次确认（多选时确认整批）
             if (action === "delete") {
-              if (menu.entry)
-                setPendingDelete(menu.entry);
+              if (menuEntries.length)
+                setPendingDelete(menuEntries);
               return;
             }
-            // 重命名要先收集新名称，交给对话框去执行
+            // 重命名要先收集新名称，交给对话框去执行（仅单选可用）
             if (action === "rename") {
               if (menu.entry)
                 setRenameTarget(menu.entry);
               return;
             }
-            // 权限修改要先拿到当前权限位，交给对话框去编辑
+            // 权限修改要先拿到当前权限位，交给对话框去编辑（多选整批）
             if (action === "chmod") {
-              if (menu.entry)
-                setChmodTarget(menu.entry);
+              if (menuEntries.length)
+                setChmodTarget(menuEntries);
               return;
             }
-            onContextAction(action, menu.entry);
+            // 批量传输派发后清掉选中，行上的高亮别留着误导
+            if (
+              action === "transfer" &&
+              menuEntries.length > 1
+            ) {
+              clearSelection();
+            }
+            onContextAction(
+              action,
+              menu.entry,
+              menuEntries
+            );
           }}
           onClose={() => setMenu(null)}
         />
@@ -493,36 +649,49 @@ const FilePane = memo(function FilePane({
       )}
       {chmodTarget && (
         <ChmodDialog
-          name={chmodTarget.name}
-          // 取不到权限位时按 644 兜底（远程一般都能拿到）
-          current={chmodTarget.perm ?? 0o644}
-          onConfirm={mode =>
-            onChmod?.(chmodTarget, mode)
+          name={
+            chmodTarget.length > 1
+              ? `${chmodTarget[0]!.name} 等 ${chmodTarget.length} 项`
+              : chmodTarget[0]!.name
           }
+          // 取不到权限位时按 644 兜底（远程一般都能拿到）
+          current={chmodTarget[0]!.perm ?? 0o644}
+          onConfirm={mode => {
+            onChmod?.(chmodTarget, mode);
+            clearSelection();
+          }}
           onClose={() => setChmodTarget(null)}
         />
       )}
       {pendingDelete && (
         <ConfirmDialog
           eyebrow="删除"
-          title={`确定删除${
-            pendingDelete.isDir
-              ? "文件夹"
-              : "文件"
-          }「${pendingDelete.name}」？`}
+          title={
+            pendingDelete.length > 1
+              ? `确定删除这 ${pendingDelete.length} 项？`
+              : `确定删除${
+                  pendingDelete[0]!.isDir
+                    ? "文件夹"
+                    : "文件"
+                }「${pendingDelete[0]!.name}」？`
+          }
           description={
-            pendingDelete.isDir
+            pendingDelete.some(
+              entry => entry.isDir
+            )
               ? "文件夹及其中的全部内容都会被删除，此操作不可撤销。"
               : "此操作不可撤销。"
           }
           confirmText="删除"
           danger
-          onConfirm={() =>
+          onConfirm={() => {
             onContextAction(
               "delete",
+              pendingDelete[0]!,
               pendingDelete
-            )
-          }
+            );
+            clearSelection();
+          }}
           onClose={() => setPendingDelete(null)}
         />
       )}

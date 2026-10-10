@@ -8,7 +8,6 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
 import {
-  baseName,
   joinPath,
   resolvePassword,
   type PaneEntry,
@@ -53,10 +52,10 @@ export function useSftp(
   // 同一时刻只允许一次远程导航：双击过快时后续请求会排在同一个连接锁上，
   // 表现为"点了半天才一个个响应"，这里直接忽略重复触发。
   const remoteBusyRef = useRef(false);
-  // 复制 / 粘贴用的内部剪贴板（记来源栏与路径，粘贴时才真正执行）
+  // 复制 / 粘贴用的内部剪贴板（记来源栏与一批条目，粘贴时才真正执行）
   const [clipboard, setClipboard] = useState<{
     pane: PaneSide;
-    path: string;
+    entries: PaneEntry[];
   } | null>(null);
 
   const tasks = useTransferTasks();
@@ -415,14 +414,13 @@ export function useSftp(
     ]
   );
 
-  /** 删除文件或目录（远程按递归删除，并在底部面板里显示进度）。 */
-  const removeEntry = useCallback(
+  /** 删除单个条目的实际执行：本地直接删，远程递归删并登记任务；不负责刷新。 */
+  const removeEntryCore = useCallback(
     async (pane: PaneSide, entry: PaneEntry) => {
       if (pane === "local") {
         await invoke("fs_remove_path", {
           path: entry.path
         });
-        void navigateLocal(local?.path);
         return;
       }
       const connection = await remoteConnection();
@@ -447,21 +445,54 @@ export function useSftp(
         throw reason;
       }
       tasks.finishTask(id);
-      void navigateRemote(
-        session as SavedSession,
-        remote?.path,
-        true
-      );
+    },
+    [remoteConnection, tasks]
+  );
+
+  /** 删除完成后刷新来源栏当前目录。 */
+  const refreshAfterRemove = useCallback(
+    (pane: PaneSide) => {
+      if (pane === "local") {
+        void navigateLocal(local?.path);
+      } else {
+        void navigateRemote(
+          session as SavedSession,
+          remote?.path,
+          true
+        );
+      }
     },
     [
-      remoteConnection,
-      remote?.path,
       local?.path,
+      remote?.path,
       session,
-      tasks,
-      navigateRemote,
-      navigateLocal
+      navigateLocal,
+      navigateRemote
     ]
+  );
+
+  /** 删除文件或目录（远程按递归删除，并在底部面板里显示进度）。 */
+  const removeEntry = useCallback(
+    async (pane: PaneSide, entry: PaneEntry) => {
+      await removeEntryCore(pane, entry);
+      refreshAfterRemove(pane);
+    },
+    [removeEntryCore, refreshAfterRemove]
+  );
+
+  /** 批量删除：逐项执行（远程每项一条任务进面板），完成后只刷新一次。 */
+  const removeEntries = useCallback(
+    async (
+      pane: PaneSide,
+      entries: PaneEntry[]
+    ) => {
+      for (const entry of entries) {
+        // 单项失败即中断：后续项很可能依赖同一故障（如权限），继续只是刷屏
+        await removeEntryCore(pane, entry);
+      }
+      refreshAfterRemove(pane);
+    },
+    [removeEntryCore, refreshAfterRemove]
   );
 
   /** 重命名文件或目录：新名字拼在原目录后面，目录本身不变。 */
@@ -513,19 +544,24 @@ export function useSftp(
     ]
   );
 
-  /** 修改远程文件 / 目录的权限（Unix 概念，仅远程栏使用）。 */
-  const changeMode = useCallback(
-    async (entry: PaneEntry, mode: number) => {
+  /** 修改一批远程条目的权限（Unix 概念，仅远程栏使用），完成后只刷新一次。 */
+  const changeModes = useCallback(
+    async (
+      entries: PaneEntry[],
+      mode: number
+    ) => {
       const directory = remote?.path;
       const connection = await remoteConnection();
-      await invoke("sftp_chmod", {
-        job: {
-          ...connection,
-          local: "",
-          remote: entry.path
-        },
-        mode
-      });
+      for (const entry of entries) {
+        await invoke("sftp_chmod", {
+          job: {
+            ...connection,
+            local: "",
+            remote: entry.path
+          },
+          mode
+        });
+      }
       void navigateRemote(
         session as SavedSession,
         directory,
@@ -540,46 +576,67 @@ export function useSftp(
     ]
   );
 
-  /** 复制：只记入内部剪贴板，粘贴时才真正执行。 */
+  /** 修改远程文件 / 目录的权限（Unix 概念，仅远程栏使用）。 */
+  const changeMode = useCallback(
+    async (entry: PaneEntry, mode: number) => {
+      await changeModes([entry], mode);
+    },
+    [changeModes]
+  );
+
+  /** 复制：只记入内部剪贴板（多选整批），粘贴时才真正执行。 */
   const copyToClipboard = useCallback(
-    (pane: PaneSide, entry: PaneEntry) => {
-      setClipboard({ pane, path: entry.path });
+    (pane: PaneSide, entries: PaneEntry[]) => {
+      setClipboard(
+        entries.length ? { pane, entries } : null
+      );
     },
     []
   );
 
-  /** 粘贴：同栏走本地复制，跨栏走传输。 */
+  /** 粘贴：同栏走本地复制（逐条，完成后刷新一次），跨栏走批量传输。 */
   const pasteInto = useCallback(
     async (pane: PaneSide) => {
-      if (!clipboard) return;
+      if (!clipboard?.entries.length) return;
       if (clipboard.pane === pane) {
-        if (pane === "local") {
-          const directory = local?.path;
-          if (!directory) {
-            throw new Error("本地目录尚未加载");
-          }
+        if (pane !== "local") {
+          throw new Error(
+            "远程之间的复制暂不支持"
+          );
+        }
+        const directory = local?.path;
+        if (!directory) {
+          throw new Error("本地目录尚未加载");
+        }
+        for (const entry of clipboard.entries) {
           await invoke("fs_copy_path", {
-            from: clipboard.path,
+            from: entry.path,
             to: directory
           });
-          void navigateLocal(directory);
-          return;
         }
-        throw new Error("远程之间的复制暂不支持");
+        void navigateLocal(directory);
+        return;
       }
-      // 跨栏粘贴 = 上传 / 下载
-      await transferFile(clipboard.pane, {
-        name: baseName(clipboard.path),
-        path: clipboard.path,
-        isDir: false,
-        size: 0
-      });
+      // 跨栏粘贴 = 上传 / 下载（transferEntries 自带逐条任务与刷新）
+      const directory =
+        clipboard.pane === "local"
+          ? remote?.path
+          : local?.path;
+      if (!directory) {
+        throw new Error("目标目录尚未加载");
+      }
+      await transferEntries(
+        clipboard.pane,
+        clipboard.entries,
+        directory
+      );
     },
     [
       clipboard,
       local?.path,
+      remote?.path,
       navigateLocal,
-      transferFile
+      transferEntries
     ]
   );
 
@@ -616,8 +673,10 @@ export function useSftp(
       transferEntries,
       createEntry,
       removeEntry,
+      removeEntries,
       renameEntry,
       changeMode,
+      changeModes,
       copyToClipboard,
       pasteInto,
       clearTransfers,
@@ -640,8 +699,10 @@ export function useSftp(
       transferEntries,
       createEntry,
       removeEntry,
+      removeEntries,
       renameEntry,
       changeMode,
+      changeModes,
       copyToClipboard,
       pasteInto,
       clearTransfers,

@@ -69,6 +69,17 @@
   background: var(--default);
 }
 
+// 多选选中的行：与 hover 同族但更实，一眼分清"路过"与"选中"
+.file-row.is-selected {
+  background: var(--accent-soft);
+}
+
+// 列表可聚焦（接收 Ctrl+A / Delete / F2），点击行时焦点落进来，
+// 默认的焦点轮廓在这种"点哪都有"的列表里只会是常驻噪音，去掉
+.sftp-file-list:focus {
+  outline: none;
+}
+
 // ===== 跨栏拖拽 =====
 // 行可拖，但**不能给 grab 光标**：整片列表都用默认光标时，
 // "按住就能拖" 与双击进入的直觉一致；到处是 grab 反而像列表不能点

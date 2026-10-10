@@ -135,6 +135,55 @@ export function activeElapsedMs(
 }
 
 /**
+ * 计算文件行被点击（主键）后的新选中集合。
+ *
+ * 与资源管理器一致：普通点击只选它；Ctrl 切换它；Shift 从锚点
+ * 扫到它（替换整个选中）。Shift 但没有锚点时退化为普通点击。
+ * `paths` 是当前列表的完整路径顺序，范围选择靠下标。
+ */
+export function nextSelection(
+  current: Set<string>,
+  paths: string[],
+  target: string,
+  options: {
+    ctrl?: boolean;
+    shift?: boolean;
+    anchor?: string | null;
+  }
+): Set<string> {
+  const anchor = options.anchor ?? null;
+  if (options.shift && anchor) {
+    const from = paths.indexOf(anchor);
+    const to = paths.indexOf(target);
+    if (from !== -1 && to !== -1) {
+      const [start, end] =
+        from < to ? [from, to] : [to, from];
+      return new Set(paths.slice(start, end + 1));
+    }
+  }
+  if (options.ctrl) {
+    const next = new Set(current);
+    if (next.has(target)) next.delete(target);
+    else next.add(target);
+    return next;
+  }
+  return new Set([target]);
+}
+
+/**
+ * 把选中路径集映射回当前列表的条目：顺序跟随列表，
+ * 自动过滤掉已不存在的路径（导航 / 刷新后的残留选中）。
+ */
+export function resolveSelected<
+  T extends { path: string }
+>(entries: T[], selected: Set<string>): T[] {
+  if (selected.size === 0) return [];
+  return entries.filter(entry =>
+    selected.has(entry.path)
+  );
+}
+
+/**
  * 生成传输任务 id：前后端共用，进度事件靠它找到面板里的那一行。
  */
 export function newTransferId(): string {
