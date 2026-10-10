@@ -28,6 +28,7 @@ import RenameDialog from "@/sftp/components/RenameDialog";
 import ChmodDialog from "@/sftp/components/ChmodDialog";
 import EntryIcon from "@/sftp/components/EntryIcon";
 import ConfirmDialog from "@/shared/components/ConfirmDialog";
+import Hint from "@/shared/components/Hint";
 import {
   formatPerm,
   formatSize,
@@ -345,27 +346,32 @@ const FilePane = memo(function FilePane({
         </span>
       </div>
       <div className="sftp-path-row">
-        <button
-          type="button"
-          className="path-nav-button"
-          aria-label="上一步"
-          disabled={trail.cursor <= 0}
-          onClick={() => go(-1)}
-        >
-          <LeftOutlined />
-        </button>
-        <button
-          type="button"
-          className="path-nav-button"
-          aria-label="下一步"
-          disabled={
-            trail.cursor < 0 ||
-            trail.cursor >= trail.paths.length - 1
-          }
-          onClick={() => go(1)}
-        >
-          <RightOutlined />
-        </button>
+        <Hint label="后退 (Alt+←)">
+          <button
+            type="button"
+            className="path-nav-button"
+            aria-label="上一步"
+            disabled={trail.cursor <= 0}
+            onClick={() => go(-1)}
+          >
+            <LeftOutlined />
+          </button>
+        </Hint>
+        <Hint label="前进 (Alt+→)">
+          <button
+            type="button"
+            className="path-nav-button"
+            aria-label="下一步"
+            disabled={
+              trail.cursor < 0 ||
+              trail.cursor >=
+                trail.paths.length - 1
+            }
+            onClick={() => go(1)}
+          >
+            <RightOutlined />
+          </button>
+        </Hint>
         {/* 输入框 + 下拉按钮 + 选择面板同处这一层：
             面板与嵌在框内的按钮都以它为定位基准，宽度正好等于地址栏 */}
         <div className="path-field">
@@ -448,6 +454,19 @@ const FilePane = memo(function FilePane({
             );
           } else if (event.key === "Escape") {
             clearSelection();
+          } else if (
+            event.altKey &&
+            event.key === "ArrowLeft"
+          ) {
+            // 后退 / 前进与按钮同一入口（go 内部自带越界保护）
+            event.preventDefault();
+            go(-1);
+          } else if (
+            event.altKey &&
+            event.key === "ArrowRight"
+          ) {
+            event.preventDefault();
+            go(1);
           } else if (event.key === "Delete") {
             const picked = resolveSelected(
               allEntries,
