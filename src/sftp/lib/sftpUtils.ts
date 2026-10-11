@@ -315,6 +315,18 @@ export function baseName(path: string): string {
 }
 
 /**
+ * 取路径的父目录（远程路径用 `/` 分隔）。
+ *
+ * 一级目录（`/root`）返回 `/` 自己而非空串：挪动判定用它判断
+ * 「条目是不是已经在目标目录里」。
+ */
+export function parentOf(path: string): string {
+  const index = path.lastIndexOf("/");
+  if (index <= 0) return "/";
+  return path.slice(0, index);
+}
+
+/**
  * 把拖拽条目转成插入终端输入行的文本（拖路径进终端用）。
  *
  * 单个目录 → `cd '<路径>'`（最常用：拖个目录过去直接 cd）；

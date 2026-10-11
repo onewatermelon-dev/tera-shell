@@ -1632,9 +1632,75 @@ pub async fn archive(
 	.map_err(|error| error.to_string())?
 }
 
+/// 远程同服务器文件操作：copy = `cp -a`，move = `mv`。
+///
+/// SFTP 协议没有服务端复制，走同一条会话的 exec 通道让服务器自己做 ——
+/// 数据不过本机中转，目录递归与权限保留都交给 `cp -a`。
+#[tauri::command(rename = "sftp_remote_fs")]
+pub async fn remote_fs(
+	pool: State<'_, SftpPool>,
+	job: TransferJob,
+	mode: String,
+	paths: Vec<String>,
+	target_dir: String,
+) -> Result<(), String> {
+	let connections = pool.connections.clone();
+	let (key, host, port, username, password) =
+		transfer_target(&job);
+	tauri::async_runtime::spawn_blocking(move || {
+		let connection = obtain(
+			&connections,
+			&key,
+			&host,
+			port,
+			&username,
+			password.as_deref(),
+		)?;
+		let operation = match mode.as_str() {
+			"copy" => "cp -a",
+			"move" => "mv",
+			_ => {
+				return Err(format!(
+					"未知文件操作：{mode}"
+				))
+			}
+		};
+		// 源在前、目标目录最后；目录递归与权限保留由 cp -a / mv 自理
+		let mut quoted: Vec<String> = paths
+			.iter()
+			.map(|path| shell_quote(path))
+			.collect();
+		quoted.push(shell_quote(&target_dir));
+		let command =
+			format!("{operation} {}", quoted.join(" "));
+		let (stdout, stderr, status) =
+			exec_output(&connection.session, &command)?;
+		info!(
+			mode = %mode,
+			status,
+			count = paths.len(),
+			command = %command,
+			stderr = %stderr.trim(),
+			"远程文件操作执行结束"
+		);
+		if status != 0 {
+			let reason = if stderr.trim().is_empty() {
+				stdout.trim()
+			} else {
+				stderr.trim()
+			};
+			return Err(format!(
+				"命令失败（退出码 {status}）：{reason}"
+			));
+		}
+		Ok(())
+	})
+	.await
+	.map_err(|error| error.to_string())?
+}
+
 /// 上传本地文件到远程路径（分块传输并按 100ms 节流上报进度）。
-#[tauri::command(rename = "sftp_upload")]
-pub async fn upload(
+#[tauri::command(rename = "sftp_upload")]pub async fn upload(
 	app: tauri::AppHandle,
 	pool: State<'_, SftpPool>,
 	transfers: State<'_, Transfers>,

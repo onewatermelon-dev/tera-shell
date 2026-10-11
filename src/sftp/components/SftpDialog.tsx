@@ -39,6 +39,8 @@ type Props = {
   remoteBusy: boolean;
   /** 远程磁盘用量（状态条展示）；未加载或查询失败为 null。 */
   remoteUsage: RemoteDiskUsage | null;
+  /** 底部进度条文案（远程复制/挪动/压缩/解压进行中）；null 不显示。 */
+  remoteOpLabel: string | null;
   onNavigateLocal: (path: string) => void;
   onNavigateRemote: (path: string) => void;
   onRefreshLocal: () => void;
@@ -129,6 +131,7 @@ export default function SftpDialog({
   remoteError,
   remoteBusy,
   remoteUsage,
+  remoteOpLabel,
   onNavigateLocal,
   onNavigateRemote,
   onRefreshLocal,
@@ -438,6 +441,14 @@ export default function SftpDialog({
                   )}
                 />
               </div>
+              {remoteOpLabel && (
+                <footer className="sftp-opbar">
+                  <span>{remoteOpLabel}</span>
+                  <span className="sftp-opbar-track">
+                    <i />
+                  </span>
+                </footer>
+              )}
               <TransferPanel
                 tasks={transfers}
                 onClear={onClearTransfers}

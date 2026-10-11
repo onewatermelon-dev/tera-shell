@@ -12,6 +12,7 @@ import type {
 import {
   findCollisions,
   hasResumable,
+  parentOf,
   pathsToTerminalText
 } from "@/sftp/lib/sftpUtils";
 import type { FileAction } from "@/sftp/components/FileContextMenu";
@@ -357,13 +358,32 @@ export default function SftpWindow({
     [sftp.session]
   );
 
-  /** 跨栏拖放落点：把条目传进目标目录（有同名冲突先弹策略框）。 */
+  /**
+   * 拖放落点分发：远程 → 远程 = 服务端挪动（mv），跨栏 = 传输。
+   *
+   * 挪动前剔除两类无意义条目：已在目标目录里的（mv 会报 same file）、
+   * 拖到自己的（mv 目录进自身）。
+   */
   const handleDropEntries = useCallback(
     (
       from: PaneSide,
       entries: PaneEntry[],
       directory: string
     ) => {
+      if (from === "remote") {
+        const moving = entries.filter(
+          entry =>
+            entry.path !== directory &&
+            parentOf(entry.path) !== directory
+        );
+        if (!moving.length) return;
+        void sftp
+          .remoteFileOp("move", moving, directory)
+          .catch(reason =>
+            onError(String(reason))
+          );
+        return;
+      }
       planCrossPane(
         from,
         entries,
@@ -395,6 +415,7 @@ export default function SftpWindow({
         remoteError={sftp.remoteError}
         remoteBusy={sftp.remoteBusy}
         remoteUsage={sftp.remoteUsage}
+        remoteOpLabel={sftp.remoteOpLabel}
         onNavigateLocal={sftp.navigateLocal}
         onNavigateRemote={handleNavigateRemote}
         onRefreshLocal={handleRefreshLocal}

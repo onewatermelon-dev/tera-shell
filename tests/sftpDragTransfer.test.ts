@@ -9,6 +9,7 @@ import {
   resolveDropTarget,
   type DropProbe
 } from "@/sftp/lib/dragTransfer";
+import { parentOf } from "@/sftp/lib/sftpUtils";
 import type { PaneEntry } from "@/sftp/lib/useSftp";
 
 function entry(
@@ -38,7 +39,7 @@ function probe(
 }
 
 describe("SFTP 拖拽落点判定", () => {
-  it("同栏拖拽不接受 —— 栏内挪动不是传输", () => {
+  it("本地同栏拖拽不接受 —— 栏内挪动不是传输", () => {
     expect(
       resolveDropTarget(
         probe({
@@ -47,14 +48,14 @@ describe("SFTP 拖拽落点判定", () => {
         })
       )
     ).toBeNull();
-    expect(
-      resolveDropTarget(
-        probe({
-          from: "remote",
-          pane: "remote"
-        })
-      )
-    ).toBeNull();
+  });
+
+  it("远程同栏拖拽被接受 —— 服务端挪动（mv）的落点", () => {
+    const target = resolveDropTarget(
+      probe({ from: "remote", pane: "remote" })
+    );
+    expect(target).not.toBeNull();
+    expect(target?.intoDirectory).toBe("/remote");
   });
 
   it("落到目标栏空白处 → 该栏当前目录", () => {
@@ -111,10 +112,10 @@ describe("SFTP 拖拽落点判定", () => {
     ).toBeNull();
   });
 
-  it("同栏一律拒绝 —— 这条不变量顺带挡掉「拖进自己/子目录」的死循环", () => {
-    // 后端的上传没有"源与目标重叠"的检测，目录套自己会无限递归。
-    // 唯一的防线就是前端根本不产生这种落点：
-    // 无论从 local 还是 remote 起手，落在**同一栏**都被拒。
+  it("本地同栏一律拒绝 —— 上传没有源/目标重叠检测，死循环只能靠前端挡", () => {
+    // 本地栏的同栏落点被拒，上传的「目录套自己无限递归」就没有入口。
+    // 远程同栏现在走服务端 mv（见下一条），自拖自/拖进子目录由
+    // 调用方用 parentOf 过滤，mv 自己也会报错兜底。
     expect(
       resolveDropTarget(
         probe({
@@ -124,15 +125,19 @@ describe("SFTP 拖拽落点判定", () => {
         })
       )
     ).toBeNull();
-    expect(
-      resolveDropTarget(
-        probe({
-          from: "remote",
-          pane: "remote",
-          entry: entry("logs", true)
-        })
-      )
-    ).toBeNull();
+  });
+
+  it("远程同栏 + 目录条目：落进那个目录（服务端 mv 挪动）", () => {
+    const target = resolveDropTarget(
+      probe({
+        from: "remote",
+        pane: "remote",
+        entry: entry("logs", true)
+      })
+    );
+    expect(target?.intoDirectory).toBe(
+      "/remote/logs"
+    );
   });
 
   it("落点目录与来源同路径也不该出现（跨栏才可能）", () => {
@@ -276,5 +281,14 @@ describe("SFTP 拖拽样式", () => {
       )?.[0] ?? "";
     expect(block).not.toBe("");
     expectDecl(block, "cursor", "grabbing");
+  });
+});
+
+describe("parentOf（远程挪动判定用）", () => {
+  it("取父目录；一级目录返回根", () => {
+    expect(parentOf("/root/.cache")).toBe(
+      "/root"
+    );
+    expect(parentOf("/root")).toBe("/");
   });
 });

@@ -33,7 +33,7 @@ export type DropTarget = {
 
 /** 判定所需的最小信息（与真实列表解耦，便于造样本）。 */
 export type DropProbe = {
-  /** 来源栏。**同栏拖拽一律拒绝**（复制靠右键菜单的复制/粘贴）。 */
+  /** 来源栏。**同栏拖拽仅远程 → 远程被接受**（服务端挪动），本地栏拒绝。 */
   from: PaneSide;
   /** 指针落在哪一栏（调用方用 elementFromPoint 找最近的栏容器得到）。 */
   pane: PaneSide;
@@ -47,8 +47,9 @@ export type DropProbe = {
  * 判定一次拖拽的落点，返回 null 表示「不接受这次落点」。
  *
  * 规则：
- * ① **同栏不接收** —— 栏内挪动不是传输，跨栏才是。返回 null 让调用方
- *    把高亮撤掉。
+ * ① **同栏默认不接收** —— 栏内挪动不是传输。唯一例外是**远程 → 远程**：
+ *    同一台服务器内的挪动走服务端 `mv`（拖 = 移动，复制走右键菜单），
+ *    本地栏不提供（本地文件操作有资源管理器与本机 shell）。
  * ② 落在**目录条目**上 → 进那个目录（最常用：拖到文件夹里）。
  * ③ 落在**文件条目**上 → 落到所在栏当前目录（不覆盖同名文件）。
  * ④ 落在**空白处** → 落到所在栏当前目录。
@@ -60,8 +61,13 @@ export type DropProbe = {
 export function resolveDropTarget(
   probe: DropProbe
 ): DropTarget | null {
-  // ① 同栏：不是传输
-  if (probe.from === probe.pane) return null;
+  // ① 同栏：本地栏不是传输；远程栏例外（服务端挪动）
+  if (
+    probe.from === probe.pane &&
+    probe.from !== "remote"
+  ) {
+    return null;
+  }
   // 所在栏还没加载出目录，没法作为落点
   if (!probe.panePath) return null;
   // ② 目录条目：落进它

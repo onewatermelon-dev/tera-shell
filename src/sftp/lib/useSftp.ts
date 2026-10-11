@@ -70,6 +70,9 @@ export function useSftp(
   const remoteUsagePathRef = useRef<
     string | null
   >(null);
+  // 底部进度条：远程 exec 类操作（复制/挪动/压缩/解压）进行中的文案
+  const [remoteOpLabel, setRemoteOpLabel] =
+    useState<string | null>(null);
   // 复制 / 粘贴用的内部剪贴板（记来源栏与一批条目，粘贴时才真正执行）
   const [clipboard, setClipboard] = useState<{
     pane: PaneSide;
@@ -638,7 +641,119 @@ export function useSftp(
     []
   );
 
-  /** 粘贴：同栏走本地复制（逐条，完成后刷新一次），跨栏走批量传输。 */
+  /**
+   * 乐观改写远程当前目录的条目列表。
+   *
+   * 高延迟链路下一次 readdir 要 0.6~1.6s（日志实测），复制/挪动后
+   * 等它对账体感很差：先按已知结果改本地列表立即呈现，随后台的
+   * 强制刷新（refresh=true，会顺带更新后端目录缓存）再对账。
+   */
+  const patchRemoteEntries = useCallback(
+    (
+      update: (
+        entries: PaneEntry[]
+      ) => PaneEntry[]
+    ) => {
+      setRemote(previous =>
+        previous
+          ? {
+              ...previous,
+              entries: update(previous.entries)
+            }
+          : previous
+      );
+    },
+    []
+  );
+
+  /**
+   * 远程同服务器文件操作：copy（cp -a 复制）或 move（mv 挪动）。
+   *
+   * 服务端自己执行，数据不过本机。成功后**乐观更新**当前列表
+   * （挪动=移除条目，复制=插入占位条目）立即呈现，再后台强制
+   * 刷新对账（顺带更新后端目录缓存，防止普通导航读到旧缓存）。
+   * ⚠️ 刷新可能被 remoteBusyRef 守卫丢掉，那段时间占位元数据
+   * （size=0）会多留一会儿，下次任意刷新自然修正。
+   */
+  const remoteFileOp = useCallback(
+    async (
+      mode: "copy" | "move",
+      entries: PaneEntry[],
+      targetDir: string
+    ) => {
+      if (!entries.length) return;
+      setRemoteOpLabel(
+        mode === "copy"
+          ? `正在复制 ${entries.length} 项…`
+          : `正在挪动 ${entries.length} 项…`
+      );
+      try {
+        const connection =
+          await remoteConnection();
+        await invoke("sftp_remote_fs", {
+          job: {
+            ...connection,
+            local: "",
+            remote: entries[0]?.path ?? ""
+          },
+          mode,
+          paths: entries.map(entry => entry.path),
+          targetDir
+        });
+        if (mode === "move") {
+          // 挪走 = 从当前列表移除（拖拽的来源一定是当前目录）
+          const moved = new Set(
+            entries.map(entry => entry.path)
+          );
+          patchRemoteEntries(previous =>
+            previous.filter(
+              entry => !moved.has(entry.path)
+            )
+          );
+        } else {
+          // 复制 = 在目标目录（即当前目录）插入占位条目，
+          // size/mtime 未知先置空，刷新对账后变成真实值
+          patchRemoteEntries(previous => [
+            ...previous,
+            ...entries.map(entry => ({
+              name: entry.name,
+              path: joinPath(
+                targetDir,
+                entry.name
+              ),
+              isDir: entry.isDir,
+              size: 0,
+              modified: null,
+              perm: null,
+              owner: null,
+              group: null,
+              iconKey: entry.isDir
+                ? "dir"
+                : (entry.iconKey ?? undefined)
+            }))
+          ]);
+        }
+        if (session) {
+          void navigateRemote(
+            session as SavedSession,
+            remote?.path,
+            true
+          );
+        }
+      } finally {
+        setRemoteOpLabel(null);
+      }
+    },
+    [
+      remoteConnection,
+      session,
+      remote?.path,
+      patchRemoteEntries,
+      navigateRemote
+    ]
+  );
+
+  /** 粘贴：同栏走本地复制 / 服务端 cp，跨栏走批量传输。 */
   const pasteInto = useCallback(
     async (
       pane: PaneSide,
@@ -646,10 +761,18 @@ export function useSftp(
     ) => {
       if (!clipboard?.entries.length) return;
       if (clipboard.pane === pane) {
-        if (pane !== "local") {
-          throw new Error(
-            "远程之间的复制暂不支持"
+        if (pane === "remote") {
+          // 远程 → 远程：服务端 cp -a，数据不过本机
+          const directory = remote?.path;
+          if (!directory) {
+            throw new Error("远程目录尚未加载");
+          }
+          await remoteFileOp(
+            "copy",
+            clipboard.entries,
+            directory
           );
+          return;
         }
         const directory = local?.path;
         if (!directory) {
@@ -684,6 +807,7 @@ export function useSftp(
       local?.path,
       remote?.path,
       navigateLocal,
+      remoteFileOp,
       transferEntries
     ]
   );
@@ -699,23 +823,33 @@ export function useSftp(
       paths: string[],
       target: string
     ) => {
-      const connection = await remoteConnection();
-      await invoke("sftp_archive", {
-        job: {
-          ...connection,
-          local: "",
-          remote: paths[0] ?? ""
-        },
-        mode,
-        paths,
-        target
-      });
-      if (session) {
-        void navigateRemote(
-          session as SavedSession,
-          remote?.path,
-          true
-        );
+      setRemoteOpLabel(
+        mode === "compress"
+          ? `正在压缩 ${paths.length} 项…`
+          : "正在解压…"
+      );
+      try {
+        const connection =
+          await remoteConnection();
+        await invoke("sftp_archive", {
+          job: {
+            ...connection,
+            local: "",
+            remote: paths[0] ?? ""
+          },
+          mode,
+          paths,
+          target
+        });
+        if (session) {
+          void navigateRemote(
+            session as SavedSession,
+            remote?.path,
+            true
+          );
+        }
+      } finally {
+        setRemoteOpLabel(null);
       }
     },
     [
@@ -774,7 +908,9 @@ export function useSftp(
       bookmarks,
       toggleBookmark,
       removeBookmark,
-      archiveEntries
+      archiveEntries,
+      remoteFileOp,
+      remoteOpLabel
     }),
     [
       session,
@@ -804,7 +940,9 @@ export function useSftp(
       bookmarks,
       toggleBookmark,
       removeBookmark,
-      archiveEntries
+      archiveEntries,
+      remoteFileOp,
+      remoteOpLabel
     ]
   );
 }
