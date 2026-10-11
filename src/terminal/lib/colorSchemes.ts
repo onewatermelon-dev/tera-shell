@@ -91,24 +91,27 @@ export function resolveColorScheme(
 /**
  * 自绘选区覆盖层用的 CSS `background` 值。
  *
+ * ## ⚠️ 第二个参数**必须是 transparent**，不能是背景色
+ *
+ * 踩过这个坑（症状：用户报「划词的时候看不到文字」——色块明显，
+ * 字全没了）：`color-mix(in srgb, A 45%, 背景色)` 混出来是**完全不透明**的
+ * 色块，叠在终端文字上就把字盖死了。必须写 `color-mix(in srgb, A 45%,
+ * transparent)` —— 选区色本身带 45% 透明度，文字从底下透出来。
+ *
+ * 之所以曾经想混背景色，是想让「亮色方案不因深灰选区而压没黑字」——
+ * 但正确解法就是**降低 alpha**，而不是换混什么。alpha 透明是等效的，
+ * 且对任何底色都成立。
+ *
  * ## 为什么要自己算，而不是直接用 `selectionBackground`
  *
  * 数据里 463 个方案的选区色**全部有值且全不透明**（`#a5a2a2` 这种）。
- * 直接铺上去会把底下的字符糊掉 —— 尤其亮色方案配浅灰选区，文字直接
- * 消失。所以必须叠一个透明度。
- *
- * ## 怎么叠
- *
- * 用 `color-mix` 把选区色按 alpha 混进**终端背景色**：这样高亮区域
- * 的观感就是「在底色上盖一层这个方案自己的选区色」，亮色方案不会因为
- * 选了深灰选区而把黑字压没了。
+ * 直接铺上去必然遮住字符。
  *
  * ## 为什么要留前景色回退
  *
- * 少数方案（如内置默认的 Tera Shell）`selectionBackground` 是空串 ——
- * 数据源本身没给。这种情况回退到原来的做法：**前景色 30% 透明**。
- * 同色叠加不改变文字明暗结构，任何主题下被选文字都清晰（这是选区色
- * 缺失时最保守的选择）。
+ * 少数方案 `selectionBackground` 是空串 —— 数据源本身没给。回退到
+ * **前景色 30% 透明**：同色叠加不改变文字明暗结构，任何主题下被选文字
+ * 都清晰（选区色缺失时最保守的选择）。
  *
  * @param scheme 当前配色方案
  */
@@ -119,7 +122,7 @@ export function toSelectionCss(
     scheme.selectionBackground.trim();
   if (!selection)
     return `color-mix(in srgb, ${scheme.foreground} 30%, transparent)`;
-  return `color-mix(in srgb, ${selection} 45%, ${scheme.background})`;
+  return `color-mix(in srgb, ${selection} 45%, transparent)`;
 }
 
 /**

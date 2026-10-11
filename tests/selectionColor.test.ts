@@ -81,17 +81,33 @@ describe("toSelectionCss", () => {
     DEFAULT_COLOR_SCHEME
   );
 
-  it("有选区色时用选区色，并混入终端背景（保证文字不被压没）", () => {
+  it("有选区色时用选区色，且**必须混 transparent**（不透明色块会遮死文字）", () => {
     const result = toSelectionCss(scheme);
     expect(result).toContain(
       "color-mix(in srgb,"
     );
-    // 选区色与背景色都要出现在表达式里
-    expect(result).toContain(scheme.background);
-    if (scheme.selectionBackground)
-      expect(result).toContain(
-        scheme.selectionBackground
-      );
+    expect(result).toContain(
+      scheme.selectionBackground
+    );
+    // ⚠️ 这条是本用例的核心：第二个参数写成背景色会混出不透明色块，
+    // 叠在终端文字上字就没了（用户报「划词的时候看不到文字」）
+    expect(
+      result,
+      "第二个参数必须是 transparent，不能是背景色"
+    ).toMatch(/,\s*transparent\)$/);
+    expect(result).not.toContain(
+      scheme.background
+    );
+  });
+
+  it("任何配色方案算出的表达式都带透明度（不能有不透明色块）", () => {
+    // 全 463 套一起验：只要有一套漏了 transparent，那个主题下就看不见字
+    for (const s of COLOR_SCHEMES) {
+      expect(
+        toSelectionCss(s),
+        `${s.name} 的选区色不透明，会遮住文字`
+      ).toMatch(/,\s*transparent\)$/);
+    }
   });
 
   it("选区色缺失时回退到前景色半透明", () => {
@@ -111,13 +127,20 @@ describe("toSelectionCss", () => {
     expect(fallback).toContain("transparent");
   });
 
-  it("全部 463 个方案都能算出合法表达式，不抛错", () => {
+  it("全部 463 个方案都能算出合法且带透明度的表达式", () => {
+    // 全量验两件事：① 表达式格式合法 ② **必须以 transparent 结尾**。
+    // 只要有一套漏了 transparency，那个主题下划词就看不见字 ——
+    // 这是真实的线上事故（用户报「划词的时候看不到文字」）
     for (const s of COLOR_SCHEMES) {
       const result = toSelectionCss(s);
       expect(
         result,
         `${s.name} 算出的表达式不合法`
       ).toMatch(/^color-mix\(in srgb, .+\)$/);
+      expect(
+        result,
+        `${s.name} 的选区色不透明，会遮住文字`
+      ).toMatch(/,\s*transparent\)$/);
     }
   });
 

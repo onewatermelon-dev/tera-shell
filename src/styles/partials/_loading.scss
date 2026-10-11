@@ -116,10 +116,26 @@ button:active {
 }
 
 // xterm 的原生跨行选区会填满中间行；该覆盖层按每行实际文字宽度重新绘制高亮。
+// ⚠️⚠️ **覆盖层必须在 WebGL canvas 之上**，否则选区会把文字盖住
+// （用户报「划词看不到文字内容了」）。
+// 成因是**子元素顺序**：本覆盖层在 `createTerminal` 时就 append 进
+// `.xterm-screen`，而 WebGL 的 canvas 是 `open()` 之后才由 addon 加进去
+// —— 同层级、都没有 z-index 时**后加入的 canvas 排在上面**（DOM 渲染器
+// 下没有 canvas，文字是 HTML 元素，所以之前一直正常）。
+// 解决：给 canvas 显式 z-index 0，把 0 以下的层级空出来给覆盖层。
+// ⚠️ canvas 画的是**不透明**背景（addon 用 theme 的 backgroundColorRGB），
+// 所以这不是「顺序难看」而是**选区色块把文字整个遮住**。
+.xterm .xterm-screen canvas {
+  z-index: 0;
+}
 
 .terminal-selection-overlay {
   position: absolute;
   inset: 0;
+
+  // ⚠️ 必须大于 canvas 的 0（见上）。取 5 是沿用原值，语义是
+  // 「压在渲染层之上、压在 xterm 自己的 decoration 层（6/7）之下」——
+  // ghost text 等 xterm 装饰要能画在选区之上。
   z-index: 5;
   pointer-events: none;
 }

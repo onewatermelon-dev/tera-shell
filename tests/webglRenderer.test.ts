@@ -127,31 +127,74 @@ describe("选区覆盖层与 WebGL 的兼容", () => {
     css = sass.compile("src/styles/app.scss").css;
   });
 
-  /**
-   * WebGL 的 canvas 是 `position:absolute` 且**没有 z-index**（auto），
-   * 与自绘选区覆盖层同为 `.xterm-screen` 的子元素。谁在上层完全取决于
-   * z-index：没有它，覆盖层会被 canvas 盖住 → 鼠标框选看不见高亮。
-   *
-   * 这条曾是个真实风险点：DOM 渲染器下 `.xterm-rows` 没有定位，
-   * 覆盖层靠文档顺序就够；换了 canvas 就必须显式压住。
-   */
-  it("覆盖层有 z-index，能盖在 WebGL canvas 之上", () => {
-    const escaped =
-      "\\.terminal-selection-overlay";
+  /** 取出某条选择器的声明块（编译后是展开格式）。 */
+  function ruleOf(selector: string): string {
+    const escaped = selector.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
     const re = new RegExp(
       `(?:^|[},])\\s*${escaped}\\s*(?:,[^{]*)?\\{([^}]*)\\}`,
       "g"
     );
-    const blocks = [...css.matchAll(re)].map(
-      m => m[1] ?? ""
+    return [...css.matchAll(re)]
+      .map(m => m[1] ?? "")
+      .join("\n");
+  }
+
+  /**
+   * 划词选区必须画在 WebGL canvas **之上**，否则色块会盖住文字
+   *（用户报「划词的看不到文字内容了」）。
+   *
+   * 成因是**子元素顺序**：覆盖层在 createTerminal 时就 append 进
+   * `.xterm-screen`，canvas 是 open() 之后才由 addon 加进去 ——
+   * 同层级都没 z-index 时，后加入的 canvas 排上面。DOM 渲染器下没有
+   * canvas（文字是 HTML 元素），所以之前一直正常。
+   */
+  it("canvas 有显式 z-index，覆盖层的 z-index 更大", () => {
+    const canvasRule = ruleOf(
+      ".xterm .xterm-screen canvas"
     );
+    const overlayRule = ruleOf(
+      ".terminal-selection-overlay"
+    );
+    // 从声明里抠出 z-index 的数值（正则里的 \s 要转义，用 RegExp 构造避开）
+    const zOf = (rule: string): number => {
+      const matched = new RegExp(
+        "z-index:\\s*(\\d+)"
+      ).exec(rule);
+      return matched ? Number(matched[1]) : -1;
+    };
     expect(
-      blocks.length,
-      "没找到 .terminal-selection-overlay 的规则"
-    ).toBeGreaterThan(0);
-    expect(blocks.join("\n")).toMatch(
-      /z-index:\s*\d+/
+      canvasRule,
+      "canvas 没有显式 z-index —— 覆盖层会被它盖住"
+    ).toContain("z-index");
+    expect(
+      zOf(canvasRule),
+      "canvas z-index 应为 0"
+    ).toBe(0);
+    expect(
+      zOf(overlayRule),
+      "覆盖层 z-index 应为 5"
+    ).toBe(5);
+    expect(
+      zOf(overlayRule),
+      "覆盖层 z-index 必须大于 canvas，否则选区遮住文字"
+    ).toBeGreaterThan(zOf(canvasRule));
+  });
+
+  it("覆盖层仍压在 xterm 自己的 decoration 层之下（ghost text 要能画在选区上）", () => {
+    // xterm 的 decoration 是 6/7（见 xterm.css），覆盖层取 5 刚好在下方
+    const overlayRule = ruleOf(
+      ".terminal-selection-overlay"
     );
+    const matched = new RegExp(
+      "z-index:\\s*(\\d+)"
+    ).exec(overlayRule);
+    const overlayZ = matched
+      ? Number(matched[1])
+      : 99;
+    expect(overlayZ).toBeLessThan(6);
   });
 
   it("AppHeader 不含 WebGL 相关逻辑（渲染器归 useTerminals 管）", () => {
