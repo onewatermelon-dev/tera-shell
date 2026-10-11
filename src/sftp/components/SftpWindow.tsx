@@ -194,6 +194,35 @@ export default function SftpWindow({
               await sftp.removeEntry(pane, entry);
             }
             break;
+          case "compress":
+          case "extract": {
+            // 仅远程栏有归档菜单；压缩包落在当前目录下
+            if (
+              !entries.length ||
+              pane !== "remote"
+            )
+              break;
+            const directory = sftp.remote?.path;
+            if (!directory) {
+              throw new Error("远程目录尚未加载");
+            }
+            const archiveName =
+              action === "compress"
+                ? entries.length === 1
+                  ? `${entries[0]!.name}.tar.gz`
+                  : "archive.tar.gz"
+                : "";
+            const paths =
+              action === "compress"
+                ? entries.map(item => item.path)
+                : [entries[0]!.path];
+            await sftp.archiveEntries(
+              action,
+              paths,
+              `${directory}/${archiveName}`
+            );
+            break;
+          }
           case "transfer":
             // 单项也走批量通道：目标目录与逐条任务逻辑同源
             if (entries.length) {

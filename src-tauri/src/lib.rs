@@ -74,6 +74,7 @@ pub fn run() {
             sftp::upload,
             sftp::download,
             sftp::disk_usage,
+            sftp::archive,
             debug_log,
             sftp::make_remote_dir,
             sftp::create_remote_file,

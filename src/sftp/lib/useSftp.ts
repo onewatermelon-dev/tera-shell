@@ -688,6 +688,44 @@ export function useSftp(
     ]
   );
 
+  /**
+   * 远程归档：compress（tar.gz 打包）或 extract（解压到所在目录）。
+   *
+   * 后端走 exec 通道跑 tar / unzip；成功后强制刷新远程当前目录。
+   */
+  const archiveEntries = useCallback(
+    async (
+      mode: "compress" | "extract",
+      paths: string[],
+      target: string
+    ) => {
+      const connection = await remoteConnection();
+      await invoke("sftp_archive", {
+        job: {
+          ...connection,
+          local: "",
+          remote: paths[0] ?? ""
+        },
+        mode,
+        paths,
+        target
+      });
+      if (session) {
+        void navigateRemote(
+          session as SavedSession,
+          remote?.path,
+          true
+        );
+      }
+    },
+    [
+      remoteConnection,
+      session,
+      remote?.path,
+      navigateRemote
+    ]
+  );
+
   // 首屏：挂载（或换会话）时拉两侧目录。
   // 依赖都是稳定的 useCallback，因此只在会话变化时重新加载。
   useEffect(() => {
@@ -735,7 +773,8 @@ export function useSftp(
       controlTransfer,
       bookmarks,
       toggleBookmark,
-      removeBookmark
+      removeBookmark,
+      archiveEntries
     }),
     [
       session,
@@ -764,7 +803,8 @@ export function useSftp(
       controlTransfer,
       bookmarks,
       toggleBookmark,
-      removeBookmark
+      removeBookmark,
+      archiveEntries
     ]
   );
 }

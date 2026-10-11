@@ -337,3 +337,17 @@ export function pathsToTerminalText(
     .map(entry => quote(entry.path))
     .join(" ");
 }
+
+/**
+ * 文件名是否是右键菜单可解压的压缩包。
+ *
+ * tar 系按扩展名识别（后端 `tar -xf` 也靠它自动选解压方式），
+ * zip 单列 —— 两者的解压命令不同（tar / unzip）。
+ */
+export function isArchiveName(
+  name: string
+): boolean {
+  return /\.(tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip)$/i.test(
+    name
+  );
+}

@@ -1393,11 +1393,14 @@ fn shell_quote(value: &str) -> String {
 	format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-/// 在连接的会话上执行一条 shell 命令并收集 stdout。
+/// 在连接的会话上执行一条 shell 命令。
+///
+/// 返回 (stdout, stderr, 退出码)：archive 这类操作要靠退出码与
+/// stderr 报错，df/du 那类只看 stdout。
 fn exec_output(
 	session: &Arc<Mutex<Session>>,
 	command: &str,
-) -> Result<String, String> {
+) -> Result<(String, String, i32), String> {
 	let mut channel = session
 		.lock()
 		.unwrap_or_else(|error| error.into_inner())
@@ -1408,12 +1411,18 @@ fn exec_output(
 	channel
 		.exec(command)
 		.map_err(|error| format!("执行命令失败：{error}"))?;
-	let mut output = String::new();
+	let mut stdout = String::new();
 	channel
-		.read_to_string(&mut output)
+		.read_to_string(&mut stdout)
 		.map_err(|error| format!("读取命令输出失败：{error}"))?;
+	let mut stderr = String::new();
+	channel
+		.stderr()
+		.read_to_string(&mut stderr)
+		.map_err(|error| format!("读取命令错误输出失败：{error}"))?;
 	let _ = channel.wait_close();
-	Ok(output)
+	let status = channel.exit_status().unwrap_or(-1);
+	Ok((stdout, stderr, status))
 }
 
 /// 解析 `df -P -k` 最后一条数据行：返回 (总容量, 可用) 字节数。
@@ -1481,26 +1490,143 @@ pub async fn disk_usage(
 			password.as_deref(),
 		)?;
 		let quoted = shell_quote(&remote);
+		let (df_output, _, _) = exec_output(
+			&connection.session,
+			&format!("df -P -k {quoted}"),
+		)?;
 		let (total_bytes, free_bytes) =
-			parse_df(&exec_output(
-				&connection.session,
-				&format!("df -P -k {quoted}"),
-			)?)
-			.ok_or_else(|| {
-				"无法解析 df 输出".to_string()
-			})?;
+			parse_df(&df_output)
+				.ok_or_else(|| {
+					"无法解析 df 输出".to_string()
+				})?;
 		let dir_bytes = exec_output(
 			&connection.session,
 			&format!("du -s -k {quoted}"),
 		)
 		.ok()
-		.and_then(|output| parse_du(&output))
+		.and_then(|(output, _, _)| parse_du(&output))
 		.unwrap_or(0);
 		Ok(RemoteDiskUsage {
 			total_bytes,
 			free_bytes,
 			dir_bytes,
 		})
+	})
+	.await
+	.map_err(|error| error.to_string())?
+}
+
+/// 远程归档：compress = tar.gz 打包，extract = 按扩展名解压到所在目录。
+///
+/// 走同一条会话的 exec 通道跑 tar / unzip（远程解压没有协议级支持）。
+/// tar 几乎每台服务器都有所以压缩只出 tar.gz；解压按扩展名分流，
+/// zip 交给 unzip（最小化安装经常没有，失败会带 stderr 报出来）。
+#[tauri::command(rename = "sftp_archive")]
+pub async fn archive(
+	pool: State<'_, SftpPool>,
+	job: TransferJob,
+	mode: String,
+	paths: Vec<String>,
+	target: String,
+) -> Result<(), String> {
+	let connections = pool.connections.clone();
+	let (key, host, port, username, password) =
+		transfer_target(&job);
+	tauri::async_runtime::spawn_blocking(move || {
+		let connection = obtain(
+			&connections,
+			&key,
+			&host,
+			port,
+			&username,
+			password.as_deref(),
+		)?;
+		let command = match mode.as_str() {
+			"compress" => {
+				if paths.is_empty() {
+					return Err("没有要压缩的条目".into());
+				}
+				// 逐条 `-C 父目录 相对名`：成员路径不带绝对前缀。
+				// 绝对路径会被 tar 剥掉首斜杠（成员变成 root/...），
+				// 解包时 -C 指定的目录下会多出一层宿主路径。
+				let mut parts: Vec<String> = Vec::new();
+				for path in &paths {
+					let file = Path::new(path);
+					let dir = file
+						.parent()
+						.unwrap_or(Path::new("."))
+						.to_string_lossy()
+						.into_owned();
+					let name = file
+						.file_name()
+						.map(|value| {
+							value.to_string_lossy().into_owned()
+						})
+						.ok_or("路径没有文件名")?;
+					parts.push(format!(
+						"-C {} {}",
+						shell_quote(&dir),
+						shell_quote(&name)
+					));
+				}
+				format!(
+					"tar -czf {} {}",
+					shell_quote(&target),
+					parts.join(" ")
+				)
+			}
+			"extract" => {
+				let archive = paths
+					.first()
+					.ok_or("没有要解压的文件")?;
+				// 解到压缩包所在目录（= 触发操作时的当前目录）
+				let dir = Path::new(archive)
+					.parent()
+					.unwrap_or(Path::new("."))
+					.to_string_lossy()
+					.into_owned();
+				if archive.to_lowercase().ends_with(".zip") {
+					format!(
+						"unzip -o {} -d {}",
+						shell_quote(archive),
+						shell_quote(&dir)
+					)
+				} else {
+					// tar -f 自动识别 gz/bz2/xz 压缩
+					format!(
+						"tar -xf {} -C {}",
+						shell_quote(archive),
+						shell_quote(&dir)
+					)
+				}
+			}
+			_ => {
+				return Err(format!(
+					"未知归档操作：{mode}"
+				))
+			}
+		};
+		let (stdout, stderr, status) =
+			exec_output(&connection.session, &command)?;
+		info!(
+			mode = %mode,
+			status,
+			stdout = %stdout.trim(),
+			stderr = %stderr.trim(),
+			command = %command,
+			"远程归档执行结束"
+		);
+		if status != 0 {
+			let reason = if stderr.trim().is_empty() {
+				stdout.trim()
+			} else {
+				stderr.trim()
+			};
+			return Err(format!(
+				"命令失败（退出码 {status}）：{reason}"
+			));
+		}
+		Ok(())
 	})
 	.await
 	.map_err(|error| error.to_string())?

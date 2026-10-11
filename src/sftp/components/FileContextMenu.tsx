@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PaneEntry } from "@/sftp/lib/useSftp";
+import { isArchiveName } from "@/sftp/lib/sftpUtils";
 
 /** 菜单与视口边缘之间保留的间隙。 */
 const VIEWPORT_MARGIN = 8;
@@ -14,6 +15,8 @@ export type FileAction =
   | "chmod"
   | "rename"
   | "create"
+  | "compress"
+  | "extract"
   | "delete";
 
 type FileContextMenuProps = {
@@ -146,6 +149,15 @@ export default function FileContextMenu({
       // 新建不需要选中条目，删到当前目录下即可
       case "create":
         return false;
+      // 远程归档：压缩对单选 / 多选都可用，解压只对压缩包文件有效
+      case "compress":
+        return !entry;
+      case "extract":
+        return !(
+          entry &&
+          count <= 1 &&
+          isArchiveName(entry.name)
+        );
       case "delete":
         return !entry;
     }
@@ -201,6 +213,20 @@ export default function FileContextMenu({
         entry?.isDir ? "重命名文件夹" : "重命名"
       )}
       {renderItem("create", "新建")}
+      {/* 远程归档是 shell 操作（tar / unzip），本地栏不提供 */}
+      {!isLocal && (
+        <>
+          <div className="context-menu-separator" />
+          {renderItem(
+            "compress",
+            "压缩为 tar.gz"
+          )}
+          {renderItem(
+            "extract",
+            "解压到当前目录"
+          )}
+        </>
+      )}
       <div className="context-menu-separator" />
       {renderItem("delete", "删除")}
     </div>
