@@ -13,7 +13,8 @@ import {
   type PaneEntry,
   type PaneListing,
   type PaneSide,
-  type TransferControlAction
+  type TransferControlAction,
+  type TransferPolicy
 } from "@/sftp/lib/sftpUtils";
 import { useTransferTasks } from "@/sftp/lib/useTransferTasks";
 import {
@@ -31,6 +32,7 @@ export type {
   PaneSide,
   TransferControlAction,
   TransferDirection,
+  TransferPolicy,
   TransferStatus,
   TransferTask
 } from "@/sftp/lib/sftpUtils";
@@ -230,90 +232,16 @@ export function useSftp(
     [remoteConnection]
   );
 
-  /** 传输：本地文件上到远程当前目录，远程文件下到本地当前目录。 */
-  const transferFile = useCallback(
-    async (pane: PaneSide, entry: PaneEntry) => {
-      const connection = await remoteConnection();
-      const directory =
-        pane === "local"
-          ? remote?.path
-          : local?.path;
-      if (!directory) {
-        throw new Error(
-          pane === "local"
-            ? "远程目录尚未加载，无法上传"
-            : "本地目录尚未加载，无法下载"
-        );
-      }
-      // 任务 id 前后端共用：先登记再调用，进度事件才有行可更新
-      const id = tasks.registerTask(
-        entry.name,
-        pane === "local" ? "upload" : "download",
-        entry.size
-      );
-      try {
-        if (pane === "local") {
-          await invoke("sftp_upload", {
-            job: {
-              ...connection,
-              id,
-              local: entry.path,
-              remote: joinPath(
-                directory,
-                entry.name
-              )
-            }
-          });
-        } else {
-          await invoke("sftp_download", {
-            job: {
-              ...connection,
-              id,
-              remote: entry.path,
-              local: joinPath(
-                directory,
-                entry.name
-              )
-            }
-          });
-        }
-      } catch (reason) {
-        // 取消是用户主动行为，不算失败也不往上抛
-        if (tasks.failTask(id, String(reason)))
-          return;
-        throw reason;
-      }
-      tasks.finishTask(id);
-      // 目标目录刷新一次，新文件立刻可见
-      if (pane === "local") {
-        void navigateRemote(
-          session as SavedSession,
-          directory,
-          true
-        );
-      } else {
-        void navigateLocal(directory);
-      }
-    },
-    [
-      remoteConnection,
-      remote?.path,
-      local?.path,
-      session,
-      tasks,
-      navigateRemote,
-      navigateLocal
-    ]
-  );
-
   /**
-   * 批量传输：把一批条目从来源栏传到目标栏的指定目录（拖拽用）。
+   * 批量传输：把一批条目从来源栏传到目标栏的指定目录（拖拽 / 右键传输 / 跨栏粘贴共用）。
    *
-   * 与 `transferFile` 的区别有两个：
    * ① **目标目录显式传入** —— 拖拽可以落在子目录里，右键菜单的"传输"
    *    永远只传到另一栏的当前目录；
    * ② **不吞异常** —— 单个条目失败不该中断整批，逐个记 console 即可
-   *    （传输面板里每条任务各自有成败状态）。
+   *    （传输面板里每条任务各自有成败状态）；
+   * ③ **冲突策略** 随 job 传给后端，目录递归里的每个文件都会过一遍；
+   *    策略为"跳过"时，顶层冲突条目在这里就地剔除，不给它们登记
+   *    注定 0 字节的死任务（目录仍保留，其内部的冲突由后端兜底）。
    *
    * ⚠️ `joinPath` 会沿用目录的分隔符：本地 Windows 是 `\`、远程是 `/`，
    * 传错目录会让拼接结果不对，所以这里不加工序，直接交给它判断。
@@ -322,14 +250,32 @@ export function useSftp(
     async (
       from: PaneSide,
       entries: PaneEntry[],
-      directory: string
+      directory: string,
+      policy: TransferPolicy = "overwrite"
     ) => {
       if (entries.length === 0) return;
       if (!directory) {
         throw new Error("目标目录尚未加载");
       }
+      // 跳过策略：顶层冲突不进队列（后端对目录内部仍有兜底）
+      let pending = entries;
+      if (policy === "skip") {
+        const targetEntries =
+          from === "local"
+            ? remote?.entries
+            : local?.entries;
+        if (targetEntries?.length) {
+          const names = new Set(
+            targetEntries.map(entry => entry.name)
+          );
+          pending = entries.filter(
+            entry => !names.has(entry.name)
+          );
+          if (pending.length === 0) return;
+        }
+      }
       const connection = await remoteConnection();
-      for (const entry of entries) {
+      for (const entry of pending) {
         const id = tasks.registerTask(
           entry.name,
           from === "local"
@@ -347,7 +293,8 @@ export function useSftp(
                 remote: joinPath(
                   directory,
                   entry.name
-                )
+                ),
+                policy
               }
             });
           } else {
@@ -359,7 +306,8 @@ export function useSftp(
                 local: joinPath(
                   directory,
                   entry.name
-                )
+                ),
+                policy
               }
             });
           }
@@ -389,6 +337,8 @@ export function useSftp(
     },
     [
       remoteConnection,
+      remote?.entries,
+      local?.entries,
       tasks,
       navigateRemote,
       navigateLocal,
@@ -649,7 +599,10 @@ export function useSftp(
 
   /** 粘贴：同栏走本地复制（逐条，完成后刷新一次），跨栏走批量传输。 */
   const pasteInto = useCallback(
-    async (pane: PaneSide) => {
+    async (
+      pane: PaneSide,
+      policy: TransferPolicy = "overwrite"
+    ) => {
       if (!clipboard?.entries.length) return;
       if (clipboard.pane === pane) {
         if (pane !== "local") {
@@ -681,7 +634,8 @@ export function useSftp(
       await transferEntries(
         clipboard.pane,
         clipboard.entries,
-        directory
+        directory,
+        policy
       );
     },
     [
@@ -718,11 +672,12 @@ export function useSftp(
       remoteError,
       remoteBusy,
       canPaste: clipboard !== null,
+      /** 内部剪贴板（跨栏粘贴的冲突检测要用来源条目清单） */
+      clipboard,
       transfers: tasks.transfers,
       navigateLocal,
       navigateRemote,
       openEntry,
-      transferFile,
       transferEntries,
       createEntry,
       removeEntry,
@@ -751,7 +706,6 @@ export function useSftp(
       navigateLocal,
       navigateRemote,
       openEntry,
-      transferFile,
       transferEntries,
       createEntry,
       removeEntry,

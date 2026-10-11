@@ -1,13 +1,26 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { SavedSession } from "@/sessions/lib/session";
 import { useSftp } from "@/sftp/lib/useSftp";
 import type {
   PaneEntry,
   PaneSide,
-  TransferControlAction
+  TransferControlAction,
+  TransferPolicy
 } from "@/sftp/lib/useSftp";
+import {
+  findCollisions,
+  hasResumable
+} from "@/sftp/lib/sftpUtils";
 import type { FileAction } from "@/sftp/components/FileContextMenu";
 import SftpPanel from "@/sftp/components/SftpPanel";
+import TransferPolicyDialog from "@/sftp/components/TransferPolicyDialog";
+
+/** 等用户选策略的一次跨栏传输：冲突清单 + 选定后的执行动作。 */
+type PendingTransfer = {
+  conflicts: PaneEntry[];
+  hasResume: boolean;
+  run: (policy: TransferPolicy) => void;
+};
 
 type SftpWindowProps = {
   /** 这个窗口绑定的会话（决定 SFTP 连到哪台机器） */
@@ -28,6 +41,48 @@ export default function SftpWindow({
   onError
 }: SftpWindowProps) {
   const sftp = useSftp(session);
+  // 等用户选策略的传输：有同名冲突时才挂起
+  const [pendingTransfer, setPendingTransfer] =
+    useState<PendingTransfer | null>(null);
+
+  /**
+   * 计划一次跨栏传输：目标栏当前列表有同名项时先弹策略对话框，
+   * 没有冲突直接按覆盖执行（= 旧行为）。
+   *
+   * `run` 由调用方闭包好"往哪传、传什么"，这里只负责拦与放。
+   */
+  const planCrossPane = useCallback(
+    (
+      from: PaneSide,
+      entries: PaneEntry[],
+      directory: string,
+      run: (policy: TransferPolicy) => void
+    ) => {
+      const targetListing =
+        from === "local"
+          ? sftp.remote
+          : sftp.local;
+      const conflicts = targetListing
+        ? findCollisions(
+            entries,
+            targetListing.entries
+          )
+        : [];
+      if (!conflicts.length || !targetListing) {
+        void run("overwrite");
+        return;
+      }
+      setPendingTransfer({
+        conflicts,
+        hasResume: hasResumable(
+          conflicts,
+          targetListing.entries
+        ),
+        run
+      });
+    },
+    [sftp.remote, sftp.local]
+  );
 
   /** 远程导航：会话与路径一起交给 hook（它负责解密密码）。 */
   const handleNavigateRemote = useCallback(
@@ -86,6 +141,43 @@ export default function SftpWindow({
               sftp.copyToClipboard(pane, entries);
             break;
           case "paste":
+            // 跨栏粘贴有同名冲突时也要过策略对话框；
+            // 同栏本地复制不走这条（fs_copy_path 行为不变）
+            if (
+              sftp.clipboard &&
+              sftp.clipboard.pane !== pane
+            ) {
+              const pasteTarget =
+                sftp.clipboard.pane === "local"
+                  ? sftp.remote
+                  : sftp.local;
+              const pasteConflicts = pasteTarget
+                ? findCollisions(
+                    sftp.clipboard.entries,
+                    pasteTarget.entries
+                  )
+                : [];
+              if (
+                pasteConflicts.length &&
+                pasteTarget
+              ) {
+                setPendingTransfer({
+                  conflicts: pasteConflicts,
+                  hasResume: hasResumable(
+                    pasteConflicts,
+                    pasteTarget.entries
+                  ),
+                  run: policy => {
+                    void sftp
+                      .pasteInto(pane, policy)
+                      .catch(reason =>
+                        onError(String(reason))
+                      );
+                  }
+                });
+                break;
+              }
+            }
             await sftp.pasteInto(pane);
             break;
           case "delete":
@@ -113,10 +205,22 @@ export default function SftpWindow({
                     : "本地目录尚未加载，无法下载"
                 );
               }
-              await sftp.transferEntries(
+              planCrossPane(
                 pane,
                 entries,
-                directory
+                directory,
+                policy => {
+                  void sftp
+                    .transferEntries(
+                      pane,
+                      entries,
+                      directory,
+                      policy
+                    )
+                    .catch(reason =>
+                      onError(String(reason))
+                    );
+                }
               );
             }
             break;
@@ -125,7 +229,7 @@ export default function SftpWindow({
         onError(String(reason));
       }
     },
-    [sftp, onError]
+    [sftp, onError, planCrossPane]
   );
 
   /** 新建对话框确认：在当前目录下创建文件夹或空文件。 */
@@ -190,51 +294,73 @@ export default function SftpWindow({
     [sftp, onError]
   );
 
-  /** 跨栏拖放落点：把条目传进目标目录。 */
+  /** 跨栏拖放落点：把条目传进目标目录（有同名冲突先弹策略框）。 */
   const handleDropEntries = useCallback(
-    async (
+    (
       from: PaneSide,
       entries: PaneEntry[],
       directory: string
     ) => {
-      try {
-        await sftp.transferEntries(
-          from,
-          entries,
-          directory
-        );
-      } catch (reason) {
-        onError(String(reason));
-      }
+      planCrossPane(
+        from,
+        entries,
+        directory,
+        policy => {
+          void sftp
+            .transferEntries(
+              from,
+              entries,
+              directory,
+              policy
+            )
+            .catch(reason =>
+              onError(String(reason))
+            );
+        }
+      );
     },
-    [sftp, onError]
+    [planCrossPane, sftp, onError]
   );
 
   return (
-    <SftpPanel
-      session={sftp.session}
-      local={sftp.local}
-      localError={sftp.localError}
-      remote={sftp.remote}
-      remoteError={sftp.remoteError}
-      remoteBusy={sftp.remoteBusy}
-      onNavigateLocal={sftp.navigateLocal}
-      onNavigateRemote={handleNavigateRemote}
-      onRefreshLocal={handleRefreshLocal}
-      onRefreshRemote={handleRefreshRemote}
-      canPaste={sftp.canPaste}
-      onFileAction={handleFileAction}
-      onCreateEntry={handleCreateEntry}
-      onRenameEntry={handleRenameEntry}
-      onChmodEntry={handleChmodEntry}
-      transfers={sftp.transfers}
-      onClearTransfers={sftp.clearTransfers}
-      onRemoveTransfers={sftp.removeTransfer}
-      onTransferControl={handleTransferControl}
-      bookmarks={sftp.bookmarks}
-      onToggleBookmark={sftp.toggleBookmark}
-      onRemoveBookmark={sftp.removeBookmark}
-      onDropEntries={handleDropEntries}
-    />
+    <>
+      <SftpPanel
+        session={sftp.session}
+        local={sftp.local}
+        localError={sftp.localError}
+        remote={sftp.remote}
+        remoteError={sftp.remoteError}
+        remoteBusy={sftp.remoteBusy}
+        onNavigateLocal={sftp.navigateLocal}
+        onNavigateRemote={handleNavigateRemote}
+        onRefreshLocal={handleRefreshLocal}
+        onRefreshRemote={handleRefreshRemote}
+        canPaste={sftp.canPaste}
+        onFileAction={handleFileAction}
+        onCreateEntry={handleCreateEntry}
+        onRenameEntry={handleRenameEntry}
+        onChmodEntry={handleChmodEntry}
+        transfers={sftp.transfers}
+        onClearTransfers={sftp.clearTransfers}
+        onRemoveTransfers={sftp.removeTransfer}
+        onTransferControl={handleTransferControl}
+        bookmarks={sftp.bookmarks}
+        onToggleBookmark={sftp.toggleBookmark}
+        onRemoveBookmark={sftp.removeBookmark}
+        onDropEntries={handleDropEntries}
+      />
+      {pendingTransfer && (
+        <TransferPolicyDialog
+          conflicts={pendingTransfer.conflicts}
+          hasResume={pendingTransfer.hasResume}
+          onDecide={policy => {
+            const run = pendingTransfer.run;
+            setPendingTransfer(null);
+            run(policy);
+          }}
+          onClose={() => setPendingTransfer(null)}
+        />
+      )}
+    </>
   );
 }

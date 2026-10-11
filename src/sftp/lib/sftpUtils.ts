@@ -19,6 +19,63 @@ export type TransferDirection =
 export type TransferControlAction =
   "pause" | "resume" | "cancel";
 
+/**
+ * 同名落点冲突策略。
+ *
+ * overwrite 截断重写（旧行为）；skip 跳过已存在的；
+ * rename 换 `a (1).txt` 相邻路径；resume 从目标已有字节数处接续。
+ */
+export type TransferPolicy =
+  "overwrite" | "skip" | "rename" | "resume";
+
+/**
+ * 找出与目标目录同名的顶层条目（要传的内容 vs 目标栏当前列表）。
+ *
+ * 只按名字判断，类型不一致（源是文件、目标同名是目录）也算冲突 ——
+ * 后端遇到这种落点必然报错，提前拦在对话框里。
+ */
+export function findCollisions(
+  entries: PaneEntry[],
+  targetListing: PaneEntry[]
+): PaneEntry[] {
+  if (!entries.length || !targetListing.length) {
+    return [];
+  }
+  const names = new Set(
+    targetListing.map(entry => entry.name)
+  );
+  return entries.filter(entry =>
+    names.has(entry.name)
+  );
+}
+
+/**
+ * 冲突里是否存在可续传项：目标同名**文件**比源小。
+ *
+ * 只有这种情况"续传"按钮才有意义 —— 目标更大说明内容对不上，
+ * 目标是目录则没有"续传"概念。
+ */
+export function hasResumable(
+  collisions: PaneEntry[],
+  targetListing: PaneEntry[]
+): boolean {
+  const sizes = new Map(
+    targetListing.map(entry => [
+      entry.name,
+      entry
+    ])
+  );
+  return collisions.some(entry => {
+    const target = sizes.get(entry.name);
+    return (
+      !!target &&
+      !target.isDir &&
+      !entry.isDir &&
+      target.size < entry.size
+    );
+  });
+}
+
 /** 目录条目：本地 `fs_list_dir` 与远程 `sftp_list` 返回同构数据。 */
 export type PaneEntry = {
   name: string;

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use ssh2::{KeyboardInteractivePrompt, Prompt, Session, Sftp};
 use std::{
 	collections::HashMap,
-	io::{Read, Write},
+	io::{Read, Seek, Write},
 	net::{TcpStream, ToSocketAddrs},
 	path::{Path, PathBuf},
 	sync::{
@@ -587,6 +587,100 @@ pub struct TransferJob {
 	/// 非传输类操作（新建 / 删除 / 权限）不传。
 	#[serde(default)]
 	id: String,
+	/// 同名冲突策略：overwrite（默认）/ skip / rename / resume。
+	/// 旧调用方不传此字段，按覆盖处理保持既有行为。
+	#[serde(default)]
+	policy: String,
+}
+
+/// 文件落点同名冲突时的处理策略。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TransferPolicy {
+	Overwrite,
+	Skip,
+	Rename,
+	Resume,
+}
+
+impl TransferPolicy {
+	fn from_job(value: &str) -> Self {
+		match value {
+			"skip" => Self::Skip,
+			"rename" => Self::Rename,
+			"resume" => Self::Resume,
+			_ => Self::Overwrite,
+		}
+	}
+}
+
+/// 同名冲突时生成不冲突的相邻路径：`a.txt → a (1).txt → a (2).txt`。
+///
+/// `exists` 是落点侧的存在性探测（远程用 stat，本地用 metadata）。
+/// 尝试上限 1000：正常情况第一个候选就命中，到上限兜底返回原路径
+/// 按覆盖处理，避免理论上的死循环。
+fn renamed_target(
+	target: &Path,
+	mut exists: impl FnMut(&Path) -> bool,
+) -> PathBuf {
+	if !exists(target) {
+		return target.to_path_buf();
+	}
+	let stem = target
+		.file_stem()
+		.map(|name| name.to_string_lossy().into_owned())
+		.unwrap_or_default();
+	let extension = target
+		.extension()
+		.map(|ext| ext.to_string_lossy().into_owned());
+	for index in 1..1000 {
+		let candidate = match &extension {
+			Some(ext) => target.with_file_name(format!(
+				"{stem} ({index}).{ext}"
+			)),
+			None => target.with_file_name(format!(
+				"{stem} ({index})"
+			)),
+		};
+		if !exists(&candidate) {
+			return candidate;
+		}
+	}
+	target.to_path_buf()
+}
+
+/// 策略决策核心：返回实际落点与起始偏移，`None` = 按策略跳过该文件。
+///
+/// 前置：落点不存在时一律正常传输（四种策略在此汇合）。落点已存在时：
+/// 覆盖 → 原路径从头写；跳过 → None；重命名 → 换相邻路径；
+/// 续传 → 目标不比源小时无事可做（None），比源小则从目标大小处接续。
+fn prepare_target(
+	policy: TransferPolicy,
+	target: &Path,
+	mut exists: impl FnMut(&Path) -> bool,
+	mut size_of: impl FnMut(&Path) -> Option<u64>,
+	source_len: u64,
+) -> Option<(PathBuf, u64)> {
+	if !exists(target) {
+		return Some((target.to_path_buf(), 0));
+	}
+	match policy {
+		TransferPolicy::Overwrite => {
+			Some((target.to_path_buf(), 0))
+		}
+		TransferPolicy::Skip => None,
+		TransferPolicy::Rename => Some((
+			renamed_target(target, &mut exists),
+			0,
+		)),
+		TransferPolicy::Resume => {
+			let done = size_of(target).unwrap_or(0);
+			if done >= source_len {
+				None
+			} else {
+				Some((target.to_path_buf(), done))
+			}
+		}
+	}
 }
 
 /// 传输进度事件名：前端 listen 这个频道更新任务面板。
@@ -737,8 +831,14 @@ pub async fn remove_remote_path(
 			let remote = Path::new(&job.remote);
 			// 先算总量，删除进度才有分母
 			let total = measure_remote(&connection.sftp, remote);
-			let mut context =
-				TransferContext::new(&app, &control, &id, total);
+			let mut context = TransferContext::new(
+				&app,
+				&control,
+				&id,
+				// 删除没有"落点冲突"概念，策略占位
+				TransferPolicy::Overwrite,
+				total,
+			);
 			remove_remote_recursive(
 				&connection.sftp,
 				remote,
@@ -968,6 +1068,8 @@ struct TransferContext<'a> {
 	app: &'a tauri::AppHandle,
 	control: &'a TransferControl,
 	id: &'a str,
+	/// 同名冲突策略（目录递归里的每个文件都要过一遍）
+	policy: TransferPolicy,
 	/// 总字节数（目录为递归求和结果）
 	total: u64,
 	/// 已传输字节数
@@ -983,17 +1085,54 @@ impl<'a> TransferContext<'a> {
 		app: &'a tauri::AppHandle,
 		control: &'a TransferControl,
 		id: &'a str,
+		policy: TransferPolicy,
 		total: u64,
 	) -> Self {
 		Self {
 			app,
 			control,
 			id,
+			policy,
 			total,
 			moved: 0,
 			reported: Instant::now(),
 			buffer: vec![0u8; CHUNK_SIZE],
 		}
+	}
+
+	/// 上传侧的策略决策：远程落点 + 起始偏移；None = 跳过该文件。
+	fn prepare_upload(
+		&self,
+		sftp: &Sftp,
+		source_len: u64,
+		target: &Path,
+	) -> Option<(PathBuf, u64)> {
+		prepare_target(
+			self.policy,
+			target,
+			|path| sftp.stat(path).is_ok(),
+			|path| sftp.stat(path).ok().and_then(|s| s.size),
+			source_len,
+		)
+	}
+
+	/// 下载侧的策略决策：本地落点 + 起始偏移；None = 跳过该文件。
+	fn prepare_download(
+		&self,
+		source_len: u64,
+		target: &Path,
+	) -> Option<(PathBuf, u64)> {
+		prepare_target(
+			self.policy,
+			target,
+			|path| path.exists(),
+			|path| {
+				std::fs::metadata(path)
+					.ok()
+					.map(|meta| meta.len())
+			},
+			source_len,
+		)
 	}
 
 	/// 上报一次进度。
@@ -1095,16 +1234,52 @@ impl<'a> TransferContext<'a> {
 			}
 			return Ok(());
 		}
+		// 同名冲突按策略处理：覆盖 / 跳过 / 重命名 / 断点续传
+		let Some((target_path, offset)) =
+			self.prepare_upload(sftp, metadata.len(), remote)
+		else {
+			return Ok(());
+		};
 		let mut source =
 			std::fs::File::open(local).map_err(|error| {
 				format!("读取 {} 失败：{error}", local.display())
 			})?;
-		let mut target = sftp.create(remote).map_err(|error| {
-			format!(
-				"创建远程文件 {} 失败：{error}",
-				remote.display()
-			)
-		})?;
+		let mut target = if offset > 0 {
+			// 续传：不带 TRUNCATE 打开已有文件，两侧都 seek 到断点；
+			// 已传过的部分计入进度，进度条才能到达 100%
+			let mut file = sftp
+				.open_mode(
+					&target_path,
+					ssh2::OpenFlags::WRITE
+						| ssh2::OpenFlags::CREATE,
+					0o644,
+					ssh2::OpenType::File,
+				)
+				.map_err(|error| {
+					format!(
+						"打开远程文件 {} 失败：{error}",
+						target_path.display()
+					)
+				})?;
+			file.seek(std::io::SeekFrom::Start(offset))
+				.map_err(|error| {
+					format!("定位续传偏移失败：{error}")
+				})?;
+			source
+				.seek(std::io::SeekFrom::Start(offset))
+				.map_err(|error| {
+					format!("定位续传偏移失败：{error}")
+				})?;
+			self.moved += offset;
+			file
+		} else {
+			sftp.create(&target_path).map_err(|error| {
+				format!(
+					"创建远程文件 {} 失败：{error}",
+					target_path.display()
+				)
+			})?
+		};
 		while self.pump(&mut source, &mut target)? {}
 		Ok(())
 	}
@@ -1148,19 +1323,52 @@ impl<'a> TransferContext<'a> {
 			}
 			return Ok(());
 		}
+		// 同名冲突按策略处理：覆盖 / 跳过 / 重命名 / 断点续传
+		let Some((target_path, offset)) =
+			self.prepare_download(stat.size.unwrap_or(0), local)
+		else {
+			return Ok(());
+		};
 		let mut source = sftp.open(remote).map_err(|error| {
 			format!(
 				"打开远程文件 {} 失败：{error}",
 				remote.display()
 			)
 		})?;
-		let mut target =
-			std::fs::File::create(local).map_err(|error| {
-				format!(
-					"写入 {} 失败：{error}",
-					local.display()
-				)
-			})?;
+		if offset > 0 {
+			// 续传：远程源与本地目标都 seek 到断点，已传部分计入进度
+			source
+				.seek(std::io::SeekFrom::Start(offset))
+				.map_err(|error| {
+					format!("定位续传偏移失败：{error}")
+				})?;
+			self.moved += offset;
+		}
+		let mut target = if offset > 0 {
+			let mut file = std::fs::OpenOptions::new()
+				.write(true)
+				.open(&target_path)
+				.map_err(|error| {
+					format!(
+						"打开 {} 失败：{error}",
+						target_path.display()
+					)
+				})?;
+			file.seek(std::io::SeekFrom::Start(offset))
+				.map_err(|error| {
+					format!("定位续传偏移失败：{error}")
+				})?;
+			file
+		} else {
+			std::fs::File::create(&target_path).map_err(
+				|error| {
+					format!(
+						"写入 {} 失败：{error}",
+						target_path.display()
+					)
+				},
+			)?
+		};
 		while self.pump(&mut source, &mut target)? {}
 		Ok(())
 	}
@@ -1196,8 +1404,13 @@ pub async fn upload(
 			let remote = PathBuf::from(&job.remote);
 			// 先递归统计总量，目录也能给出准确的整体进度
 			let total = measure_local(&local);
-			let mut context =
-				TransferContext::new(&app, &control, &id, total);
+			let mut context = TransferContext::new(
+				&app,
+				&control,
+				&id,
+				TransferPolicy::from_job(&job.policy),
+				total,
+			);
 			context.upload(&connection.sftp, &local, &remote)?;
 			context.report(true);
 			info!(
@@ -1242,8 +1455,13 @@ pub async fn download(
 			let remote = PathBuf::from(&job.remote);
 			// 先递归统计总量，目录也能给出准确的整体进度
 			let total = measure_remote(&connection.sftp, &remote);
-			let mut context =
-				TransferContext::new(&app, &control, &id, total);
+			let mut context = TransferContext::new(
+				&app,
+				&control,
+				&id,
+				TransferPolicy::from_job(&job.policy),
+				total,
+			);
 			context.download(&connection.sftp, &remote, &local)?;
 			context.report(true);
 			info!(
@@ -1339,4 +1557,98 @@ fn read_dir(
 		entries,
 		icons: icons::icons_for(&keys),
 	})
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn renamed_target_skips_existing() {
+		let target = Path::new("/r/a.txt");
+		let taken = |path: &Path| {
+			path == Path::new("/r/a.txt")
+		};
+		assert_eq!(
+			renamed_target(target, taken),
+			PathBuf::from("/r/a (1).txt")
+		);
+	}
+
+	#[test]
+	fn renamed_target_first_free_wins() {
+		let target = Path::new("/r/a.txt");
+		let taken = |path: &Path| {
+			path == Path::new("/r/a.txt")
+				|| path == Path::new("/r/a (1).txt")
+		};
+		assert_eq!(
+			renamed_target(target, taken),
+			PathBuf::from("/r/a (2).txt")
+		);
+	}
+
+	#[test]
+	fn prepare_target_decisions() {
+		let target = Path::new("/r/a.bin");
+		let exists = |_: &Path| true;
+		// 目标比源小 → 续传从目标大小处接续
+		assert_eq!(
+			prepare_target(
+				TransferPolicy::Resume,
+				target,
+				exists,
+				|_| Some(100),
+				300
+			),
+			Some((target.to_path_buf(), 100))
+		);
+		// 目标不比源小 → 无事可做
+		assert_eq!(
+			prepare_target(
+				TransferPolicy::Resume,
+				target,
+				exists,
+				|_| Some(300),
+				300
+			),
+			None
+		);
+		// 跳过已存在的目标
+		assert_eq!(
+			prepare_target(
+				TransferPolicy::Skip,
+				target,
+				exists,
+				|_| Some(100),
+				300
+			),
+			None
+		);
+		// 重命名换相邻路径（只有原路径被占用）
+		let taken_original = |path: &Path| {
+			path == Path::new("/r/a.bin")
+		};
+		assert_eq!(
+			prepare_target(
+				TransferPolicy::Rename,
+				target,
+				taken_original,
+				|_| Some(100),
+				300
+			),
+			Some((PathBuf::from("/r/a (1).bin"), 0))
+		);
+		// 落点不存在：任何策略都正常传输
+		assert_eq!(
+			prepare_target(
+				TransferPolicy::Skip,
+				Path::new("/r/new.bin"),
+				|_: &Path| false,
+				|_| None,
+				300
+			),
+			Some((PathBuf::from("/r/new.bin"), 0))
+		);
+	}
 }
