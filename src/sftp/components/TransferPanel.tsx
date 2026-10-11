@@ -151,7 +151,11 @@ function TransferRow({
           100,
           (task.bytes / task.total) * 100
         )
-      : 0;
+      : // 0 字节条目（或删除 0B 文件）没有可计的总量：
+        // 未完成时停在 0，完成即满格，不显示成"—"假死
+        task.status === "done"
+        ? 100
+        : 0;
   const remainingMs =
     task.status === "running" &&
     speed > 0 &&
@@ -182,7 +186,9 @@ function TransferRow({
         <em>
           {task.total > 0
             ? `${percent.toFixed(0)}%`
-            : "—"}
+            : task.status === "done"
+              ? "100%"
+              : "—"}
         </em>
       </span>
       <span className="transfer-size">
