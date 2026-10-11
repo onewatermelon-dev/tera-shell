@@ -313,3 +313,27 @@ export function baseName(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
 }
+
+/**
+ * 把拖拽条目转成插入终端输入行的文本（拖路径进终端用）。
+ *
+ * 单个目录 → `cd '<路径>'`（最常用：拖个目录过去直接 cd）；
+ * 其余情况 → 单引号包裹的路径按空格连接（文件好接在命令后面）。
+ * 单引号按 POSIX 规则转义（`'` → `'\''`），PowerShell 也兼容。
+ * 刻意不带换行：插入后由用户决定是否回车执行。
+ */
+export function pathsToTerminalText(
+  entries: PaneEntry[]
+): string {
+  const quote = (path: string) =>
+    `'${path.replaceAll("'", "'\\''")}'`;
+  if (entries.length === 1) {
+    const entry = entries[0]!;
+    return entry.isDir
+      ? `cd ${quote(entry.path)}`
+      : quote(entry.path);
+  }
+  return entries
+    .map(entry => quote(entry.path))
+    .join(" ");
+}

@@ -1047,6 +1047,16 @@ fn is_dot_entry(path: &Path) -> bool {
 	)
 }
 
+/// 拼远程子路径：强制 `/` 分隔 —— `PathBuf::join` 在 Windows 宿主上
+/// 会拼出 `\`，远端 Linux 收到的是带反斜杠的字面量文件名。
+fn remote_join(parent: &Path, name: &std::ffi::OsStr) -> PathBuf {
+	let mut text = parent.to_string_lossy().into_owned();
+	if !text.ends_with('/') {
+		text.push('/');
+	}
+	PathBuf::from(text + &name.to_string_lossy())
+}
+
 /// 递归统计远程路径的总字节数。
 fn measure_remote(sftp: &Sftp, path: &Path) -> u64 {
 	match sftp.stat(path) {
@@ -1233,7 +1243,7 @@ impl<'a> TransferContext<'a> {
 				self.upload(
 					sftp,
 					&entry.path(),
-					&remote.join(entry.file_name()),
+					&remote_join(remote, &entry.file_name()),
 				)?;
 			}
 			return Ok(());
@@ -1628,11 +1638,16 @@ fn read_dir(
 		if name.is_empty() || name == "." || name == ".." {
 			continue;
 		}
-		entries.push(RemoteEntry {
-			icon_key: icons::icon_key(&name, stat.is_dir()),
-			name,
-			path: entry_path.to_string_lossy().into_owned(),
-			is_dir: stat.is_dir(),
+	entries.push(RemoteEntry {
+		icon_key: icons::icon_key(&name, stat.is_dir()),
+		name,
+		// 远程路径统一用 `/`：readdir 的 PathBuf 是 Windows 宿主拼的，
+		// 分隔符会是 `\`，不纠正的话前端拿到的 `/root\.vim` 这类
+		// 路径在 Linux 上根本不存在
+		path: entry_path
+			.to_string_lossy()
+			.replace('\\', "/"),
+		is_dir: stat.is_dir(),
 			size: stat.size.unwrap_or(0),
 			modified: stat.mtime,
 			perm: stat.perm,
@@ -1659,7 +1674,7 @@ fn read_dir(
 	} else {
 		canonical
 			.parent()
-			.map(|parent| parent.to_string_lossy().into_owned())
+			.map(|parent| parent.to_string_lossy().replace('\\', "/"))
 	};
 	info!(
 		read_ms,
@@ -1674,7 +1689,9 @@ fn read_dir(
 		keys.push(entry.icon_key.clone());
 	}
 	Ok(SftpListing {
-		path: canonical.to_string_lossy().into_owned(),
+		path: canonical
+			.to_string_lossy()
+			.replace('\\', "/"),
 		parent,
 		entries,
 		icons: icons::icons_for(&keys),

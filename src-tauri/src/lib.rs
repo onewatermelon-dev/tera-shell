@@ -19,6 +19,13 @@ fn open_devtools(window: tauri::WebviewWindow) {
     window.open_devtools();
 }
 
+/// 前端诊断日志：跨窗口交互（拖路径进终端）这类链路排查用，
+/// 写进 tracing 常规日志，`~/.tera-shell/logs/<日期>` 可查。
+#[tauri::command]
+fn debug_log(message: String) {
+    tracing::info!(message, "前端诊断");
+}
+
 /// 创建并运行 Tauri 桌面应用。
 ///
 /// 插件必须在应用启动阶段注册，前端才能调用对应的 JavaScript API；
@@ -67,6 +74,7 @@ pub fn run() {
             sftp::upload,
             sftp::download,
             sftp::disk_usage,
+            debug_log,
             sftp::make_remote_dir,
             sftp::create_remote_file,
             sftp::remove_remote_path,

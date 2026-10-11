@@ -54,6 +54,12 @@ type SftpPanelProps = {
     host: string,
     path: string
   ) => void;
+  /** 拖出本窗口边界松手：条目 + 光标屏幕坐标（拖路径进终端用）。 */
+  onPathDrop: (
+    entries: PaneEntry[],
+    screenX: number,
+    screenY: number
+  ) => void;
   onFileAction: (
     pane: PaneSide,
     action: FileAction,
@@ -131,6 +137,7 @@ export default function SftpPanel({
   onClearTransfers,
   onRemoveTransfers,
   onTransferControl,
+  onPathDrop,
   onDropEntries
 }: SftpPanelProps) {
   // 标题栏文案：与会话名一致（后端建窗口时的标题用的是同一个名字）
@@ -187,7 +194,9 @@ export default function SftpPanel({
         payload.from,
         payload.entries,
         target.intoDirectory
-      )
+      ),
+    onDropOutside: (entries, screenX, screenY) =>
+      onPathDrop(entries, screenX, screenY)
   });
 
   return (

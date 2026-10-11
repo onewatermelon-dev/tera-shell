@@ -39,12 +39,22 @@ export type PaneDragState = {
  * ② **6px 位移阈值**才算拖动，纯点击不误触发；
  * ③ 落点用 `elementFromPoint` + `closest()`，**不能用 `event.target`**
  *    （被拖的行跟着指针走）。
+ *
+ * 跨窗口尾巴：拖出本窗口边界松手时栏内必然无落点，此时 pointerup
+ * 仍会送达（拖拽窗口持有 OS 鼠标捕获），把条目连屏幕坐标交给
+ * `onDropOutside` —— 宿主据此做「拖路径进终端」的跨窗口投递。
  */
 export function usePaneDrag(options: {
   /** 落点确认：把来源栏的这些条目传进目标栏的该目录 */
   onDrop: (
     payload: DragPayload,
     target: DropTarget
+  ) => void;
+  /** 拖出本窗口边界松手：条目 + 光标屏幕坐标。 */
+  onDropOutside?: (
+    entries: PaneEntry[],
+    screenX: number,
+    screenY: number
   ) => void;
 }) {
   const [state, setState] =
@@ -55,6 +65,10 @@ export function usePaneDrag(options: {
 
   // 拖拽过程中要读最新的回调，闭包里的旧值会失真
   const onDropRef = useRef(options.onDrop);
+  /** 同上：出窗投递回调也要读最新的 */
+  const onDropOutsideRef = useRef(
+    options.onDropOutside
+  );
   /** 拖拽起点所在栏与条目 —— pointerdown 时记，move/up 阶段要用 */
   const payloadRef = useRef<DragPayload | null>(
     null
@@ -68,7 +82,9 @@ export function usePaneDrag(options: {
   // ⚠️ 必须在 effect 里同步 —— eslint react-hooks/refs 不允许渲染期写 ref
   useEffect(() => {
     onDropRef.current = options.onDrop;
-  }, [options.onDrop]);
+    onDropOutsideRef.current =
+      options.onDropOutside;
+  });
 
   /**
    * 从一行开始拖。
@@ -171,6 +187,27 @@ export function usePaneDrag(options: {
           console.info(
             "[sftp] 拖放取消（无效落点）"
           );
+          // 光标出了本窗口边界：栏内必然没有落点，交给宿主
+          // 做跨窗口投递（拖路径进主窗口的终端）
+          const entries = payload?.entries;
+          if (
+            entries?.length &&
+            onDropOutsideRef.current &&
+            (ev.screenX < window.screenX ||
+              ev.screenX >
+                window.screenX +
+                  window.outerWidth ||
+              ev.screenY < window.screenY ||
+              ev.screenY >
+                window.screenY +
+                  window.outerHeight)
+          ) {
+            onDropOutsideRef.current(
+              entries,
+              ev.screenX,
+              ev.screenY
+            );
+          }
         }
       };
 
@@ -241,7 +278,8 @@ function buildGhost(
  *
  * `elementFromPoint` 命中的是行内某个单元格（文件名 / 大小 / 时间），
  * 所以要 `closest` 两层：先找行（拿 `data-entry-path` 与
- * `data-entry-dir`），再找栏（拿 `data-pane-side` 与 `data-pane-path`）。
+ * `data-entry-dir`），再找栏（拿 `data-pane-side` 与
+ * `data-pane-path`）。
  *
  * ⚠️ 命中行但读不到栏时返回 null（当作无效落点）：宁可不高亮，
  * 也别把条目判到错误的栏里去 —— 那会传错方向。

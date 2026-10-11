@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import type { SavedSession } from "@/sessions/lib/session";
 import { useSftp } from "@/sftp/lib/useSftp";
 import type {
@@ -9,7 +11,8 @@ import type {
 } from "@/sftp/lib/useSftp";
 import {
   findCollisions,
-  hasResumable
+  hasResumable,
+  pathsToTerminalText
 } from "@/sftp/lib/sftpUtils";
 import type { FileAction } from "@/sftp/components/FileContextMenu";
 import SftpPanel from "@/sftp/components/SftpPanel";
@@ -294,6 +297,37 @@ export default function SftpWindow({
     [sftp, onError]
   );
 
+  /**
+   * 拖出 SFTP 窗口边界松手：把路径文本广播给主窗口（拖路径进终端）。
+   *
+   * 绑定会话 id 一起带上 —— 主窗口按 id / sourceSessionId 解析出
+   * 该会话自己的终端标签再写入，远程路径对别的会话没有意义。
+   */
+  const handlePathDrop = useCallback(
+    (
+      entries: PaneEntry[],
+      screenX: number,
+      screenY: number
+    ) => {
+      const current = sftp.session;
+      if (!current || !entries.length) return;
+      const text = pathsToTerminalText(entries);
+      console.info(
+        `[path-drop] drop outside, session=${current.id} text=${text}`
+      );
+      void invoke("debug_log", {
+        message: `[path-drop] drop outside, session=${current.id} text=${text}`
+      }).catch(() => {});
+      void emit("sftp-paths-to-terminal", {
+        sessionId: current.id,
+        text,
+        screenX,
+        screenY
+      });
+    },
+    [sftp.session]
+  );
+
   /** 跨栏拖放落点：把条目传进目标目录（有同名冲突先弹策略框）。 */
   const handleDropEntries = useCallback(
     (
@@ -348,6 +382,7 @@ export default function SftpWindow({
         bookmarks={sftp.bookmarks}
         onToggleBookmark={sftp.toggleBookmark}
         onRemoveBookmark={sftp.removeBookmark}
+        onPathDrop={handlePathDrop}
         onDropEntries={handleDropEntries}
       />
       {pendingTransfer && (
