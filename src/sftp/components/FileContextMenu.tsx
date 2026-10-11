@@ -196,6 +196,8 @@ export default function FileContextMenu({
         top: y,
         transform: `translate(${shift.x}px, ${shift.y}px)`
       }}
+      // 鼠标移出菜单即自动关闭（对齐应用菜单的交互）
+      onMouseLeave={onClose}
     >
       {renderItem("transfer", "传输", true)}
       <div className="context-menu-separator" />

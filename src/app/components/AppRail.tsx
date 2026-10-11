@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Dropdown, Kbd } from "@heroui/react";
 import { keepTerminalFocus } from "@/shared/lib/keepTerminalFocus";
 import {
@@ -204,6 +205,27 @@ export default function AppRail({
   onMenuClosed
 }: RailProps) {
   const t = useT();
+  // 受控开关：鼠标离开菜单浮层要自动收起（须能从浮层事件里关）
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  /**
+   * 鼠标离开菜单浮层：自动收起。
+   *
+   * 移向**子菜单**时不关 —— 子菜单是独立浮层（portal），从主菜单
+   * 挪过去会触发主浮层的 mouseleave，用 relatedTarget 是否还在
+   * 任意菜单浮层内来区分。
+   */
+  function leaveMenu(event: React.MouseEvent) {
+    const next = event.relatedTarget;
+    if (
+      next instanceof Element &&
+      next.closest("[data-menu-popover]")
+    ) {
+      return;
+    }
+    setMenuOpen(false);
+  }
+
   return (
     <nav
       className="app-rail"
@@ -214,8 +236,9 @@ export default function AppRail({
     >
       <>
         <Dropdown.Root
-          // 菜单收起（执行了动作或直接关闭）后把焦点还给终端
+          isOpen={menuOpen}
           onOpenChange={open => {
+            setMenuOpen(open);
             if (!open) onMenuClosed();
           }}
         >
@@ -229,7 +252,11 @@ export default function AppRail({
           >
             <MenuOutlined />
           </Dropdown.Trigger>
-          <Dropdown.Popover placement="right top">
+          <Dropdown.Popover
+            placement="right top"
+            data-menu-popover=""
+            onMouseLeave={leaveMenu}
+          >
             <Dropdown.Menu>
               {menus.map(menu => (
                 <Dropdown.SubmenuTrigger
@@ -244,7 +271,11 @@ export default function AppRail({
                     <Dropdown.SubmenuIndicator />
                   </Dropdown.Item>
                   {/* RAC 约定：SubmenuTrigger 第二个 child 必须是 Popover，Menu 才会弹成独立浮层 */}
-                  <Dropdown.Popover placement="right top">
+                  <Dropdown.Popover
+                    placement="right top"
+                    data-menu-popover=""
+                    onMouseLeave={leaveMenu}
+                  >
                     <Dropdown.Menu
                       onAction={key =>
                         onAction(String(key))
