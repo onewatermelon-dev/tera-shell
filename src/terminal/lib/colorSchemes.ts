@@ -27,7 +27,9 @@ const DEFAULT_SCHEME: ColorScheme = {
   background: "#0b0e14",
   foreground: "#c9d1d9",
   cursor: "#2967ce",
-  selectionBackground: "",
+  // 内置默认方案没有自己的选区色数据，给一个青蓝色（与光标同族）。
+  // 空串会触发 toSelectionCss 的前景色回退
+  selectionBackground: "#2a5f8f",
   // xterm 内置 ANSI 默认值：配色功能上线前的终端就用这套
   ansi: [
     "#2e3436",
@@ -87,11 +89,45 @@ export function resolveColorScheme(
 }
 
 /**
+ * 自绘选区覆盖层用的 CSS `background` 值。
+ *
+ * ## 为什么要自己算，而不是直接用 `selectionBackground`
+ *
+ * 数据里 463 个方案的选区色**全部有值且全不透明**（`#a5a2a2` 这种）。
+ * 直接铺上去会把底下的字符糊掉 —— 尤其亮色方案配浅灰选区，文字直接
+ * 消失。所以必须叠一个透明度。
+ *
+ * ## 怎么叠
+ *
+ * 用 `color-mix` 把选区色按 alpha 混进**终端背景色**：这样高亮区域
+ * 的观感就是「在底色上盖一层这个方案自己的选区色」，亮色方案不会因为
+ * 选了深灰选区而把黑字压没了。
+ *
+ * ## 为什么要留前景色回退
+ *
+ * 少数方案（如内置默认的 Tera Shell）`selectionBackground` 是空串 ——
+ * 数据源本身没给。这种情况回退到原来的做法：**前景色 30% 透明**。
+ * 同色叠加不改变文字明暗结构，任何主题下被选文字都清晰（这是选区色
+ * 缺失时最保守的选择）。
+ *
+ * @param scheme 当前配色方案
+ */
+export function toSelectionCss(
+  scheme: ColorScheme
+): string {
+  const selection =
+    scheme.selectionBackground.trim();
+  if (!selection)
+    return `color-mix(in srgb, ${scheme.foreground} 30%, transparent)`;
+  return `color-mix(in srgb, ${selection} 45%, ${scheme.background})`;
+}
+
+/**
  * 换算成 xterm 的 ITheme 输入（ANSI 16 色逐个展开成具名键）。
  *
  * 划词高亮不在这 —— 终端把原生选区设成透明，视觉由自绘覆盖层
- * （terminalSelection.ts + .terminal-selection-range）负责，颜色是
- * 前景色半透明（CSS 变量 --terminal-fg），任何主题下文字都清晰。
+ * （terminalSelection.ts + .terminal-selection-range）负责，颜色见
+ * `toSelectionCss`。
  */
 export function toXtermTheme(
   scheme: ColorScheme

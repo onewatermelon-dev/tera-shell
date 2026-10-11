@@ -17,7 +17,10 @@ import {
 } from "@/sessions/lib/sessionTransfer";
 import type { SessionGroup } from "@/sessions/lib/sessionGroup";
 import { useTerminals } from "@/terminal/lib/useTerminals";
-import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
+import {
+  resolveColorScheme,
+  toSelectionCss
+} from "@/terminal/lib/colorSchemes";
 import { useT } from "@/settings/lib/i18n";
 import type { SavedSession } from "@/sessions/lib/session";
 import AppHeader, {
@@ -606,8 +609,8 @@ export default function App() {
     refocusTerminal: refocusActive
   };
 
-  // 终端配色方案的背景/前景下传给 CSS：.terminal-host 的余数缝隙要跟
-  // xterm 背景融为一体、划词覆盖层要用前景色做高亮 —— CSS 拿不到
+  // 终端配色方案的背景/前景/选区下传给 CSS：.terminal-host 的余数缝隙要跟
+  // xterm 背景融为一体、划词覆盖层要用它做高亮 —— CSS 拿不到
   // xterm 主题，走变量
   const scheme = resolveColorScheme(
     appSettings.settings.colorScheme
@@ -623,7 +626,11 @@ export default function App() {
       style={
         {
           "--terminal-bg": scheme.background,
-          "--terminal-fg": scheme.foreground
+          "--terminal-fg": scheme.foreground,
+          // 选区色：格式是完整的 color-mix() 表达式（见 toSelectionCss），
+          // 混入了终端背景色以保证文字不被压没
+          "--terminal-selection":
+            toSelectionCss(scheme)
         } as Record<string, string>
       }
     >

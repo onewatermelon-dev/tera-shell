@@ -24,6 +24,10 @@ import {
   VIM_SCHEME_SETUP
 } from "@/terminal/lib/catView";
 import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
+import {
+  disableWebgl,
+  enableWebgl
+} from "@/terminal/lib/webglRenderer";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
@@ -804,6 +808,10 @@ export function useTerminals(
       const first = !session.mounted;
       if (first) {
         session.terminal.open(session.element);
+        // ⚠️ WebGL 必须在 open() 之后启用：addon 内部要往
+        // `terminal.screenElement` 塞 canvas，而该元素 open() 时才创建。
+        // 失败时 enableWebgl 内部静默降级，这里不会中断挂载
+        enableWebgl(session.terminal);
         session.mounted = true;
       }
       resizeObserver.current?.observe(host);
@@ -1805,9 +1813,13 @@ export function useTerminals(
       await invoke("terminal_close", {
         id
       }).catch(onError);
-      openedRef.current[
-        index
-      ]?.terminal.dispose();
+      const closing = openedRef.current[index];
+      // 先摘 WebGL 再 dispose 终端：addon 的 canvas 由它自己管，
+      // 终端先 dispose 的话 addon 会对已销毁的 screenElement 操作
+      if (closing) {
+        disableWebgl(closing.terminal);
+        closing.terminal.dispose();
+      }
       setOpened(prev => {
         const next = prev.filter(
           s => s.id !== id
@@ -2019,6 +2031,11 @@ export function useTerminals(
           documentShortcutHandler.current,
           true
         );
+      // ⚠️ 释放全部 WebGL context：浏览器对同时存活的 context 有上限，
+      // 组件卸载（含 HMR、设置页切换导致的重挂）不清理的话，
+      // context 会一直挂着直到达上限，之后新终端全拿不到 WebGL
+      for (const session of openedRef.current)
+        disableWebgl(session.terminal);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只随挂载注册一次，回调经 ref 取最新值（见上）
   }, []);

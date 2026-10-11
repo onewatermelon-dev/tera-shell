@@ -127,13 +127,17 @@ button:active {
 .terminal-selection-range {
   position: absolute;
 
-  // 鼠标框选：当前配色方案前景色 30% 透明（--terminal-fg 由 App 注入）。
-  // 同色叠加不会改变文字的明暗结构，任何主题下被选文字都清晰；
-  // 旧的固定主题蓝在亮色主题下会把文字糊掉
-  background: color-mix(
-    in srgb,
-    var(--terminal-fg, #c9d1d9) 30%,
-    transparent
+  // 鼠标框选：颜色由配色方案的选区色算来（--terminal-selection 由 App
+  // 注入，见 colorSchemes 的 toSelectionCss）。⚠️ 不要再写死颜色 ——
+  // 463 个 iTerm 方案各自带选区色，不用就等于把这套配色数据的一半丢掉。
+  // fallback 是前景色 30% 透明（自定义变量缺失时的兜底）
+  background: var(
+    --terminal-selection,
+    color-mix(
+      in srgb,
+      var(--terminal-fg, #c9d1d9) 30%,
+      transparent
+    )
   );
 }
 
