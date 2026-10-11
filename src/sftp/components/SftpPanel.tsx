@@ -62,6 +62,11 @@ type SftpPanelProps = {
     screenX: number,
     screenY: number
   ) => void;
+  /** 远程栏内拖拽挪动：条目 + 目标目录（服务端 mv）。 */
+  onRemoteMove: (
+    entries: PaneEntry[],
+    directory: string
+  ) => void;
   onFileAction: (
     pane: PaneSide,
     action: FileAction,
@@ -141,6 +146,7 @@ export default function SftpPanel({
   onRemoveTransfers,
   onTransferControl,
   onPathDrop,
+  onRemoteMove,
   onDropEntries
 }: SftpPanelProps) {
   // 标题栏文案：与会话名一致（后端建窗口时的标题用的是同一个名字）
@@ -192,12 +198,25 @@ export default function SftpPanel({
     isTarget,
     isPaneTarget
   } = usePaneDrag({
-    onDrop: (payload, target: DropTarget) =>
+    onDrop: (payload, target: DropTarget) => {
+      // 远程 → 远程（同栏）= 服务端挪动；其余（含远程 → 本地）= 传输。
+      // 必须按 target.pane 区分：远程拖到本地栏时 from 也是 "remote"。
+      if (
+        payload.from === "remote" &&
+        target.pane === "remote"
+      ) {
+        onRemoteMove(
+          payload.entries,
+          target.intoDirectory
+        );
+        return;
+      }
       onDropEntries(
         payload.from,
         payload.entries,
         target.intoDirectory
-      ),
+      );
+    },
     onDropOutside: (entries, screenX, screenY) =>
       onPathDrop(entries, screenX, screenY)
   });

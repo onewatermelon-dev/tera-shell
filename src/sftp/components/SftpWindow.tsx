@@ -359,31 +359,33 @@ export default function SftpWindow({
   );
 
   /**
-   * 拖放落点分发：远程 → 远程 = 服务端挪动（mv），跨栏 = 传输。
+   * 远程栏内拖拽挪动：服务端 mv 到目标目录。
    *
-   * 挪动前剔除两类无意义条目：已在目标目录里的（mv 会报 same file）、
+   * 剔除两类无意义条目：已在目标目录里的（mv 会报 same file）、
    * 拖到自己的（mv 目录进自身）。
    */
+  const handleRemoteMove = useCallback(
+    (entries: PaneEntry[], directory: string) => {
+      const moving = entries.filter(
+        entry =>
+          entry.path !== directory &&
+          parentOf(entry.path) !== directory
+      );
+      if (!moving.length) return;
+      void sftp
+        .remoteFileOp("move", moving, directory)
+        .catch(reason => onError(String(reason)));
+    },
+    [sftp, onError]
+  );
+
+  /** 跨栏拖放落点：把条目传进目标目录（有同名冲突先弹策略框）。 */
   const handleDropEntries = useCallback(
     (
       from: PaneSide,
       entries: PaneEntry[],
       directory: string
     ) => {
-      if (from === "remote") {
-        const moving = entries.filter(
-          entry =>
-            entry.path !== directory &&
-            parentOf(entry.path) !== directory
-        );
-        if (!moving.length) return;
-        void sftp
-          .remoteFileOp("move", moving, directory)
-          .catch(reason =>
-            onError(String(reason))
-          );
-        return;
-      }
       planCrossPane(
         from,
         entries,
@@ -433,6 +435,7 @@ export default function SftpWindow({
         onToggleBookmark={sftp.toggleBookmark}
         onRemoveBookmark={sftp.removeBookmark}
         onPathDrop={handlePathDrop}
+        onRemoteMove={handleRemoteMove}
         onDropEntries={handleDropEntries}
       />
       {pendingTransfer && (
