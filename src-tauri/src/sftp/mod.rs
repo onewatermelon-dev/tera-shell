@@ -598,7 +598,7 @@ pub struct TransferJob {
 }
 
 /// 文件落点同名冲突时的处理策略。
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum TransferPolicy {
 	Overwrite,
 	Skip,
@@ -1121,13 +1121,28 @@ impl<'a> TransferContext<'a> {
 		source_len: u64,
 		target: &Path,
 	) -> Option<(PathBuf, u64)> {
-		prepare_target(
+		let resolved = prepare_target(
 			self.policy,
 			target,
 			|path| sftp.stat(path).is_ok(),
 			|path| sftp.stat(path).ok().and_then(|s| s.size),
 			source_len,
-		)
+		);
+		tracing::info!(
+			policy = ?self.policy,
+			target = %target.display(),
+			resolved = resolved
+				.as_ref()
+				.map(|(path, offset)| format!(
+					"{} @+{}",
+					path.display(),
+					offset
+				))
+				.as_deref()
+				.unwrap_or("skip"),
+			"上传落点策略"
+		);
+		resolved
 	}
 
 	/// 下载侧的策略决策：本地落点 + 起始偏移；None = 跳过该文件。
@@ -1136,7 +1151,7 @@ impl<'a> TransferContext<'a> {
 		source_len: u64,
 		target: &Path,
 	) -> Option<(PathBuf, u64)> {
-		prepare_target(
+		let resolved = prepare_target(
 			self.policy,
 			target,
 			|path| path.exists(),
@@ -1146,7 +1161,22 @@ impl<'a> TransferContext<'a> {
 					.map(|meta| meta.len())
 			},
 			source_len,
-		)
+		);
+		tracing::info!(
+			policy = ?self.policy,
+			target = %target.display(),
+			resolved = resolved
+				.as_ref()
+				.map(|(path, offset)| format!(
+					"{} @+{}",
+					path.display(),
+					offset
+				))
+				.as_deref()
+				.unwrap_or("skip"),
+			"下载落点策略"
+		);
+		resolved
 	}
 
 	/// 上报一次进度。
@@ -1227,8 +1257,20 @@ impl<'a> TransferContext<'a> {
 				format!("读取 {} 失败：{error}", local.display())
 			})?;
 		if metadata.is_dir() {
+			// 目录级冲突也按策略处理（同下载侧）：重命名整个目录或整树跳过
+			let target = match self.policy {
+				TransferPolicy::Rename if sftp.stat(remote).is_ok() => {
+					renamed_target(remote, |path| {
+						sftp.stat(path).is_ok()
+					})
+				}
+				TransferPolicy::Skip if sftp.stat(remote).is_ok() => {
+					return Ok(());
+				}
+				_ => remote.to_path_buf(),
+			};
 			// 目标目录可能已存在（合并上传），忽略 mkdir 的报错
-			let _ = sftp.mkdir(remote, 0o755);
+			let _ = sftp.mkdir(&target, 0o755);
 			let entries =
 				std::fs::read_dir(local).map_err(|error| {
 					format!(
@@ -1243,7 +1285,7 @@ impl<'a> TransferContext<'a> {
 				self.upload(
 					sftp,
 					&entry.path(),
-					&remote_join(remote, &entry.file_name()),
+					&remote_join(&target, &entry.file_name()),
 				)?;
 			}
 			return Ok(());
@@ -1309,10 +1351,21 @@ impl<'a> TransferContext<'a> {
 			format!("读取远程 {} 失败：{error}", remote.display())
 		})?;
 		if stat.is_dir() {
-			std::fs::create_dir_all(local).map_err(|error| {
+			// 目录级冲突也按策略处理：重命名 = 整个目录改名（落回新
+			// 目录，不与既有目录合并），跳过 = 整树略过，其余照旧合并。
+			let target = match self.policy {
+				TransferPolicy::Rename if local.exists() => {
+					renamed_target(local, |path| path.exists())
+				}
+				TransferPolicy::Skip if local.exists() => {
+					return Ok(());
+				}
+				_ => local.to_path_buf(),
+			};
+			std::fs::create_dir_all(&target).map_err(|error| {
 				format!(
 					"创建目录 {} 失败：{error}",
-					local.display()
+					target.display()
 				)
 			})?;
 			let entries =
@@ -1332,7 +1385,7 @@ impl<'a> TransferContext<'a> {
 				self.download(
 					sftp,
 					&child,
-					&local.join(name),
+					&target.join(name),
 				)?;
 			}
 			return Ok(());
