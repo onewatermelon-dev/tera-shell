@@ -123,6 +123,42 @@ export function shortcutOf(
 }
 
 /**
+ * SFTP 窗口自己的快捷键表（默认出厂键位）。
+ *
+ * 与终端窗口的 `APP_SHORTCUTS` 分开：两边的动作互不相干，设置页也按
+ * 「终端窗口 / SFTP 窗口」两段分别展示。覆盖仍存同一张 `overrides`
+ * （动作 id 全局不重复），生效合并见下方 store。
+ *
+ * 键位串里的主键用 `event.key` 的原名（ArrowLeft 等），归一化会保留
+ * 这类「命名键」的大小写，不会变成 ARROWLEFT。
+ */
+export const SFTP_SHORTCUTS: Record<
+  string,
+  string
+> = {
+  // 文件列表后退 / 前进：沿资源管理器习惯用 Alt+方向键
+  sftpGoBack: "Alt+ArrowLeft",
+  sftpGoForward: "Alt+ArrowRight"
+};
+
+/**
+ * 快捷键的生效范围：设置页按它分成「终端窗口 / SFTP 窗口」两段。
+ *
+ * ⚠️ 这里是**按生效窗口**分（用户 2026-10 要求），与早年按「文件 /
+ * 编辑 / 查看」分五段被否是两回事 —— 那次反对的是把一张表切碎，
+ * 这次是两张表本来就有不同的生效窗口，分开展示是信息不是噪音。
+ */
+export type ShortcutScope = "terminal" | "sftp";
+
+export function shortcutScope(
+  actionId: string
+): ShortcutScope {
+  return actionId in SFTP_SHORTCUTS
+    ? "sftp"
+    : "terminal";
+}
+
+/**
  * 动作 id 的展示名（设置页与冲突提示用）。
  *
  * ⚠️ 这里给英文 fallback：i18n 字典在 settings 域，而本文件在 shared 域
@@ -148,7 +184,9 @@ export const ACTION_LABELS: Record<
   openSftp: "Open SFTP",
   devtools: "Developer tools",
   reconnect: "Reconnect",
-  toggleFocusMode: "Fullscreen"
+  toggleFocusMode: "Fullscreen",
+  sftpGoBack: "SFTP back",
+  sftpGoForward: "SFTP forward"
 };
 
 /**
@@ -174,7 +212,10 @@ export const ACTION_LABELS: Record<
  * 别再混用。
  */
 export const CUSTOMIZABLE_ACTIONS: Set<string> =
-  new Set(Object.keys(APP_SHORTCUTS));
+  new Set([
+    ...Object.keys(APP_SHORTCUTS),
+    ...Object.keys(SFTP_SHORTCUTS)
+  ]);
 
 /**
  * 判断某个动作是不是由别处（`useTerminals`）处理的。
@@ -197,6 +238,35 @@ export type Chord = {
   alt: boolean;
 };
 
+/**
+ * 功能键与方向键这类「命名键」的识别：键名不统一大小写，而是走
+ * `canonicalKey` 规范成标准写法（F12 / ArrowLeft）。
+ */
+const NAMED_KEY = /^(f\d{1,2}|arrow\w+)$/i;
+
+/** 命名键的显示符号：给人看的是「←」，不是「ArrowLeft」。 */
+const KEY_SYMBOLS: Record<string, string> = {
+  arrowleft: "←",
+  arrowright: "→",
+  arrowup: "↑",
+  arrowdown: "↓"
+};
+
+/** 把命名键规范成标准大小写：`f12 → F12`、`arrowleft → ArrowLeft`。 */
+function canonicalKey(key: string): string {
+  if (/^f\d{1,2}$/i.test(key))
+    return key.toUpperCase();
+  if (/^arrow/i.test(key)) {
+    const rest = key.slice(5);
+    return (
+      "Arrow" +
+      rest.charAt(0).toUpperCase() +
+      rest.slice(1).toLowerCase()
+    );
+  }
+  return key;
+}
+
 export function parseChord(
   chord: string
 ): Chord | null {
@@ -209,8 +279,8 @@ export function parseChord(
   if (!key) return null;
   const lower = key.toLowerCase();
   return {
-    // F12 这类功能键原样保留；字母键统一小写便于比对
-    key: /^f\d{1,2}$/i.test(key) ? key : lower,
+    // F12 / ArrowLeft 这类命名键原样保留；字母键统一小写便于比对
+    key: NAMED_KEY.test(key) ? key : lower,
     ctrl: parts.some(p =>
       /^(ctrl|control)$/i.test(p)
     ),
@@ -249,9 +319,10 @@ export function matchChord(
   if (event.shiftKey !== chord.shift)
     return false;
   if (event.altKey !== chord.alt) return false;
-  const target = chord.key;
-  const actual = /^f\d{1,2}$/i.test(event.key)
-    ? event.key
+  // 命名键两边都规范成标准键名再比，容忍手改文件的小写变体
+  const target = canonicalKey(chord.key);
+  const actual = NAMED_KEY.test(event.key)
+    ? canonicalKey(event.key)
     : event.key.toLowerCase();
   return actual === target;
 }
@@ -288,7 +359,8 @@ export type ShortcutOverrides = Record<
 /** 模块级 store：生效键位。与 i18n 同一套订阅模式。 */
 let overrides: ShortcutOverrides = {};
 let effective: Record<string, string> = {
-  ...APP_SHORTCUTS
+  ...APP_SHORTCUTS,
+  ...SFTP_SHORTCUTS
 };
 const listeners = new Set<() => void>();
 
@@ -327,7 +399,8 @@ export function setShortcutOverrides(
     return;
   overrides = clean;
   const merged: Record<string, string> = {
-    ...APP_SHORTCUTS
+    ...APP_SHORTCUTS,
+    ...SFTP_SHORTCUTS
   };
   for (const [id, chord] of Object.entries(
     overrides
@@ -336,7 +409,7 @@ export function setShortcutOverrides(
     // 顺手挡掉手改文件塞进来的未知 id
     if (
       CUSTOMIZABLE_ACTIONS.has(id) &&
-      APP_SHORTCUTS[id]
+      (APP_SHORTCUTS[id] ?? SFTP_SHORTCUTS[id])
     )
       merged[id] = chord;
   }
@@ -391,8 +464,7 @@ export function sanitizeOverrides(
  * 用户在设置页录的是按键事件，转出来的串可能是 `Ctrl+Shift+n`；
  * 手改设置文件也可能大小写混乱。统一后再存，冲突检查才准确。
  * 解析不出来（空串、只有修饰键）返回 null。
- */
-export function normalizeChord(
+ */ export function normalizeChord(
   chord: string
 ): string | null {
   const parsed = parseChord(chord);
@@ -401,16 +473,41 @@ export function normalizeChord(
   if (parsed.ctrl) parts.push("Ctrl");
   if (parsed.alt) parts.push("Alt");
   if (parsed.shift) parts.push("Shift");
-  // 功能键保留 F12 的大写 F，字母键统一大写显示
+  // 功能键 / 方向键规范成标准键名，字母键统一大写显示
   parts.push(
-    /^f\d{1,2}$/i.test(parsed.key)
-      ? parsed.key.toUpperCase()
+    NAMED_KEY.test(parsed.key)
+      ? canonicalKey(parsed.key)
       : parsed.key.toUpperCase()
   );
   // 光按修饰键（Ctrl+Shift+）没有主键，不成其为一个组合
   const key = parts.pop() ?? "";
   if (!key || key === "SHIFT") return null;
   parts.push(key);
+  return parts.join("+");
+}
+
+/**
+ * 键位串的显示形式：方向键转符号（`Alt+ArrowLeft → Alt+←`）。
+ *
+ * 存储与匹配始终用 `event.key` 原名（归一化、冲突检查都依赖它），
+ * 只有**给人看的**地方走这里 —— 设置页的键位格子、提示气泡。
+ * 没有符号映射的键（字母 / F 键）按原样显示。
+ */
+export function formatChord(
+  chord: string
+): string {
+  const parsed = parseChord(chord);
+  if (!parsed) return chord;
+  const parts: string[] = [];
+  if (parsed.ctrl) parts.push("Ctrl");
+  if (parsed.alt) parts.push("Alt");
+  if (parsed.shift) parts.push("Shift");
+  const symbol =
+    KEY_SYMBOLS[parsed.key.toLowerCase()];
+  if (symbol) parts.push(symbol);
+  else if (NAMED_KEY.test(parsed.key))
+    parts.push(canonicalKey(parsed.key));
+  else parts.push(parsed.key.toUpperCase());
   return parts.join("+");
 }
 
@@ -526,9 +623,7 @@ export function chordFromEvent(
   )
     return null;
   const ctrl = event.ctrlKey || !!event.metaKey;
-  const isFunction = /^f\d{1,2}$/i.test(
-    event.key
-  );
+  const isFunction = NAMED_KEY.test(event.key);
   if (!ctrl && !event.altKey && !isFunction)
     return null;
   return normalizeChord(
@@ -551,9 +646,12 @@ function buildChordString(
   if (ctrl) parts.push("Ctrl");
   if (alt) parts.push("Alt");
   if (shift) parts.push("Shift");
-  // 按 ctrl 时浏览器报的 key 往往已是大写（Ctrl+Shift+N → "N"），
-  // 但不是所有布局都如此，统一大写存
-  parts.push(key.toUpperCase());
+  // 命名键规范成标准键名（ArrowLeft），其余统一大写
+  parts.push(
+    NAMED_KEY.test(key)
+      ? canonicalKey(key)
+      : key.toUpperCase()
+  );
   return parts.join("+");
 }
 

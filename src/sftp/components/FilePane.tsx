@@ -30,6 +30,11 @@ import EntryIcon from "@/sftp/components/EntryIcon";
 import ConfirmDialog from "@/shared/components/ConfirmDialog";
 import Hint from "@/shared/components/Hint";
 import {
+  formatChord,
+  matchAction,
+  shortcutOf
+} from "@/shared/lib/appShortcuts";
+import {
   formatPerm,
   formatSize,
   formatTime
@@ -346,7 +351,9 @@ const FilePane = memo(function FilePane({
         </span>
       </div>
       <div className="sftp-path-row">
-        <Hint label="后退 (Alt+←)">
+        <Hint
+          label={`后退 (${formatChord(shortcutOf("sftpGoBack") ?? "")})`}
+        >
           <button
             type="button"
             className="path-nav-button"
@@ -357,7 +364,9 @@ const FilePane = memo(function FilePane({
             <LeftOutlined />
           </button>
         </Hint>
-        <Hint label="前进 (Alt+→)">
+        <Hint
+          label={`前进 (${formatChord(shortcutOf("sftpGoForward") ?? "")})`}
+        >
           <button
             type="button"
             className="path-nav-button"
@@ -455,15 +464,14 @@ const FilePane = memo(function FilePane({
           } else if (event.key === "Escape") {
             clearSelection();
           } else if (
-            event.altKey &&
-            event.key === "ArrowLeft"
+            matchAction(event, "sftpGoBack")
           ) {
-            // 后退 / 前进与按钮同一入口（go 内部自带越界保护）
+            // 后退 / 前进键位读生效表（设置页 SFTP 段可自定义），
+            // go 内部自带越界保护
             event.preventDefault();
             go(-1);
           } else if (
-            event.altKey &&
-            event.key === "ArrowRight"
+            matchAction(event, "sftpGoForward")
           ) {
             event.preventDefault();
             go(1);

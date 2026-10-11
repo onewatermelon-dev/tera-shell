@@ -35,6 +35,7 @@ import {
   DEVTOOLS_ALT_CHORD,
   effectiveShortcuts,
   findConflict,
+  formatChord,
   handledElsewhere,
   isRecordingShortcut,
   matchAction,
@@ -43,7 +44,9 @@ import {
   parseChord,
   sanitizeOverrides,
   setShortcutOverrides,
-  shortcutOf
+  shortcutOf,
+  SFTP_SHORTCUTS,
+  shortcutScope
 } from "@/shared/lib/appShortcuts";
 
 /** 构造一个键盘事件。 */
@@ -416,10 +419,11 @@ describe("用户自定义快捷键：生效表", () => {
   // store 是模块级的，每个用例开头必须复位，否则相互污染
   beforeEach(() => setShortcutOverrides({}));
 
-  it("初始生效表等于默认表", () => {
-    expect(effectiveShortcuts()).toEqual(
-      APP_SHORTCUTS
-    );
+  it("初始生效表等于默认表（终端 + SFTP 两表合并）", () => {
+    expect(effectiveShortcuts()).toEqual({
+      ...APP_SHORTCUTS,
+      ...SFTP_SHORTCUTS
+    });
     expect(shortcutOf("newSession")).toBe(
       APP_SHORTCUTS.newSession!
     );
@@ -902,5 +906,126 @@ describe("handledElsewhere", () => {
     expect(handledElsewhere("newSession")).toBe(
       false
     );
+  });
+});
+
+describe("SFTP_SHORTCUTS 表", () => {
+  it("与终端表无重复键位（两表合并后同一键只归一个动作）", () => {
+    const seen = new Map<string, string>();
+    for (const table of [
+      APP_SHORTCUTS,
+      SFTP_SHORTCUTS
+    ]) {
+      for (const [id, chordStr] of Object.entries(
+        table
+      )) {
+        const previous = seen.get(chordStr);
+        expect(
+          previous,
+          `${previous} 与 ${id} 都绑了 ${chordStr}`
+        ).toBeUndefined();
+        seen.set(chordStr, id);
+      }
+    }
+  });
+
+  it("范围判定：sftp 动作归 SFTP 段，其余归终端段", () => {
+    expect(shortcutScope("sftpGoBack")).toBe(
+      "sftp"
+    );
+    expect(shortcutScope("sftpGoForward")).toBe(
+      "sftp"
+    );
+    expect(shortcutScope("newSession")).toBe(
+      "terminal"
+    );
+    // 两张表的动作都登记为可自定义
+    expect(
+      CUSTOMIZABLE_ACTIONS.has("sftpGoBack")
+    ).toBe(true);
+  });
+
+  it("方向键是命名键：归一化保留 ArrowLeft 原名，不变成大写杂串", () => {
+    expect(normalizeChord("Alt+ArrowLeft")).toBe(
+      "Alt+ArrowLeft"
+    );
+  });
+
+  it("matchAction 命中方向键事件（event.key 为 ArrowLeft 原名）", () => {
+    expect(
+      matchAction(
+        keyEvent("ArrowLeft", { alt: true }),
+        "sftpGoBack"
+      )
+    ).toBe("sftpGoBack");
+    expect(
+      matchAction(
+        keyEvent("ArrowRight", { alt: true }),
+        "sftpGoForward"
+      )
+    ).toBe("sftpGoForward");
+    // 无修饰键的方向键不该命中（那是列表里的滚动/光标）
+    expect(
+      matchAction(
+        keyEvent("ArrowLeft"),
+        "sftpGoBack"
+      )
+    ).toBeNull();
+  });
+
+  it("用户改键位后 SFTP 动作跟随生效表", () => {
+    setShortcutOverrides({
+      sftpGoBack: "Ctrl+Shift+B"
+    });
+    try {
+      expect(shortcutOf("sftpGoBack")).toBe(
+        "Ctrl+Shift+B"
+      );
+      expect(
+        matchAction(
+          keyEvent("ArrowLeft", { alt: true }),
+          "sftpGoBack"
+        )
+      ).toBeNull();
+      expect(
+        matchAction(
+          keyEvent("b", {
+            ctrl: true,
+            shift: true
+          }),
+          "sftpGoBack"
+        )
+      ).toBe("sftpGoBack");
+    } finally {
+      setShortcutOverrides({});
+    }
+  });
+});
+
+describe("formatChord 显示层", () => {
+  it("方向键转符号：Alt+ArrowLeft 显示为 Alt+←", () => {
+    expect(formatChord("Alt+ArrowLeft")).toBe(
+      "Alt+←"
+    );
+    expect(formatChord("Alt+ArrowRight")).toBe(
+      "Alt+→"
+    );
+    expect(formatChord("Alt+ArrowUp")).toBe(
+      "Alt+↑"
+    );
+    expect(formatChord("Alt+ArrowDown")).toBe(
+      "Alt+↓"
+    );
+  });
+
+  it("没有符号映射的键照常显示", () => {
+    expect(formatChord("Ctrl+Shift+N")).toBe(
+      "Ctrl+Shift+N"
+    );
+    expect(formatChord("F12")).toBe("F12");
+  });
+
+  it("解析不了的串原样返回", () => {
+    expect(formatChord("")).toBe("");
   });
 });

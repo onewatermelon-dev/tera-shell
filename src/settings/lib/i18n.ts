@@ -481,6 +481,10 @@ const zhCN = {
   // ---- 快捷键自定义 ----
   "shortcuts.hint":
     "点击键位后按下想要的组合键，Esc 取消。建议保留 Ctrl+Shift 前缀 —— 裸 Ctrl+字母 在终端里多为 shell 的行编辑键。",
+  "shortcuts.scope.terminal": "终端窗口",
+  "shortcuts.scope.sftp": "SFTP 窗口",
+  "shortcuts.action.sftpBack": "后退",
+  "shortcuts.action.sftpForward": "前进",
   "shortcuts.record": "录制快捷键",
   "shortcuts.listening": "按下组合键…",
   "shortcuts.custom": "已自定义",
@@ -1009,6 +1013,10 @@ const enUS: Record<MessageKey, string> = {
   // ---- 快捷键自定义 ----
   "shortcuts.hint":
     "Click a shortcut then press the key combination. Esc cancels. Keeping the Ctrl+Shift prefix is recommended — bare Ctrl+letter is mostly shell line editing in the terminal.",
+  "shortcuts.scope.terminal": "Terminal window",
+  "shortcuts.scope.sftp": "SFTP window",
+  "shortcuts.action.sftpBack": "Back",
+  "shortcuts.action.sftpForward": "Forward",
   "shortcuts.record": "Record shortcut",
   "shortcuts.listening": "Press keys…",
   "shortcuts.custom": "Custom",

@@ -11,11 +11,14 @@ import {
 import {
   ACTION_LABELS,
   APP_SHORTCUTS as DEFAULT_SHORTCUTS,
+  SFTP_SHORTCUTS,
   beginShortcutRecording,
   chordFromEvent,
   findConflict,
+  formatChord,
   useShortcuts,
-  type ShortcutOverrides
+  type ShortcutOverrides,
+  type ShortcutScope
 } from "@/shared/lib/appShortcuts";
 import {
   useT,
@@ -30,18 +33,29 @@ type Props = {
 };
 
 /**
- * 设置页要列出的全部动作（**单层，不分组**）。
+ * 设置页的分组：按**生效窗口**分成终端 / SFTP 两段。
  *
- * 顺序 = `APP_SHORTCUTS` 的声明顺序（会话操作 → 编辑 → 查找 → 工具 →
- * 终端上下文），用户在这一页看到的排列与「应用菜单里从上到下会遇到的
- * 顺序」一致，找东西时不用记分组。
- *
- * ⚠️ 曾经用 `ACTION_GROUPS`（文件 / 编辑 / 查看 / 工具 / 终端右键菜单）
- * 分五段渲染，用户要求取消分版块。分组数据本身仍在 appShortcuts 里
- * （i18n 与别处可能还要按分组取名字），只是这一页不再按它渲染。
+ * ⚠️ 早年按「文件 / 编辑 / 查看」分五段被用户否掉（切碎列表）；
+ * 现在的分法不同——两张默认表本来就作用于不同窗口，分成两段是
+ * 「这个键在哪儿生效」的信息，不是把一张表切碎。每段内部仍按
+ * 声明顺序平铺，段内不再细分。
  */
-const ALL_SHORTCUT_ACTIONS: string[] =
-  Object.keys(DEFAULT_SHORTCUTS);
+const SCOPES: {
+  id: ShortcutScope;
+  titleKey: MessageKey;
+  actions: string[];
+}[] = [
+  {
+    id: "terminal",
+    titleKey: "shortcuts.scope.terminal",
+    actions: Object.keys(DEFAULT_SHORTCUTS)
+  },
+  {
+    id: "sftp",
+    titleKey: "shortcuts.scope.sftp",
+    actions: Object.keys(SFTP_SHORTCUTS)
+  }
+];
 
 /**
  * 快捷键编辑区：按分组列出全部动作，点一下开始录制。
@@ -184,87 +198,93 @@ export default function ShortcutSettings({
   const customizedCount =
     Object.keys(overrides).length;
 
+  /** 单行动作条目（键位格子 + 重置 + 冲突提示），两段共用。 */
+  const renderRow = (actionId: string) => {
+    const chord = shortcuts[actionId] ?? "";
+    const isCustomized =
+      overrides[actionId] !== undefined;
+    const isRecordingThis =
+      recording === actionId;
+    return (
+      <div
+        key={actionId}
+        className="shortcut-item"
+      >
+        <div className="shortcut-name">
+          <span className="shortcut-label">
+            {labelOf(actionId, t)}
+          </span>
+          {isCustomized && (
+            <span className="shortcut-custom">
+              {t("shortcuts.custom")}
+            </span>
+          )}
+        </div>
+        <div className="shortcut-actions">
+          <button
+            type="button"
+            className={
+              isRecordingThis
+                ? "shortcut-key is-recording"
+                : "shortcut-key"
+            }
+            aria-label={t("shortcuts.record")}
+            // 点击后进入录制态：这一下不能再触发全局动作
+            onClick={() =>
+              startRecording(actionId)
+            }
+          >
+            {isRecordingThis ? (
+              <span className="shortcut-recording">
+                {t("shortcuts.listening")}
+              </span>
+            ) : (
+              <KeyOutlined />
+            )}
+            {!isRecordingThis &&
+              formatChord(chord)}
+          </button>
+          <button
+            type="button"
+            className="shortcut-reset"
+            aria-label={t("shortcuts.resetOne")}
+            // 已经是默认值就没得重置，禁用省得给假反馈
+            disabled={!isCustomized}
+            onClick={() => resetOne(actionId)}
+          >
+            <UndoOutlined />
+          </button>
+        </div>
+        {conflict?.actionId === actionId && (
+          <p className="shortcut-conflict">
+            {conflict.message}
+          </p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="shortcut-settings">
       <p className="shortcut-hint">
         {t("shortcuts.hint")}
       </p>
-      {/* ⚠️ **单层列表，不分组**：原先按「文件 / 编辑 / 查看 / 工具 /
-          终端右键菜单」分五段，每段一个标题。用户要求取消分版块 ——
-          五个小标题把 16 行切碎，找一个动作要先判断它在哪个版块，
-          比平铺扫一遍更慢。 */}
-      <div className="shortcut-list">
-        {ALL_SHORTCUT_ACTIONS.map(actionId => {
-          const chord = shortcuts[actionId] ?? "";
-          const isCustomized =
-            overrides[actionId] !== undefined;
-          const isRecordingThis =
-            recording === actionId;
-          return (
-            <div
-              key={actionId}
-              className="shortcut-item"
-            >
-              <div className="shortcut-name">
-                <span className="shortcut-label">
-                  {labelOf(actionId, t)}
-                </span>
-                {isCustomized && (
-                  <span className="shortcut-custom">
-                    {t("shortcuts.custom")}
-                  </span>
-                )}
-              </div>
-              <div className="shortcut-actions">
-                <button
-                  type="button"
-                  className={
-                    isRecordingThis
-                      ? "shortcut-key is-recording"
-                      : "shortcut-key"
-                  }
-                  aria-label={t(
-                    "shortcuts.record"
-                  )}
-                  // 点击后进入录制态：这一下不能再触发全局动作
-                  onClick={() =>
-                    startRecording(actionId)
-                  }
-                >
-                  {isRecordingThis ? (
-                    <span className="shortcut-recording">
-                      {t("shortcuts.listening")}
-                    </span>
-                  ) : (
-                    <KeyOutlined />
-                  )}
-                  {!isRecordingThis && chord}
-                </button>
-                <button
-                  type="button"
-                  className="shortcut-reset"
-                  aria-label={t(
-                    "shortcuts.resetOne"
-                  )}
-                  // 已经是默认值就没得重置，禁用省得给假反馈
-                  disabled={!isCustomized}
-                  onClick={() =>
-                    resetOne(actionId)
-                  }
-                >
-                  <UndoOutlined />
-                </button>
-              </div>
-              {conflict?.actionId ===
-                actionId && (
-                <p className="shortcut-conflict">
-                  {conflict.message}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* 按「终端窗口 / SFTP 窗口」两段渲染，段内平铺 */}
+      {SCOPES.map(scope => (
+        <section
+          key={scope.id}
+          className="shortcut-scope"
+        >
+          <p className="shortcut-scope-title">
+            {t(scope.titleKey)}
+          </p>
+          <div className="shortcut-list">
+            {scope.actions.map(actionId =>
+              renderRow(actionId)
+            )}
+          </div>
+        </section>
+      ))}
       <div className="shortcut-footer">
         <button
           type="button"
@@ -295,7 +315,10 @@ export default function ShortcutSettings({
 function shortcutOfDefault(
   actionId: string
 ): string | undefined {
-  return DEFAULT_SHORTCUTS[actionId];
+  return (
+    DEFAULT_SHORTCUTS[actionId] ??
+    SFTP_SHORTCUTS[actionId]
+  );
 }
 
 /**
@@ -324,7 +347,9 @@ const ACTION_I18N_KEYS: Record<
   openSftp: "app.action.openSftp",
   devtools: "app.action.devtools",
   reconnect: "terminal.reconnect.action",
-  toggleFocusMode: "terminal.fullscreen.action"
+  toggleFocusMode: "terminal.fullscreen.action",
+  sftpGoBack: "shortcuts.action.sftpBack",
+  sftpGoForward: "shortcuts.action.sftpForward"
 };
 
 /** 动作的展示名：复用应用菜单里已有的文案，缺键退回英文。 */

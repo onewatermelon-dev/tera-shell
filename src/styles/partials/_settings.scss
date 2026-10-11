@@ -176,6 +176,20 @@
   color: var(--muted);
 }
 
+// 快捷键按生效窗口分两段（终端 / SFTP）的段标题
+.shortcut-scope + .shortcut-scope {
+  margin-top: 16px;
+}
+
+.shortcut-scope-title {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
 .shortcut-list {
   display: flex;
   flex-direction: column;
