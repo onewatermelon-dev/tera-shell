@@ -10,9 +10,11 @@ import type {
   PaneEntry,
   PaneListing,
   PaneSide,
+  RemoteDiskUsage,
   TransferControlAction,
   TransferTask
 } from "@/sftp/lib/useSftp";
+import { formatSize } from "@/sftp/lib/fileFormat";
 import type { FileAction } from "@/sftp/components/FileContextMenu";
 import FilePane from "@/sftp/components/FilePane";
 import TransferPanel from "@/sftp/components/TransferPanel";
@@ -31,6 +33,8 @@ type SftpPanelProps = {
   remote: PaneListing | null;
   remoteError: string;
   remoteBusy: boolean;
+  /** 远程磁盘用量（状态条展示）；未加载或查询失败为 null。 */
+  remoteUsage: RemoteDiskUsage | null;
   onNavigateLocal: (path: string) => void;
   onNavigateRemote: (path: string) => void;
   onRefreshLocal: () => void;
@@ -110,6 +114,7 @@ export default function SftpPanel({
   remote,
   remoteError,
   remoteBusy,
+  remoteUsage,
   onNavigateLocal,
   onNavigateRemote,
   onRefreshLocal,
@@ -148,6 +153,25 @@ export default function SftpPanel({
     "remote",
     remoteHost
   );
+
+  /**
+   * 磁盘用量摘要，显示在远程栏标题旁：`可用 X / 共 Y · 目录 Z`。
+   * 无数据（未加载 / 查询失败）返回 null，标题旁就不显示。
+   */
+  function formatUsage(
+    usage: RemoteDiskUsage | null
+  ): string | null {
+    if (!usage) return null;
+    const parts = [
+      `可用 ${formatSize(usage.freeBytes)} / 共 ${formatSize(usage.totalBytes)}`
+    ];
+    if (usage.dirBytes > 0) {
+      parts.push(
+        `目录 ${formatSize(usage.dirBytes)}`
+      );
+    }
+    return parts.join(" · ");
+  }
 
   // 跨栏拖拽：松手时把来源栏的条目传进目标栏目录。
   // 单一回调入口，两个 FilePane 共用同一套拖拽状态 ——
@@ -325,6 +349,7 @@ export default function SftpPanel({
             isDragging={isDragging}
             isTarget={isTarget}
             isPaneTarget={isPaneTarget("remote")}
+            usageText={formatUsage(remoteUsage)}
           />
         </div>
         <TransferPanel

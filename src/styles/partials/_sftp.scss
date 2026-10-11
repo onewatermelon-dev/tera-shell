@@ -476,6 +476,17 @@
   color: var(--accent);
 }
 
+// 标题旁的磁盘用量摘要：比加载提示更弱的灰字
+// （标题整体是 10px 大写 + 宽字距，摘要要退回正常排版才可读）
+.pane-usage {
+  margin-left: 8px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 // 栏头右侧的目录过滤框：输入即实时筛选当前列表（纯前端）
 .pane-filter-wrap {
   position: relative;

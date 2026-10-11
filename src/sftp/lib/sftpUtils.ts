@@ -19,6 +19,16 @@ export type TransferDirection =
 export type TransferControlAction =
   "pause" | "resume" | "cancel";
 
+/** 远程磁盘用量（SFTP 状态条展示用）。 */
+export type RemoteDiskUsage = {
+  /** 落点所在文件系统的总容量 */
+  totalBytes: number;
+  /** 可用空间 */
+  freeBytes: number;
+  /** 当前目录累计大小；du 失败时为 0 */
+  dirBytes: number;
+};
+
 /**
  * 同名落点冲突策略。
  *

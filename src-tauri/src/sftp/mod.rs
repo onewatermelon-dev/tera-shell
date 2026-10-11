@@ -45,6 +45,9 @@ const PREFETCH_LIMIT: usize = 8;
 /// 名字要从 `/etc/passwd`、`/etc/group` 查，连上后读一次即可长期复用。
 struct Connection {
 	sftp: Arc<Sftp>,
+	/// 同一条会话的句柄：SFTP 之外还要跑 shell 命令（磁盘用量 df/du）。
+	/// ssh2 的 Session 非 Sync，用互斥锁串行化 exec。
+	session: Arc<Mutex<Session>>,
 	users: HashMap<u32, String>,
 	groups: HashMap<u32, String>,
 }
@@ -460,6 +463,7 @@ fn connect(
 	);
 	Ok(Arc::new(Connection {
 		sftp: Arc::new(sftp),
+		session: Arc::new(Mutex::new(session)),
 		users,
 		groups,
 	}))
@@ -1374,6 +1378,124 @@ impl<'a> TransferContext<'a> {
 	}
 }
 
+/// 单引号包裹的 shell 字面量：路径可能带空格与引号。
+fn shell_quote(value: &str) -> String {
+	format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+/// 在连接的会话上执行一条 shell 命令并收集 stdout。
+fn exec_output(
+	session: &Arc<Mutex<Session>>,
+	command: &str,
+) -> Result<String, String> {
+	let mut channel = session
+		.lock()
+		.unwrap_or_else(|error| error.into_inner())
+		.channel_session()
+		.map_err(|error| {
+			format!("打开命令通道失败：{error}")
+		})?;
+	channel
+		.exec(command)
+		.map_err(|error| format!("执行命令失败：{error}"))?;
+	let mut output = String::new();
+	channel
+		.read_to_string(&mut output)
+		.map_err(|error| format!("读取命令输出失败：{error}"))?;
+	let _ = channel.wait_close();
+	Ok(output)
+}
+
+/// 解析 `df -P -k` 最后一条数据行：返回 (总容量, 可用) 字节数。
+///
+/// -P 是 POSIX 定宽格式：Filesystem 1024-blocks Used Available Capacity Mounted。
+/// 挂载点带空格也不影响 —— 取的是前面几列。
+fn parse_df(output: &str) -> Option<(u64, u64)> {
+	let last = output
+		.lines()
+		.filter(|line| !line.trim().is_empty())
+		.last()?;
+	let mut fields = last.split_whitespace();
+	let _filesystem = fields.next()?;
+	let blocks: u64 = fields.next()?.parse().ok()?;
+	let _used: u64 = fields.next()?.parse().ok()?;
+	let available: u64 = fields.next()?.parse().ok()?;
+	Some((blocks * 1024, available * 1024))
+}
+
+/// 解析 `du -s -k` 输出：目录累计大小（字节）。
+fn parse_du(output: &str) -> Option<u64> {
+	output
+		.lines()
+		.next()?
+		.split_whitespace()
+		.next()?
+		.parse::<u64>()
+		.ok()
+		.map(|blocks| blocks * 1024)
+}
+
+/// 远程磁盘用量（状态栏展示用）。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDiskUsage {
+	/// 落点所在文件系统的总容量
+	total_bytes: u64,
+	/// 可用空间
+	free_bytes: u64,
+	/// 当前目录累计大小（du 拿不到时为 0）
+	dir_bytes: u64,
+}
+
+/// 查询远程磁盘用量：df 给容量与可用空间，du 给当前目录累计大小。
+///
+/// 用 SFTP 所在的同一条会话开 exec 通道跑 shell（ssh2 协议本身拿不到
+/// statvfs）。du 是非致命项 —— 超大目录会跑满会话超时，失败时置 0，
+/// 容量与可用空间照常显示。
+#[tauri::command(rename = "sftp_disk_usage")]
+pub async fn disk_usage(
+	pool: State<'_, SftpPool>,
+	job: TransferJob,
+) -> Result<RemoteDiskUsage, String> {
+	let connections = pool.connections.clone();
+	let (key, host, port, username, password) =
+		transfer_target(&job);
+	let remote = job.remote.clone();
+	tauri::async_runtime::spawn_blocking(move || {
+		let connection = obtain(
+			&connections,
+			&key,
+			&host,
+			port,
+			&username,
+			password.as_deref(),
+		)?;
+		let quoted = shell_quote(&remote);
+		let (total_bytes, free_bytes) =
+			parse_df(&exec_output(
+				&connection.session,
+				&format!("df -P -k {quoted}"),
+			)?)
+			.ok_or_else(|| {
+				"无法解析 df 输出".to_string()
+			})?;
+		let dir_bytes = exec_output(
+			&connection.session,
+			&format!("du -s -k {quoted}"),
+		)
+		.ok()
+		.and_then(|output| parse_du(&output))
+		.unwrap_or(0);
+		Ok(RemoteDiskUsage {
+			total_bytes,
+			free_bytes,
+			dir_bytes,
+		})
+	})
+	.await
+	.map_err(|error| error.to_string())?
+}
+
 /// 上传本地文件到远程路径（分块传输并按 100ms 节流上报进度）。
 #[tauri::command(rename = "sftp_upload")]
 pub async fn upload(
@@ -1650,5 +1772,36 @@ mod tests {
 			),
 			Some((PathBuf::from("/r/new.bin"), 0))
 		);
+	}
+}
+
+#[cfg(test)]
+mod disk_usage_tests {
+	use super::*;
+
+	#[test]
+	fn parse_df_reads_last_data_line() {
+		let output = "Filesystem 1024-blocks Used Available Capacity Mounted on\n\
+		              /dev/sda1 1000 400 600 40% /\n";
+		assert_eq!(parse_df(output), Some((1000 * 1024, 600 * 1024)));
+	}
+
+	#[test]
+	fn parse_df_mount_with_spaces() {
+		// 挂载点带空格：取的是前几列，不受影响
+		let output = "/dev/sda1 2048 1024 1024 50% /mnt/my data\n";
+		assert_eq!(parse_df(output), Some((2048 * 1024, 1024 * 1024)));
+	}
+
+	#[test]
+	fn parse_df_garbage_returns_none() {
+		assert_eq!(parse_df("df: invalid option"), None);
+		assert_eq!(parse_df(""), None);
+	}
+
+	#[test]
+	fn parse_du_reads_block_count() {
+		assert_eq!(parse_du("1234\t/var/log\n"), Some(1234 * 1024));
+		assert_eq!(parse_du("du: cannot access"), None);
 	}
 }

@@ -13,6 +13,7 @@ import {
   type PaneEntry,
   type PaneListing,
   type PaneSide,
+  type RemoteDiskUsage,
   type TransferControlAction,
   type TransferPolicy
 } from "@/sftp/lib/sftpUtils";
@@ -30,6 +31,7 @@ export type {
   PaneEntry,
   PaneListing,
   PaneSide,
+  RemoteDiskUsage,
   TransferControlAction,
   TransferDirection,
   TransferPolicy,
@@ -61,6 +63,13 @@ export function useSftp(
   // 同一时刻只允许一次远程导航：双击过快时后续请求会排在同一个连接锁上，
   // 表现为"点了半天才一个个响应"，这里直接忽略重复触发。
   const remoteBusyRef = useRef(false);
+  // 远程磁盘用量：每次导航成功后异步刷新；ref 记录"已请求的目录"，
+  // 结果回来时目录已切走就丢弃（响应乱序时不串台）
+  const [remoteUsage, setRemoteUsage] =
+    useState<RemoteDiskUsage | null>(null);
+  const remoteUsagePathRef = useRef<
+    string | null
+  >(null);
   // 复制 / 粘贴用的内部剪贴板（记来源栏与一批条目，粘贴时才真正执行）
   const [clipboard, setClipboard] = useState<{
     pane: PaneSide;
@@ -154,8 +163,9 @@ export function useSftp(
         const password = target.password
           ? await resolvePassword(target.password)
           : undefined;
-        setRemote(
-          await invoke<PaneListing>("sftp_list", {
+        const listing = await invoke<PaneListing>(
+          "sftp_list",
+          {
             request: {
               host: target.host,
               port: target.port,
@@ -164,8 +174,39 @@ export function useSftp(
               path: path ?? null,
               refresh
             }
-          })
+          }
         );
+        setRemote(listing);
+        // 磁盘用量异步跟上：不阻塞目录列表。df/du 走同一条 SSH
+        // 会话的 exec 通道，超大目录的 du 会跑满会话超时后放弃
+        remoteUsagePathRef.current = listing.path;
+        void invoke<RemoteDiskUsage>(
+          "sftp_disk_usage",
+          {
+            job: {
+              host: target.host,
+              port: target.port,
+              username: target.username,
+              password,
+              local: "",
+              remote: listing.path
+            }
+          }
+        )
+          .then(usage => {
+            if (
+              remoteUsagePathRef.current ===
+              listing.path
+            )
+              setRemoteUsage(usage);
+          })
+          .catch(() => {
+            if (
+              remoteUsagePathRef.current ===
+              listing.path
+            )
+              setRemoteUsage(null);
+          });
       } catch (reason) {
         // 失败时保留原目录内容（错误文案会盖在上面），不清空以便重试
         setRemoteError(String(reason));
@@ -671,6 +712,8 @@ export function useSftp(
       remote,
       remoteError,
       remoteBusy,
+      /** 远程磁盘用量（状态条展示）；未加载或查询失败为 null */
+      remoteUsage,
       canPaste: clipboard !== null,
       /** 内部剪贴板（跨栏粘贴的冲突检测要用来源条目清单） */
       clipboard,
@@ -701,6 +744,7 @@ export function useSftp(
       remote,
       remoteError,
       remoteBusy,
+      remoteUsage,
       clipboard,
       tasks,
       navigateLocal,

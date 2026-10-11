@@ -67,6 +67,8 @@ type FilePaneProps = {
   bookmarks: string[];
   /** 当前目录是否已收藏。 */
   bookmarked: boolean;
+  /** 标题旁的磁盘用量摘要（仅远程栏有）；null 不显示。 */
+  usageText?: string | null;
   /** 收藏 / 取消收藏当前目录。 */
   onToggleBookmark: () => void;
   /** 删除一条书签。 */
@@ -132,6 +134,7 @@ const FilePane = memo(function FilePane({
   canPaste,
   bookmarks,
   bookmarked,
+  usageText = null,
   onToggleBookmark,
   onRemoveBookmark,
   onContextAction,
@@ -330,6 +333,14 @@ const FilePane = memo(function FilePane({
       <div className="sftp-pane-head">
         <span className="sftp-pane-title">
           {label}
+          {usageText && (
+            <em
+              className="pane-usage"
+              title={usageText}
+            >
+              {usageText}
+            </em>
+          )}
           {busy && (
             <em className="pane-busy">载入中…</em>
           )}

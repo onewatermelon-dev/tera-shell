@@ -331,6 +331,7 @@ export default function SftpWindow({
         remote={sftp.remote}
         remoteError={sftp.remoteError}
         remoteBusy={sftp.remoteBusy}
+        remoteUsage={sftp.remoteUsage}
         onNavigateLocal={sftp.navigateLocal}
         onNavigateRemote={handleNavigateRemote}
         onRefreshLocal={handleRefreshLocal}
