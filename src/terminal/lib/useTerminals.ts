@@ -26,7 +26,8 @@ import {
 import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import {
   disableWebgl,
-  enableWebgl
+  enableWebgl,
+  setWebglEnabled
 } from "@/terminal/lib/webglRenderer";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
@@ -171,6 +172,7 @@ export function useTerminals(
     | "commandCompletion"
     | "cursorStyle"
     | "cursorBlink"
+    | "webglRender"
     | "scrollback"
   >,
   /**
@@ -721,6 +723,15 @@ export function useTerminals(
     const family = resolveFontFamily(
       appearance.fontFamily
     );
+    // 硬件加速开关：关掉时释放已启用终端上的 addon，xterm 自动落回
+    // DOM 渲染器（已有终端无需重建，屏幕内容立刻重新绘制）。
+    // ⚠️ WeakMap 不可遍历，得由这里把当前所有会话的 terminal 传进去
+    if (!appearance.webglRender)
+      setWebglEnabled(
+        false,
+        openedRef.current.map(s => s.terminal)
+      );
+    else setWebglEnabled(true);
     const theme = toXtermTheme(
       resolveColorScheme(appearance.colorScheme)
     );
@@ -758,6 +769,7 @@ export function useTerminals(
     appearance.commandCompletion,
     appearance.cursorStyle,
     appearance.cursorBlink,
+    appearance.webglRender,
     pausePtySync,
     resize
   ]);
@@ -808,12 +820,14 @@ export function useTerminals(
       const first = !session.mounted;
       if (first) {
         session.terminal.open(session.element);
-        // ⚠️ WebGL 必须在 open() 之后启用：addon 内部要往
-        // `terminal.screenElement` 塞 canvas，而该元素 open() 时才创建。
-        // 失败时 enableWebgl 内部静默降级，这里不会中断挂载
-        enableWebgl(session.terminal);
         session.mounted = true;
       }
+      // ⚠️ WebGL 必须在 open() 之后启用：addon 内部要往
+      // `terminal.screenElement` 塞 canvas，而该元素 open() 时才创建。
+      // 放在 `first` 之外是必要的 —— 设置里把硬件加速打开时，
+      // 已存在的终端也要补上。enableWebgl 幂等，重复调用无副作用。
+      // 失败时内部静默降级，这里不会中断挂载。
+      enableWebgl(session.terminal);
       resizeObserver.current?.observe(host);
       resize(session);
       // 只让活动窗格抢键盘焦点：挂载时顺带 focus 活动那只，
@@ -821,7 +835,16 @@ export function useTerminals(
       if (pane.id === activePane?.id)
         session.terminal.focus();
     }
-  }, [opened, panes, activePane?.id, resize]);
+    // ⚠️ 依赖里带 appearance.webglRender：设置里把硬件加速**打开**时，
+    // 已存在的终端要在这里补一次 enableWebgl（它幂等，重复调用无副作用）；
+    // 关掉时由上面那个外观 effect 里的 setWebglEnabled 统一释放。
+  }, [
+    opened,
+    panes,
+    activePane?.id,
+    resize,
+    appearance.webglRender
+  ]);
 
   // ---- 5. Terminal creation (uses openSearch) ----
   const createTerminal = useCallback(

@@ -27,6 +27,9 @@ import {
 import useTerminalsSource from "@/terminal/lib/useTerminals.ts?raw";
 import webglSource from "@/terminal/lib/webglRenderer.ts?raw";
 import appHeaderSource from "@/app/components/AppHeader.tsx?raw";
+import webglRendererRaw from "@/terminal/lib/webglRenderer.ts?raw";
+import settingsSource from "@/settings/lib/settings.ts?raw";
+import settingsPageSource from "@/settings/components/SettingsPage.tsx?raw";
 
 /** 剥掉注释再匹配 —— 类名在注释里被大量提及。 */
 const stripComments = (source: string) =>
@@ -216,5 +219,73 @@ describe("回归防护：WebGL 未被回退", () => {
   it("enableWebgl / disableWebgl 都接上了", () => {
     expect(code).toContain("enableWebgl");
     expect(code).toContain("disableWebgl");
+  });
+});
+
+describe("硬件加速开关（设置项）", () => {
+  const code = stripComments(useTerminalsSource);
+  const webglSource = stripComments(
+    webglRendererRaw
+  );
+
+  it("开关有 setWebglEnabled 入口，且关掉时释放 addon", () => {
+    expect(webglSource).toContain(
+      "export function setWebglEnabled("
+    );
+    // 关掉要落到 DOM 渲染器：dispose 每个已启用的 addon
+    expect(webglSource).toContain(
+      "disposeAll(terminals)"
+    );
+  });
+
+  it("WeakMap 不可遍历 —— 关开关时终端必须由调用方传入", () => {
+    // WeakMap 没有 values()/clear()，遍历会 TS2550/TS2339
+    expect(
+      webglSource,
+      "不该试图遍历 WeakMap"
+    ).not.toMatch(
+      /webglByTerminal\.(values|clear)\(/
+    );
+    // 调用处把当前所有会话的 terminal 传了进去
+    expect(code).toContain(
+      "openedRef.current.map(s => s.terminal)"
+    );
+  });
+
+  it("enableWebgl 尊重开关：关着时不启用", () => {
+    expect(webglSource).toMatch(
+      /if \(!webglEnabled\) return;/
+    );
+  });
+
+  it("打开开关后已存在的终端也会补启用（enableWebgl 移出 first 分支）", () => {
+    // 在 first 分支里的话，设置里重新打开时老终端不会被补上
+    expect(code).toMatch(
+      /if \(first\) \{[\s\S]{0,120}mounted = true;[\s\S]{0,40}\}[\s\S]{0,120}enableWebgl\(session\.terminal\);/
+    );
+    // 该 effect 的依赖里必须带开关
+    expect(code).toMatch(
+      /appearance\.webglRender[\s\S]{0,40}\]/
+    );
+  });
+
+  it("设置项默认开（旧数据缺字段时也是开）", () => {
+    expect(settingsSource).toMatch(
+      /webglRender: true/
+    );
+    // ⚠️ 必须是 `!== false` 而不是真值判断 —— 真值判断会让
+    // 「旧配置里没有这个字段」变成 false，等于给存量用户静默关掉加速
+    expect(settingsSource).toContain(
+      "webglRender: parsed.webglRender !== false"
+    );
+  });
+
+  it("设置页有该开关的 UI", () => {
+    expect(settingsPageSource).toContain(
+      "settings.webgl.title"
+    );
+    expect(settingsPageSource).toContain(
+      "settings.webglRender"
+    );
   });
 });

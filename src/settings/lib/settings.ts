@@ -52,6 +52,14 @@ export type AppSettings = {
   /** 终端光标是否闪烁（设置-终端里开关）。 */
   cursorBlink: boolean;
   /**
+   * 硬件加速渲染（WebGL）。
+   *
+   * 关掉后终端退回 DOM 渲染器：大输出时滚动/输入会明显变涩，
+   * 但在显卡驱动异常、或发现 WebGL 下有渲染怪象（缺色、字形缺失）时
+   * 是一条现成的退路 —— 也是排查此类问题时该先试的一步。
+   */
+  webglRender: boolean;
+  /**
    * 终端回滚行数：内存里保留多少行历史输出（设置-终端里选择）。
    *
    * 传给 xterm 的 `scrollback`，见 MIN_SCROLLBACK/MAX_SCROLLBACK。
@@ -118,6 +126,7 @@ export const defaultSettings: AppSettings = {
   commandCompletion: true,
   cursorStyle: "block",
   cursorBlink: true,
+  webglRender: true,
   scrollback: DEFAULT_SCROLLBACK,
   dataDir: "",
   shortcutOverrides: {}
@@ -197,6 +206,8 @@ export function loadSettings(): AppSettings {
           ? parsed.cursorStyle
           : "block",
       cursorBlink: parsed.cursorBlink !== false,
+      // 默认开：只有显式存过 false 才关
+      webglRender: parsed.webglRender !== false,
       // 回滚行数：旧数据没这个字段（undefined）时 clampScrollback
       // 会退回默认值，无需额外判断
       scrollback: clampScrollback(

@@ -532,6 +532,9 @@ const zhCN = {
   "settings.cursorBlink.title": "光标闪烁",
   "settings.cursorBlink.desc":
     "终端光标是否闪烁。",
+  "settings.webgl.title": "硬件加速渲染",
+  "settings.webgl.desc":
+    "用 GPU 绘制终端文字（WebGL）。大输出时滚动与输入更顺滑；关闭后退回普通渲染，若遇到缺色、字形缺失等显示异常可先关掉它。",
   "settings.dataDir.title": "数据存储路径",
   "settings.dataDir.desc":
     "会话、设置与快捷宏的导出目录（默认为用户主目录）。保存后会把现有数据复制到新位置；路径后缀 .tera-shell 不可更改。",
@@ -1067,6 +1070,9 @@ const enUS: Record<MessageKey, string> = {
   "settings.cursorBlink.title": "Cursor blink",
   "settings.cursorBlink.desc":
     "Whether the terminal cursor blinks.",
+  "settings.webgl.title": "Hardware acceleration",
+  "settings.webgl.desc":
+    "Draw terminal text with the GPU (WebGL). Keeps scrolling and typing smooth on heavy output. Turn it off to fall back to normal rendering — useful if you hit missing colors or glyphs.",
   "settings.dataDir.title": "Data location",
   "settings.dataDir.desc":
     "Where sessions, settings and macros are exported (defaults to your home directory). Saving copies the current data to the new location; the .tera-shell suffix is fixed.",

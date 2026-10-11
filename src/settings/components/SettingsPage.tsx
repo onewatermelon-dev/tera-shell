@@ -492,6 +492,26 @@ export default function SettingsPage({
             />
 
             <SettingsRow
+              title={t("settings.webgl.title")}
+              description={t(
+                "settings.webgl.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.webgl.title"
+                  )}
+                  isSelected={
+                    settings.webglRender
+                  }
+                  onChange={webglRender =>
+                    onChange({ webglRender })
+                  }
+                />
+              }
+            />
+
+            <SettingsRow
               title={t("settings.welcome.title")}
               description={t(
                 "settings.welcome.desc"

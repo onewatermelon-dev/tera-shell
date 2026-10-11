@@ -46,6 +46,31 @@ const webglByTerminal = new WeakMap<
 let degradedCount = 0;
 
 /**
+ * 全局开关：关掉后**已启用的终端也会退回 DOM 渲染器**。
+ *
+ * 供设置项「硬件加速渲染」使用。除了给用户一个在驱动异常/观感不适时
+ * 的退路，这也是排查渲染问题的基本手段 —— 任何颜色、字形、选区的异常，
+ * 第一步就该是关掉它看是否恢复，用来区分「是 WebGL 的问题」还是
+ * 「与 WebGL 无关」。
+ */
+let webglEnabled = true;
+
+/**
+ * 设置项变更时调用；关 → 顺带释放传入的那些终端上的 addon。
+ *
+ * ⚠️ 关闭时**必须由调用方把终端传进来**：addon 存在 WeakMap 里，
+ * WeakMap 不可遍历（没有 `values`/`clear`），本模块拿不到全部实例。
+ */
+export function setWebglEnabled(
+  on: boolean,
+  terminals: Iterable<Terminal> = []
+): void {
+  if (webglEnabled === on) return;
+  webglEnabled = on;
+  if (!on) disposeAll(terminals);
+}
+
+/**
  * 给已 open() 的终端启用 WebGL 渲染器。
  *
  * 失败**静默降级**而不是抛错：WebGL 是纯优化，显卡不支持、驱动有问题、
@@ -60,6 +85,8 @@ let degradedCount = 0;
 export function enableWebgl(
   terminal: Terminal
 ): void {
+  // 设置里关掉了硬件加速：退回 DOM 渲染器（终端照常可用）
+  if (!webglEnabled) return;
   if (webglByTerminal.has(terminal)) return;
   try {
     const addon = new WebglAddon();
@@ -107,4 +134,18 @@ export function isWebglActive(
   terminal: Terminal
 ): boolean {
   return webglByTerminal.has(terminal);
+}
+
+/**
+ * 释放传入终端上的 addon（设置里关掉硬件加速时用）。
+ *
+ * dispose 后 xterm 自动落回 DOM 渲染器 —— WebglAddon.dispose 就是移除
+ * canvas 并把 renderer 换回默认那个。**已有终端不需要重建**，屏幕上内容
+ * 立刻以 DOM 方式重绘。
+ */
+function disposeAll(
+  terminals: Iterable<Terminal>
+): void {
+  for (const terminal of terminals)
+    disableWebgl(terminal);
 }
