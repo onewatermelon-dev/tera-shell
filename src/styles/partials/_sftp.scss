@@ -581,15 +581,134 @@
 }
 
 .path-nav-button:hover:not(:disabled),
-.path-refresh-button:hover:not(:disabled) {
+.path-refresh-button:hover:not(:disabled),
+.path-bookmark-button:hover:not(:disabled) {
   color: var(--foreground);
   background: var(--default);
 }
 
 .path-nav-button:disabled,
-.path-refresh-button:disabled {
+.path-refresh-button:disabled,
+.path-bookmark-button:disabled {
   cursor: default;
   opacity: 0.4;
+}
+
+// 书签按钮：与刷新按钮同族；当前目录已收藏时星形点亮为主题色
+.path-bookmark-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.path-bookmark-button .is-on {
+  color: var(--accent);
+}
+
+// 书签面板：挂在地址栏右端下方，与路径选择面板同族的浮层
+.bookmark-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 26px;
+  z-index: 20;
+  min-width: 220px;
+  max-width: 360px;
+  padding: 4px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+}
+
+.bookmark-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 6px;
+}
+
+.bookmark-toggle:hover {
+  background: var(--default);
+}
+
+.bookmark-star.is-on {
+  color: var(--accent);
+}
+
+.bookmark-items {
+  padding: 4px 0 0;
+  margin: 4px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.bookmark-item:hover {
+  background: var(--default);
+}
+
+.bookmark-jump {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.bookmark-remove {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.bookmark-remove:hover {
+  color: var(--danger);
+  background: var(--border);
+}
+
+.bookmark-empty {
+  padding: 6px 8px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
 }
 
 // 下拉按钮：嵌在输入框内部右端。

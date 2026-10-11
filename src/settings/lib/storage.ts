@@ -22,7 +22,9 @@ export const DataName = {
   models: "models",
   aiHistory: "ai_history",
   commandHistory: "command_history",
-  aiPrefs: "ai_prefs"
+  aiPrefs: "ai_prefs",
+  /** SFTP 目录书签（按栏与主机维度收藏），见 sftp/lib/sftpBookmarks.ts */
+  sftpBookmarks: "sftp_bookmarks"
 } as const;
 
 /**

@@ -19,6 +19,10 @@ import FilePane from "@/sftp/components/FilePane";
 import SftpDock from "@/sftp/components/SftpDock";
 import TransferPanel from "@/sftp/components/TransferPanel";
 import { usePaneDrag } from "@/sftp/lib/usePaneDrag";
+import {
+  bookmarkPathsFor,
+  type SftpBookmark
+} from "@/sftp/lib/sftpBookmarks";
 import type { DropTarget } from "@/sftp/lib/dragTransfer";
 
 type Props = {
@@ -40,6 +44,20 @@ type Props = {
   onClose: () => void;
   /** 剪贴板里是否有可粘贴的内容 */
   canPaste: boolean;
+  /** 目录书签（全部；本地栏按空 host 过滤，远程栏按会话主机过滤）。 */
+  bookmarks: SftpBookmark[];
+  /** 收藏 / 取消收藏某个目录。 */
+  onToggleBookmark: (
+    side: PaneSide,
+    host: string,
+    path: string
+  ) => void;
+  /** 删除一条书签。 */
+  onRemoveBookmark: (
+    side: PaneSide,
+    host: string,
+    path: string
+  ) => void;
   /** 右键菜单动作；pane 指明发生在哪一栏，entries 为完整作用条目集 */
   onFileAction: (
     pane: PaneSide,
@@ -111,6 +129,9 @@ export default function SftpDialog({
   onRefreshLocal,
   onRefreshRemote,
   canPaste,
+  bookmarks,
+  onToggleBookmark,
+  onRemoveBookmark,
   onFileAction,
   onCreateEntry,
   onRenameEntry,
@@ -155,6 +176,19 @@ export default function SftpDialog({
     session.kind === "ssh"
       ? `远程 · ${session.host}`
       : "远程";
+  // 书签按栏过滤：本地栏 host 恒空串；远程栏跟会话主机走
+  const remoteHost =
+    session.kind === "ssh" ? session.host : "";
+  const localBookmarks = bookmarkPathsFor(
+    bookmarks,
+    "local",
+    ""
+  );
+  const remoteBookmarks = bookmarkPathsFor(
+    bookmarks,
+    "remote",
+    remoteHost
+  );
 
   return (
     <Modal
@@ -255,6 +289,24 @@ export default function SftpDialog({
                   canPickPath
                   isLocal
                   canPaste={canPaste}
+                  bookmarks={localBookmarks}
+                  bookmarked={localBookmarks.includes(
+                    local?.path ?? ""
+                  )}
+                  onToggleBookmark={() =>
+                    onToggleBookmark(
+                      "local",
+                      "",
+                      local?.path ?? ""
+                    )
+                  }
+                  onRemoveBookmark={path =>
+                    onRemoveBookmark(
+                      "local",
+                      "",
+                      path
+                    )
+                  }
                   onContextAction={(
                     action,
                     entry,
@@ -303,6 +355,24 @@ export default function SftpDialog({
                   onRefresh={onRefreshRemote}
                   isLocal={false}
                   canPaste={canPaste}
+                  bookmarks={remoteBookmarks}
+                  bookmarked={remoteBookmarks.includes(
+                    remote?.path ?? ""
+                  )}
+                  onToggleBookmark={() =>
+                    onToggleBookmark(
+                      "remote",
+                      remoteHost,
+                      remote?.path ?? ""
+                    )
+                  }
+                  onRemoveBookmark={path =>
+                    onRemoveBookmark(
+                      "remote",
+                      remoteHost,
+                      path
+                    )
+                  }
                   onContextAction={(
                     action,
                     entry,

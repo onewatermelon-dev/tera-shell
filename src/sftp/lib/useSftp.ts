@@ -16,6 +16,13 @@ import {
   type TransferControlAction
 } from "@/sftp/lib/sftpUtils";
 import { useTransferTasks } from "@/sftp/lib/useTransferTasks";
+import {
+  loadBookmarks,
+  removedBookmark,
+  saveBookmarks,
+  toggledBookmarks,
+  type SftpBookmark
+} from "@/sftp/lib/sftpBookmarks";
 
 // 类型定义集中在 sftpUtils，这里重新导出，外部仍从 useSftp 引入
 export type {
@@ -57,8 +64,54 @@ export function useSftp(
     pane: PaneSide;
     entries: PaneEntry[];
   } | null>(null);
+  // 目录书签：启动时从数据文件读一次，之后内存先行、异步落盘
+  const [bookmarks, setBookmarks] = useState<
+    SftpBookmark[]
+  >(loadBookmarks);
 
   const tasks = useTransferTasks();
+
+  /** 收藏 / 取消收藏某栏某主机的一个目录。 */
+  const toggleBookmark = useCallback(
+    (
+      side: PaneSide,
+      host: string,
+      path: string
+    ) => {
+      setBookmarks(previous => {
+        const next = toggledBookmarks(
+          previous,
+          side,
+          host,
+          path
+        );
+        saveBookmarks(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  /** 删除一条书签。 */
+  const removeBookmark = useCallback(
+    (
+      side: PaneSide,
+      host: string,
+      path: string
+    ) => {
+      setBookmarks(previous => {
+        const next = removedBookmark(
+          previous,
+          side,
+          host,
+          path
+        );
+        saveBookmarks(next);
+        return next;
+      });
+    },
+    []
+  );
 
   /** 浏览本地目录；不传路径表示用户主目录。 */
   const navigateLocal = useCallback(
@@ -681,7 +734,10 @@ export function useSftp(
       pasteInto,
       clearTransfers,
       removeTransfer,
-      controlTransfer
+      controlTransfer,
+      bookmarks,
+      toggleBookmark,
+      removeBookmark
     }),
     [
       session,
@@ -707,7 +763,10 @@ export function useSftp(
       pasteInto,
       clearTransfers,
       removeTransfer,
-      controlTransfer
+      controlTransfer,
+      bookmarks,
+      toggleBookmark,
+      removeBookmark
     ]
   );
 }

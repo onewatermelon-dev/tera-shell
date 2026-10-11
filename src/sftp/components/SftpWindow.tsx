@@ -231,6 +231,9 @@ export default function SftpWindow({
       onClearTransfers={sftp.clearTransfers}
       onRemoveTransfers={sftp.removeTransfer}
       onTransferControl={handleTransferControl}
+      bookmarks={sftp.bookmarks}
+      onToggleBookmark={sftp.toggleBookmark}
+      onRemoveBookmark={sftp.removeBookmark}
       onDropEntries={handleDropEntries}
     />
   );

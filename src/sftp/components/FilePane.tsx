@@ -4,7 +4,9 @@ import {
   FolderOutlined,
   LeftOutlined,
   ReloadOutlined,
-  RightOutlined
+  RightOutlined,
+  StarFilled,
+  StarOutlined
 } from "@ant-design/icons";
 import {
   EmptyState,
@@ -43,6 +45,7 @@ import {
   nextSelection,
   resolveSelected
 } from "@/sftp/lib/sftpUtils";
+import BookmarkMenu from "@/sftp/components/BookmarkMenu";
 
 type FilePaneProps = {
   label: string;
@@ -60,6 +63,14 @@ type FilePaneProps = {
   isLocal: boolean;
   /** 剪贴板里是否有可粘贴的内容 */
   canPaste: boolean;
+  /** 本栏可用的目录书签（已按侧与主机过滤）。 */
+  bookmarks: string[];
+  /** 当前目录是否已收藏。 */
+  bookmarked: boolean;
+  /** 收藏 / 取消收藏当前目录。 */
+  onToggleBookmark: () => void;
+  /** 删除一条书签。 */
+  onRemoveBookmark: (path: string) => void;
   /** 右键菜单动作；entry 为右键点中的条目（空白处 null），entries
    * 是本次作用的完整条目集（多选时为整个选中，否则只含 entry 一项） */
   onContextAction: (
@@ -119,6 +130,10 @@ const FilePane = memo(function FilePane({
   canPickPath = false,
   isLocal,
   canPaste,
+  bookmarks,
+  bookmarked,
+  onToggleBookmark,
+  onRemoveBookmark,
   onContextAction,
   onCreate,
   onRename,
@@ -199,6 +214,9 @@ const FilePane = memo(function FilePane({
   // 路径选择面板：点开时才加载根入口（事件回调里取数，不需要 effect）
   const [picker, setPicker] =
     useState<PlaceListing | null>(null);
+  // 书签面板：点开时列出本栏收藏
+  const [bookmarksOpen, setBookmarksOpen] =
+    useState(false);
 
   async function openPicker() {
     try {
@@ -432,6 +450,36 @@ const FilePane = memo(function FilePane({
             />
           )}
         </div>
+        {/* 书签：星形实心=当前目录已收藏；点开面板可跳转 / 删除 */}
+        <Hint label="目录书签">
+          <button
+            type="button"
+            className="path-bookmark-button"
+            aria-label="目录书签"
+            disabled={!listing}
+            onClick={() =>
+              setBookmarksOpen(open => !open)
+            }
+          >
+            {bookmarked ? (
+              <StarFilled className="is-on" />
+            ) : (
+              <StarOutlined />
+            )}
+          </button>
+        </Hint>
+        {bookmarksOpen && (
+          <BookmarkMenu
+            bookmarks={bookmarks}
+            bookmarked={bookmarked}
+            onToggleCurrent={onToggleBookmark}
+            onJump={onOpen}
+            onRemove={onRemoveBookmark}
+            onClose={() =>
+              setBookmarksOpen(false)
+            }
+          />
+        )}
         {/* 刷新放在地址栏右侧（上一步/下一步在左端） */}
         <button
           type="button"
