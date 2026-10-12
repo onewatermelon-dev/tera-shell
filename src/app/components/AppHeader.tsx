@@ -32,6 +32,52 @@ import {
 } from "@ant-design/icons";
 
 /**
+ * 按键事件的最小形状（只要用到的几个字段）。
+ */
+type KeyLike = {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+};
+
+/**
+ * 这次按键是不是「裸 Ctrl+C / Ctrl+V」（无 Shift/Alt）。
+ *
+ * 只对这两个键有意义：它们是浏览器原生复制/粘贴的默认键，而
+ * `Ctrl+Shift+C` 这类组合浏览器并不处理（某些终端还自己绑了
+ * 「复制」到 Ctrl+Shift+C），所以不能一概放行。
+ */
+function isPlainCtrl(event: KeyLike): boolean {
+  if (event.shiftKey || event.altKey)
+    return false;
+  const key = event.key.toLowerCase();
+  return key === "c" || key === "v";
+}
+
+/**
+ * 事件目标是否在**终端之外**。
+ *
+ * 判据用「最近的 `.terminal-instance` 祖先」而不是「焦点在哪」：
+ * 终端里划词后焦点仍在 xterm 的辅助 textarea 上，AI 面板里划词则焦点
+ * 落在那个 div（甚至 body）——两种都要能正确区分。
+ *
+ * 事件 target 为 null（个别合成事件）时按「在外部」处理：宁可放行给
+ * 浏览器原生复制，也不要抢走用户的复制意图。
+ */
+function isOutsideTerminal(
+  target: EventTarget | null
+): boolean {
+  if (!(target instanceof HTMLElement))
+    return true;
+  // xterm 的辅助 textarea 算终端内部（与 isEditableTarget 的排除同源）
+  if (target.closest(".xterm-helper-textarea"))
+    return false;
+  return !target.closest(".terminal-instance");
+}
+
+/**
  * 菜单可执行的动作集合。
  *
  * 由 App 组装后整体传入：标题栏只负责派发 id，不关心会话/终端的具体实现。
@@ -203,6 +249,18 @@ export default function AppHeader({
       // 菜单已打开时不抢：方向键/回车要在菜单里正常导航
       const active = document.activeElement;
       if (active?.closest('[role="menu"]'))
+        return;
+      // ⚠️ **焦点不在终端里时不抢 Ctrl+C / Ctrl+V**：
+      // 用户在 AI 面板、设置页等界面划词后按 Ctrl+C，期望复制的是
+      // **刚划中的那段文字**；而 `copy` 动作会去读终端选区（那里是空的），
+      // 结果就是「划词能选中、Ctrl+C 没反应」——
+      // 剪贴板被写成了空串，还顺手把浏览器原生复制给 preventDefault 掉了。
+      // 这里显式放行：焦点在终端 → 走应用动作（有选区才复制）;
+      // 焦点在别处 → 交回浏览器原生复制。
+      if (
+        isOutsideTerminal(event.target) &&
+        isPlainCtrl(event)
+      )
         return;
       for (const id of Object.keys(shortcuts)) {
         // find / devtools 已在 useTerminals 里实现，这里再绑会触发两遍
