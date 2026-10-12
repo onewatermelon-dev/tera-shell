@@ -135,4 +135,44 @@ describe("AI 面板 markdown 排版", () => {
     expect(pre).toMatch(/border:/);
     expect(pre).toMatch(/overflow-x:\s*auto/);
   });
+
+  /**
+   * 代码块工具栏（复制 / 下载）必须钉死在代码块右上角。
+   *
+   * ## 根因：sticky 的移动范围被父元素框住
+   *
+   * Streamdown 给工具栏的是 `sticky top-2 -mt-10`。sticky 只在
+   * **父元素（code-block 容器）** 的范围内活动 —— 代码块顶部一旦
+   * 滚出 AI 面板的可视区，工具栏就被推出容器边界、跟着正文一起跑，
+   * 表现为「滚动内容的时候按钮会移动」。
+   *
+   * 而代码块真正的横向滚动发生在 code-block-body 上，sticky 完全
+   * 不管那件事。正确做法是绝对定位 + 父级 relative。
+   *
+   * 为什么值得写测试：回归时按钮「漂移」是纯视觉，只有把定位方式
+   * 钉成断言才拦得住 —— 改回 sticky 不会有任何报错。
+   */
+  it("代码块工具栏绝对定位固定（不用 sticky，sticky 会随内容漂移）", () => {
+    expect(
+      css,
+      "code-block 容器没有 position: relative，绝对定位会退化成相对更外层"
+    ).toMatch(
+      /\.ai-entry\.is-assistant\s+\[data-streamdown=code-block\]\s*\{[^}]*position:\s*relative/
+    );
+
+    const re =
+      /\.ai-entry\.is-assistant\s+\[data-streamdown=code-block\]\s*>\s*\.sticky\s*\{([^}]*)\}/g;
+    const toolbar = [...css.matchAll(re)]
+      .map(m => m[1] ?? "")
+      .join("\n");
+    expect(
+      toolbar,
+      "工具栏没有钉成 position: absolute —— 会退回 sticky 而随内容移动"
+    ).toMatch(/position:\s*absolute/);
+    // -mt-10 / h-8 是配合 sticky 的，absolute 下要清掉否则错位
+    expect(toolbar).toMatch(/top:\s*6px/);
+    expect(toolbar).toMatch(/right:\s*6px/);
+    expect(toolbar).toMatch(/margin-top:\s*0/);
+    expect(toolbar).toMatch(/height:\s*auto/);
+  });
 });

@@ -631,6 +631,28 @@
       border-left: 2px solid var(--border);
     }
 
+    // ---- 代码块右上角工具栏（复制 / 下载）固定不漂 ----
+    // ⚠️ Streamdown 自带的工具栏是 `sticky top-2 -mt-10`，但 **sticky 的
+    // 移动范围被它的父元素（code-block 容器）框住**：消息流一滚动、
+    // 代码块顶部滚出面板，工具栏就被推出容器边界、跟着内容一起跑
+    // （用户报的「滚动内容的时候按钮会移动」）。而容器内真正的横向
+    // 滚动发生在 code-block-body 上，sticky 也不管那件事。
+    // 改成绝对定位钉在容器右上角：不依赖任何滚动祖先，横竖都不动。
+    // ⚠️ 别退回 sticky —— 一旦代码块比面板还高就会复现。
+    [data-streamdown="code-block"] {
+      position: relative;
+    }
+
+    [data-streamdown="code-block"] > .sticky {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      left: auto;
+      z-index: 10;
+      height: auto;
+      margin-top: 0;
+    }
+
     // 代码块外框：Streamdown 用 `bg-sidebar`（现已映射到 surface），
     // 但边框缺失时和正文区分不明显
     pre {

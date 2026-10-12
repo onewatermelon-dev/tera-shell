@@ -163,6 +163,76 @@ pub fn create_file(path: String) -> Result<(), String> {
 		})
 }
 
+/// 把一段文本经系统「另存为」框写到磁盘。
+///
+/// 用途：AI 回答里代码块的「下载」按钮。Streamdown 自带的下载是纯浏览器
+/// 实现（`URL.createObjectURL` + `<a download>`），而 WebView2 **没有注册
+/// 下载处理器**，这类下载请求会被静默丢弃 —— 点按钮毫无反应。这里用
+/// `tauri-plugin-dialog` 弹框 + `std::fs::write` 落盘，与 `transfer` 模块的
+/// 会话导出同一条路子。
+///
+/// 返回实际写成的路径；用户取消则 `Ok(None)`，不是错误。
+#[tauri::command(rename = "fs_save_text_file")]
+pub async fn save_text_file(
+	app: tauri::AppHandle,
+	content: String,
+	suggested_name: String,
+) -> Result<Option<String>, String> {
+	use tauri_plugin_dialog::DialogExt;
+
+	// 扩展名切出来当过滤器：保存框默认只显示该类型，用户想改成别的
+	// 仍可手动改文件名（过滤器只是预选，不是强制）。
+	let extension = suggested_name
+		.rsplit_once('.')
+		.map(|(_, ext)| ext.to_lowercase())
+		.filter(|ext| {
+			!ext.is_empty() &&
+				ext.chars().all(|ch| {
+					ch.is_ascii_alphanumeric() ||
+						ch == '+' ||
+						ch == '-'
+				})
+		})
+		.unwrap_or_else(|| "txt".to_string());
+
+	let picked = tauri::async_runtime::spawn_blocking(
+		move || {
+			app.dialog()
+				.file()
+				.set_file_name(suggested_name)
+				.add_filter(&extension, &[&extension])
+				.blocking_save_file()
+		},
+	)
+	.await
+	.map_err(|error| {
+		format!("打开保存对话框失败：{error}")
+	})?;
+
+	let Some(path) = picked else {
+		tracing::info!("用户取消了文本另存为");
+		return Ok(None);
+	};
+
+	let path = path.to_string();
+	// 按引用传：下面记日志还要用 content.len()
+	if let Err(error) = std::fs::write(&path, &content) {
+		tracing::error!(
+			path = %path,
+			"写入另存为文件失败：{error}"
+		);
+		return Err(format!("写入 {path} 失败：{error}"));
+	}
+	// ⚠️ 只记路径与字节数，**不记内容** —— 代码块内容可能含服务器上的
+	// 路径、配置片段甚至凭据
+	tracing::info!(
+		path = %path,
+		bytes = content.len(),
+		"文本已另存为文件"
+	);
+	Ok(Some(path))
+}
+
 /// 删除文件或目录（目录按递归删除）。
 #[tauri::command(rename = "fs_remove_path")]
 pub fn remove_path(path: String) -> Result<(), String> {

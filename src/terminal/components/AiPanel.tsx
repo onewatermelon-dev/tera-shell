@@ -43,6 +43,8 @@ import {
 import type { AiToolCall } from "@/terminal/lib/aiChat";
 import AiBlacklistDialog from "@/terminal/components/AiBlacklistDialog";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
+import { fillCodeFenceLanguage } from "@/terminal/lib/codeFence";
+import { attachStreamdownExport } from "@/terminal/lib/streamdownExport";
 
 /** 欢迎卡片的示例提示池：每次卡片出现随机展示一条（文案在 i18n） */
 const WELCOME_TIP_KEYS = [
@@ -575,6 +577,17 @@ export default function AiPanel({
     [queued, reorderQueued]
   );
   const bodyRef = useRef<HTMLDivElement>(null);
+  // 代码块「下载」失败的提示。单独一个 state 而不是复用 useAiChat 的
+  // error：那个是聊天链路的错误气泡（会被 clear/restore 重置），
+  // 混进去会被下一轮发送顺手清掉，用户刚看到就消失。
+  const [saveError, setSaveError] = useState("");
+  // 接管 Streamdown 的下载按钮（代码块 + 表格）：它们用浏览器原生下载，
+  // WebView2 会静默丢弃，点按钮毫无反应。改成弹系统另存为框
+  // （见 streamdownExport.ts）。
+  useEffect(
+    () => attachStreamdownExport(setSaveError),
+    []
+  );
   // 欢迎卡片的示例提示：卡片每次出现随机换一条 —— 依赖用 entries 的
   // 数组引用而非长度：点「新对话」时 clear() 换上新数组，即便此前也是
   // 空列表也会重抽。随机数发生在渲染期属于本功能的行为需求，显式豁免
@@ -936,7 +949,11 @@ export default function AiPanel({
                   )}
                   {entry.text && (
                     <Streamdown>
-                      {entry.text}
+                      {/* 裸围栏补默认语言：模型漏标时左上角就没标签，
+                          同一段回答里「有的有、有的没有」。 */}
+                      {fillCodeFenceLanguage(
+                        entry.text
+                      )}
                     </Streamdown>
                   )}
                 </div>
@@ -996,14 +1013,18 @@ export default function AiPanel({
             )}
             {stream.text && (
               <Streamdown>
-                {stream.text}
+                {/* 流式同样要补：未闭合围栏也处理，
+                    标签在第一帧就出现，不用等整块结束。 */}
+                {fillCodeFenceLanguage(
+                  stream.text
+                )}
               </Streamdown>
             )}
           </div>
         )}
-        {error && (
+        {(error || saveError) && (
           <p className="ai-entry is-error">
-            {error}
+            {error || saveError}
           </p>
         )}
       </div>
