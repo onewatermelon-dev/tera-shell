@@ -502,6 +502,25 @@
   color: var(--muted);
 }
 
+// Streamdown（AI 回答的 markdown 渲染器）靠 **shadcn 语义色的 tailwind
+// 原子类**排版：`text-muted-foreground`、`bg-sidebar`、`text-primary`、
+// `bg-popover`、`bg-card`…而这些变量 HeroUI **只定义了一部分** ——
+// 已定义：`--foreground` `--background` `--muted` `--border` `--accent`；
+// 缺失：`--muted-foreground` `--sidebar` `--primary` `--popover` `--card`。
+// 缺的那几个不是「少个颜色」那么轻 —— 它们一缺，元素直接退化成
+// **继承父级的颜色**（通常是前景色），于是：
+// 引用块/表格头/行内代码失去灰调、代码块没有边框底色、链接没有链接色。
+// 用户看到的「样式很怪」就是这些退化叠在一起。
+// 作用域限定在 `.ai-panel`：只补 Streamdown 需要的别名，不污染全局
+// （顺带也让 Streamdown 自带的 dark: 变体在明暗两套主题下都成立）。
+.ai-panel {
+  --muted-foreground: var(--foreground);
+  --sidebar: var(--surface-secondary);
+  --popover: var(--surface-secondary);
+  --card: var(--surface-secondary);
+  --primary: var(--accent);
+}
+
 .ai-entry {
   padding: 8px 10px;
   margin: 0;
@@ -531,6 +550,114 @@
     pre,
     table {
       @include thin-scrollbar;
+    }
+
+    // ---- markdown 正文排版（对齐 Codex CLI 的观感）----
+    // ⚠️ Streamdown 自带的排版是给「独立 markdown 文档」设计的，
+    // 直接塞进 390px 的侧栏里会显得又挤又乱 —— 段落没间距、列表
+    // 缩进太深、标题一上来就 3xl。这里按侧栏宽度重调一档。
+
+    // 段落间距：Codex 里段落之间有明显的呼吸感，这里靠 margin 而不是
+    // 空行（流式输出时半行会抖）
+    p {
+      margin: 0 0 0.7em;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+
+    // 标题：侧栏窄，2xl/3xl 会折行并撑出面板，按钮级别往下压
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      margin: 1em 0 0.5em;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    h1 {
+      font-size: 1.25em;
+    }
+
+    h2 {
+      font-size: 1.15em;
+    }
+
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-size: 1em;
+    }
+
+    // 列表：Streamdown 默认 `[li_&]:pl-6`（24px）在窄面板里太深
+    ul,
+    ol {
+      padding-inline-start: 1.35em;
+      margin: 0 0 0.7em;
+    }
+
+    li {
+      margin: 0.15em 0;
+    }
+
+    // 列表项里紧跟的段落不要再多一份下边距（会撑出空行）
+    li > p {
+      margin-bottom: 0;
+    }
+
+    // 行内代码：Streamdown 给的是 `rounded bg-muted`，
+    // 但 --muted 在这个底色上几乎同色，看不出是代码
+    code {
+      padding: 0.1em 0.3em;
+      font-size: 0.92em;
+      border-radius: 4px;
+    }
+
+    :not(pre) > code {
+      background: var(--surface-secondary);
+    }
+
+    // 引用块：左侧竖线 + 弱化文字
+    blockquote {
+      padding-left: 0.8em;
+      margin: 0 0 0.7em;
+      font-style: normal;
+      color: var(--muted);
+      border-left: 2px solid var(--border);
+    }
+
+    // 代码块外框：Streamdown 用 `bg-sidebar`（现已映射到 surface），
+    // 但边框缺失时和正文区分不明显
+    pre {
+      padding: 10px 12px;
+      margin: 0 0 0.7em;
+      overflow-x: auto;
+      font-size: 0.92em;
+      line-height: 1.5;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    // 表格：窄面板里横向滚，字号略降一档免得撑破
+    table {
+      font-size: 0.92em;
+    }
+
+    // 分隔线留白过大
+    hr {
+      margin: 1em 0;
+    }
+
+    // 链接：Streamdown 用 `text-primary`，映射到 accent 了；
+    // 这里补下划线，链接与普通文字才区分得开
+    a {
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
   }
 
