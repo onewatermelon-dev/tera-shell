@@ -6,8 +6,8 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent
 } from "react";
-import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
+import { AiMarkdown } from "@/terminal/components/aicss/AiMarkdown";
 import { ThinkingState } from "@/terminal/components/aicss/ThinkingState";
 import { Button, Modal } from "@heroui/react";
 import {
@@ -43,7 +43,6 @@ import {
 import type { AiToolCall } from "@/terminal/lib/aiChat";
 import AiBlacklistDialog from "@/terminal/components/AiBlacklistDialog";
 import type { OpenSession } from "@/terminal/lib/terminalTypes";
-import { fillCodeFenceLanguage } from "@/terminal/lib/codeFence";
 import { attachStreamdownExport } from "@/terminal/lib/streamdownExport";
 
 /** 欢迎卡片的示例提示池：每次卡片出现随机展示一条（文案在 i18n） */
@@ -948,13 +947,9 @@ export default function AiPanel({
                     />
                   )}
                   {entry.text && (
-                    <Streamdown>
-                      {/* 裸围栏补默认语言：模型漏标时左上角就没标签，
-                          同一段回答里「有的有、有的没有」。 */}
-                      {fillCodeFenceLanguage(
-                        entry.text
-                      )}
-                    </Streamdown>
+                    <AiMarkdown
+                      text={entry.text}
+                    />
                   )}
                 </div>
                 <ChatMessageActions
@@ -1012,13 +1007,10 @@ export default function AiPanel({
               !stream.text && <ThinkingState />
             )}
             {stream.text && (
-              <Streamdown>
-                {/* 流式同样要补：未闭合围栏也处理，
-                    标签在第一帧就出现，不用等整块结束。 */}
-                {fillCodeFenceLanguage(
-                  stream.text
-                )}
-              </Streamdown>
+              <AiMarkdown
+                text={stream.text}
+                streaming
+              />
             )}
           </div>
         )}
