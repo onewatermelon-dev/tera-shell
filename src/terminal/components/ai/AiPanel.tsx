@@ -105,6 +105,11 @@ export default function AiPanel({
     string[]
   >([]);
   const bodyRef = useRef<HTMLDivElement>(null);
+  // 用户是否还贴着消息流底部。流式期间每个 chunk 都会换 stream 引用、
+  // 触发下面的自动滚动；只有贴着底部时才跟随 —— 否则用户往上翻历史
+  // 会被反复拽回底部（滚轮先把 atBottomRef 置 false，下一个 chunk 的
+  // effect 就不抢了）。
+  const atBottomRef = useRef(true);
   // 代码块「下载」失败的提示。单独一个 state 而不是复用 useAiChat 的
   // error：那个是聊天链路的错误气泡（会被 clear/restore 重置），
   // 混进去会被下一轮发送顺手清掉，用户刚看到就消失。
@@ -117,10 +122,24 @@ export default function AiPanel({
     []
   );
   // 新消息 / 状态变化后滚到底部，聊天面板的默认阅读位置在最新一条
+  // （仅当用户还贴着底部；翻历史时不被拽回，见 atBottomRef）
   useEffect(() => {
     const node = bodyRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
+    if (node && atBottomRef.current) {
+      node.scrollTop = node.scrollHeight;
+    }
   }, [entries, error, pendingCardId, stream]);
+  // 用户主动滚动（滚轮 / 滚动条）：离开底部 80px 以外算「翻历史」，
+  // 停止自动跟随；重新贴回底部则恢复跟随
+  const onBodyScroll = () => {
+    const node = bodyRef.current;
+    if (!node) return;
+    const distance =
+      node.scrollHeight -
+      node.scrollTop -
+      node.clientHeight;
+    atBottomRef.current = distance < 80;
+  };
 
   return (
     <aside
@@ -157,7 +176,12 @@ export default function AiPanel({
           </button>
           <AiHistoryMenu
             host={session.host}
-            onRestore={restore}
+            onRestore={history => {
+              // 换成另一段历史：阅读位置重置到最新一条，
+              // 不管之前翻到哪里
+              atBottomRef.current = true;
+              restore(history);
+            }}
             renameCurrent={renameCurrent}
           />
           <button
@@ -174,6 +198,7 @@ export default function AiPanel({
       <div
         className="ai-panel-body"
         ref={bodyRef}
+        onScroll={onBodyScroll}
       >
         <AiMessageList
           entries={entries}
@@ -264,6 +289,9 @@ export default function AiPanel({
           )}
           placeholder={t("ai.input")}
           onSend={text => {
+            // 新消息强制回底：这一轮的回答从最新一条开始看，
+            // 不管之前把历史翻到了哪里
+            atBottomRef.current = true;
             void send(
               text,
               selected,
