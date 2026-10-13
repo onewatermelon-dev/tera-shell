@@ -1,0 +1,261 @@
+/* AI 输入框的浮层菜单：「+」菜单（模型选择 / 附件 / 技能）、
+   「/」命令面板（已下线，样式残留）与供应商悬停浮层。
+
+   2026-10-13 从原 PromptInput.module.css 拆出。`.menuFlyout` /
+   `.menuIcon` / `.menuSub` 在原文件里各有两条（菜单区一份、文件末尾
+   的展开态补充一份），同类名必须留在同一文件，否则哈希名对不上。 */
+
+/* "/" command palette - same container as the + menu, pinned above the field */
+.slashMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 25;
+  width: 200px;
+  padding: 3px;
+  background: var(--pi-menu-bg, #ffffff);
+  border: 0.5px solid
+    var(--pi-menu-border, #e6e8ec);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 1px 1px rgba(0, 0, 0, 0.04);
+  transform-origin: bottom left;
+  animation: pi-menu-in 200ms
+    cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.slashLabel {
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 425;
+  color: var(--pi-muted, #a1a1a1);
+}
+.slashEmpty {
+  padding: 6px 7px;
+  font-size: 11px;
+  color: var(--pi-muted, #a1a1a1);
+}
+
+/* "+" menu - same container style as the input frame */
+.menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  width: 180px;
+  padding: 3px;
+  background: var(--pi-menu-bg, #ffffff);
+  border: 0.5px solid
+    var(--pi-menu-border, #e6e8ec);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 1px 1px rgba(0, 0, 0, 0.04);
+  transform-origin: bottom left;
+  animation: pi-menu-in 200ms
+    cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--pi-fg, #1a1a1a);
+  font-size: 11px;
+  font-weight: 425;
+  line-height: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.menuItem:hover {
+  background: var(
+    --pi-menu-hover,
+    rgba(26, 26, 26, 0.06)
+  );
+}
+.menuItem:active {
+  background: var(
+    --pi-menu-active,
+    rgba(26, 26, 26, 0.09)
+  );
+}
+.menuItem.menuItemActive {
+  background: var(
+    --pi-menu-hover,
+    rgba(26, 26, 26, 0.06)
+  );
+}
+.slashMenu[data-keyboard] .menuItem:hover {
+  background: transparent;
+}
+.slashMenu[data-keyboard]
+  .menuItem.menuItemActive,
+.slashMenu[data-keyboard]
+  .menuItem.menuItemActive:hover {
+  background: var(
+    --pi-menu-hover,
+    rgba(26, 26, 26, 0.06)
+  );
+}
+.menuIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--pi-muted, #a1a1a1);
+}
+.menuName {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menuCheck {
+  display: inline-flex;
+  flex: none;
+  color: var(--pi-fg, #1a1a1a);
+}
+
+/* Skills - a side flyout that expands from the "Skills" row */
+.menuSub {
+  position: relative;
+}
+.menuChevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--pi-muted, #a1a1a1);
+}
+/* brand marks keep their own colours; ChatGPT is monochrome so it follows text */
+.menuBrand {
+  display: inline-flex;
+  flex: none;
+  color: var(--pi-fg, #1a1a1a);
+}
+.menuFlyout {
+  position: absolute;
+  top: -3px;
+  left: calc(100% + 6px);
+  width: 168px;
+  padding: 3px;
+  background: var(--pi-menu-bg, #ffffff);
+  border: 0.5px solid
+    var(--pi-menu-border, #e6e8ec);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 1px 1px rgba(0, 0, 0, 0.04);
+}
+/* invisible bridge across the 6px gap so the hover doesn't drop when the
+   pointer travels from the row into the flyout */
+.menuFlyout::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -7px;
+  width: 7px;
+}
+
+/* model info popover - a non-interactive card shown on hover to the right */
+.menuPopover {
+  position: absolute;
+  top: -3px;
+  left: calc(100% + 6px);
+  z-index: 30;
+  width: 200px;
+  padding: 10px 12px;
+  background: var(--pi-menu-bg, #ffffff);
+  border: 0.5px solid
+    var(--pi-menu-border, #e6e8ec);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 1px 1px rgba(0, 0, 0, 0.04);
+  pointer-events: none;
+}
+.popoverTitle {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--pi-fg, #1a1a1a);
+}
+.popoverDesc {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--pi-muted, #a1a1a1);
+}
+.popoverMeta {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--pi-muted, #a1a1a1);
+}
+.menuDivider {
+  height: 0.5px;
+  margin: 4px -3px;
+  background: var(--pi-menu-border, #e6e8ec);
+}
+.menuLabel {
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 425;
+  color: var(--pi-muted, #a1a1a1);
+}
+@keyframes pi-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iconBtn::before,
+  .pill::before,
+  .menuItem,
+  .plusIcon {
+    transition: none;
+  }
+  .pill,
+  .pill.pillExit,
+  .menu,
+  .menuFlyout,
+  .menuPopover,
+  .slashMenu {
+    animation: none;
+  }
+  .spinner {
+    animation-duration: 1.4s;
+  }
+}
+
+/* 供应商悬停浮层：展开态由 JS data-open 控制（带延迟关闭，见 PromptInput）。
+   纯 :hover 会在指针斜穿行与浮层之间的死区时瞬间收起 */
+.menuFlyout {
+  display: none;
+  z-index: 30;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.menuSub[data-open] .menuFlyout {
+  display: block;
+}
+
+/* 菜单行图标列：固定 14px 宽，保证各行文字左缘对齐 */
+.menuIcon,
+.menuIconSpacer {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  color: var(--pi-muted, #a1a1a1);
+}

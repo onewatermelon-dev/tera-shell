@@ -6,7 +6,7 @@ import {
   RECONNECT_MAX_DELAY,
   shouldAutoReconnect,
   SSH_ERROR_EXIT_CODE
-} from "@/terminal/lib/reconnect";
+} from "@/terminal/lib/session/reconnect";
 
 /**
  * 自动重连的判定与退避。

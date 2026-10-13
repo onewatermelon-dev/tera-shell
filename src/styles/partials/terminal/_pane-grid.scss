@@ -1,0 +1,74 @@
+// 窗格网格：.pane-grid 根容器、窗格单元、递归分割容器与可拖分隔条。
+// 布局比例由 JS 侧 paneLayout.ts 算好经 inline style 下发，这里只管外观。
+
+// ===== 窗格网格 =====
+// 每个窗格 = 一套标签条 + 一个终端宿主，窗格之间用可拖分隔条划分。
+// 布局完全由 JS 侧的布局树（paneLayout.ts）算好：递归渲染 .pane-split，
+// 比例通过 inline style 的 flex 权重下发，这里只管外观。
+
+// 网格根容器：占满工作区 Card 的剩余高度
+.pane-grid {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+// 一个窗格：纵向排「标签条 + 终端」，flex:1 让它撑满父级给的权重
+.pane-cell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+// 分割容器：row 左右并排、column 上下堆叠。
+// min-height/width 都要 0，否则 flex 子项的内容会把容器撑破、
+// 分隔条被推到可视区之外
+.pane-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-split--row {
+  flex-direction: row;
+}
+
+.pane-split--column {
+  flex-direction: column;
+}
+
+// 分割的两侧：flex 权重由 inline style 给出（比例 × 1 0%），
+// basis 0% 才能让「剩余空间按权重分」——用固定 basis 的话
+// 两侧加分隔条会超出容器，分隔条产生偏移
+.pane-split-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+// 分隔条：拖动调整两块比例（VSCode 式），悬停高亮。
+// row 分割（左右）用竖条 col-resize，column 分割（上下）用横条 row-resize
+.pane-divider {
+  flex: none;
+  background: var(--border);
+}
+
+.pane-divider--row {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.pane-divider--column {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.pane-divider:hover {
+  background: var(--accent);
+}

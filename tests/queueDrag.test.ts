@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   moveQueued,
   type AiQueuedMessage
-} from "@/terminal/lib/aiChat";
+} from "@/terminal/lib/ai/aiChat";
 
 type Rect = {
   id: string;

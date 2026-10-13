@@ -1,0 +1,167 @@
+/* Theme follows the nearest [data-theme] ancestor (preview switch),
+   then .dark, then the OS when no data-theme is set. */
+
+/* AI 输入框本体：主题变量、外框与 contentEditable 编辑区。
+
+   2026-10-13 从原 PromptInput.module.css（955 行）拆出：
+   - 主题变量 / .wrap / .frame / .field 与文件末尾的 `.wrap svg`
+     （描边宽度）留在本文件；
+   - 底部按钮行与待发送图片缩略图 → PromptInputControls.module.css；
+   - 「+」菜单与「/」命令面板 → PromptInputMenu.module.css。
+   组件里的 import 顺序即层叠顺序，三个文件的引用顺序不能调。
+
+   2026-10-13 删死规则：Skills 斜杠 pill、Enhance Prompt 假流程与附件
+   chips 已随组件改造一并移除（见 PromptInput.tsx 头部说明），JSX 只引用
+   wrap / frame / editorWrap / field —— .skillPill / .enhancingText /
+   .chip* / .frame[data-enhancing] 及只服务它们的主题变量
+   （--pi-skill-* / --pi-chip-* / --pi-shimmer / --pi-enhance-ring /
+   --pi-angle）全部删除。
+   ⚠️ CSS module 类名按文件哈希：删规则时同步清点跨文件悬挂引用 ——
+   PromptInputMenu.module.css 的 reduced-motion 块里点过这些类名，
+   已一并拔掉。 */
+
+:global(:root),
+:global([data-theme="light"]) {
+  --pi-frame-bg: #ffffff;
+  --pi-frame-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.02);
+  --pi-fg: #1a1a1a;
+  --pi-muted: #a1a1a1;
+  --pi-icon-fill: rgba(26, 26, 26, 0.06);
+  --pi-icon-fill-hover: rgba(26, 26, 26, 0.1);
+  --pi-icon-fill-open: rgba(26, 26, 26, 0.12);
+  --pi-send-fg: #ffffff;
+  --pi-send-bg: #0b0d12;
+  --pi-send-bg-hover: #2a2f3a;
+  --pi-menu-bg: #ffffff;
+  --pi-menu-border: #e6e8ec;
+  --pi-menu-hover: rgba(26, 26, 26, 0.06);
+  --pi-menu-active: rgba(26, 26, 26, 0.09);
+}
+:global([data-theme="dark"]),
+:global(.dark) {
+  --pi-frame-bg: #1a1a1a;
+  --pi-frame-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+  --pi-fg: #f5f5f5;
+  --pi-muted: #a3a3a3;
+  --pi-icon-fill: rgba(245, 245, 245, 0.06);
+  --pi-icon-fill-hover: rgba(245, 245, 245, 0.1);
+  --pi-icon-fill-open: rgba(245, 245, 245, 0.12);
+  --pi-send-fg: #0a0a0a;
+  --pi-send-bg: #f5f5f5;
+  --pi-send-bg-hover: #ffffff;
+  --pi-menu-bg: #1a1a1a;
+  --pi-menu-border: #303030;
+  --pi-menu-hover: rgba(245, 245, 245, 0.06);
+  --pi-menu-active: rgba(245, 245, 245, 0.09);
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) {
+    --pi-frame-bg: #1a1a1a;
+    --pi-frame-shadow:
+      0 0 0 0.5px rgba(255, 255, 255, 0.12),
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 2px 4px rgba(0, 0, 0, 0.3);
+    --pi-fg: #f5f5f5;
+    --pi-muted: #a3a3a3;
+    --pi-icon-fill: rgba(245, 245, 245, 0.06);
+    --pi-icon-fill-hover: rgba(
+      245,
+      245,
+      245,
+      0.1
+    );
+    --pi-icon-fill-open: rgba(
+      245,
+      245,
+      245,
+      0.12
+    );
+    --pi-send-fg: #0a0a0a;
+    --pi-send-bg: #f5f5f5;
+    --pi-send-bg-hover: #ffffff;
+    --pi-menu-bg: #1a1a1a;
+    --pi-menu-border: #303030;
+    --pi-menu-hover: rgba(245, 245, 245, 0.06);
+    --pi-menu-active: rgba(245, 245, 245, 0.09);
+  }
+}
+
+.wrap {
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+  font-family:
+    "Inter Variable", "Inter", sans-serif;
+}
+
+.frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 10px 10px;
+  background: var(--pi-frame-bg, #ffffff);
+  /* transparent border keeps the box geometry steady;
+     the visible 0.5px hairline + drop shadow match the surrounding cards. */
+  border: 0.5px solid transparent;
+  border-radius: 12px;
+  /* hairline ring first so it paints on top of the drops and stays even on
+     every edge (otherwise the bottom is hidden by the drop shadow) */
+  box-shadow: var(
+    --pi-frame-shadow,
+    0 0 0 0.5px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.02)
+  );
+}
+
+/* editable field - a contentEditable div */
+.editorWrap {
+  position: relative;
+}
+.field {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--pi-fg, #1a1a1a);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: -0.12px;
+  min-height: 18px;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.field ::selection,
+.field::selection {
+  background: Highlight;
+  color: HighlightText;
+}
+.field ::-moz-selection,
+.field::-moz-selection {
+  background: Highlight;
+  color: HighlightText;
+}
+.field[data-empty]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--pi-fg, #1a1a1a);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.wrap svg {
+  stroke-width: 1.5px;
+}

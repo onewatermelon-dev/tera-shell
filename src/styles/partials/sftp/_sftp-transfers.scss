@@ -1,0 +1,194 @@
+// 底部传输信息面板：固定高度、内部纵向滚动（表头 sticky 吸顶），
+// 行内进度条与暂停/恢复/取消操作列。
+// 细滚动条 mixin 在 _scrollbar.scss —— .transfer-scroll 是滚动容器。
+@use "../scrollbar" as *;
+
+// 铺满模式下外层容器的内边距被清掉了，面板要自己留出与窗口边缘的距离，
+// 否则左右和底部会直接贴到窗口边上（上方由 .sftp-body 的 gap 提供）。
+.sftp-transfers {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  height: 172px;
+  padding: 10px 12px;
+  margin: 0 12px 12px;
+  overflow: hidden;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.transfer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.transfer-title {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.transfer-count {
+  font-size: 10px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.transfer-clear {
+  padding: 0;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.transfer-clear:hover:not(:disabled) {
+  color: var(--foreground);
+}
+
+.transfer-clear:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+// 表头与行同处一个滚动容器，表头 sticky 吸顶
+.transfer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+
+  @include thin-scrollbar;
+}
+
+.transfer-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 1.4fr)
+    54px 112px 76px 88px 66px 66px 74px 66px 66px 82px;
+  gap: 8px;
+  align-items: center;
+  min-width: 900px;
+  padding: 0 4px;
+}
+
+.transfer-head-row {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 22px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface-secondary);
+}
+
+.transfer-row {
+  height: 26px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.transfer-name {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.transfer-arrow {
+  flex: none;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.transfer-status.is-running {
+  color: var(--accent);
+}
+
+.transfer-status.is-paused {
+  color: var(--warning, #d99a2b);
+}
+
+.transfer-status.is-done {
+  color: var(--success);
+}
+
+.transfer-status.is-cancelled {
+  color: var(--muted);
+}
+
+.transfer-status.is-failed {
+  color: var(--danger);
+}
+
+// 操作列：暂停 / 恢复 / 取消。
+// 不用下划线做悬浮反馈（点完还会留一横），改为变颜色；
+// 同时去掉点击后浏览器给的焦点外框。
+.transfer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.transfer-action {
+  padding: 0;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  outline: none;
+  background: none;
+  border: none;
+}
+
+.transfer-action:hover {
+  color: var(--foreground);
+}
+
+.transfer-action--danger {
+  color: var(--danger);
+}
+
+.transfer-action--danger:hover {
+  color: var(--foreground);
+}
+
+.transfer-progress {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.transfer-bar {
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  background: var(--surface-hover);
+  border-radius: 3px;
+}
+
+.transfer-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.transfer-progress em {
+  flex: none;
+  font-style: normal;
+}
+
+.transfer-empty {
+  padding: 12px 4px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}

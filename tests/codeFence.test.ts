@@ -3,7 +3,7 @@ import {
   fillCodeFenceLanguage,
   DEFAULT_CODE_LANGUAGE
 } from "@/terminal/lib/codeFence";
-import { SYSTEM_PROMPT } from "@/terminal/lib/aiChat";
+import { SYSTEM_PROMPT } from "@/terminal/lib/ai/aiChat";
 
 /**
  * 裸围栏补默认语言。

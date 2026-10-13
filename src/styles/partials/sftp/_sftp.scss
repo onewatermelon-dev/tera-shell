@@ -1,0 +1,247 @@
+// ---- HeroUI Modal 对话框的少量补充样式 ----
+// 面板/字段/按钮外观全部交给 Modal + TextField + Button，
+// 这里只保留宽度、字段间距与文案色（.session-dialog，会话/分组对话框共用）。
+// SFTP 窗口外壳：Modal 形态（顶部拖动区、返回按钮、浮层尺寸）与独立全屏
+// 窗口骨架（自绘标题栏、内容区、两栏容器），外加底部多窗口切换栏。
+// 传输面板 / 两栏内部 / 路径与书签拆到 _sftp-transfers / _sftp-panes /
+// _sftp-path。
+// 细滚动条 mixin 在 _scrollbar.scss —— .sftp-dock 是滚动容器，要用。
+// `as *` 不能省：scss 的 @use 是按文件隔离的命名空间，不加就得写全名。
+@use "../scrollbar" as *;
+
+.session-dialog {
+  width: 430px;
+}
+
+// SFTP 面板顶部兼作窗口拖动区：Tauri 判定的是 mousedown 事件目标本身是否带
+// data-tauri-drag-region，所以让 Header 内的文本穿透，事件才会落到 Header 上。
+// 关闭钮是交互元素，需要恢复可点。
+.sftp-header {
+  position: relative;
+
+  // 标题文案已经下放到各栏（远程栏直接写主机 IP），
+  // 这里只剩窗口控制按钮与拖动区，高度与主窗口标题栏保持一致。
+  // padding 必须清零：HeroUI Header 自带内边距，而绝对定位是相对
+  // padding box 的，留着会把右上角的控制按钮从窗口边缘推下来。
+  min-height: 46px;
+  padding: 0;
+}
+
+.sftp-header > * {
+  pointer-events: none;
+}
+
+.sftp-header button {
+  pointer-events: auto;
+}
+
+// SFTP 窗口的控制按钮：始终贴窗口右上角。
+// 用 fixed 而不是在 Header 内 absolute —— HeroUI 的 Modal 在
+// Container / Dialog / Header 上都可能带内边距，逐层抵消很脆；
+// 这几个按钮控制的本来就是"窗口"，贴窗口边缘才是对的。
+.sftp-header .win-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  height: 46px;
+}
+
+// 左上角的"返回工作区"：与控制按钮同一行，同样贴窗口边缘
+// （定位方式与 .win-controls 一致，见下方说明）
+.sftp-back {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  height: 46px;
+  padding: 0 8px;
+}
+
+.sftp-back button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+}
+
+// 底部窗口标签栏：多个全屏窗口叠加时只能看到最上面一个，
+// 靠这条常驻横条暴露"一共开了几个"，并提供切换入口。
+// 只在开了一个以上时渲染（见 SftpDock）。
+.sftp-dock {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  overflow-x: auto;
+  background: var(--surface-secondary);
+  border-top: 1px solid var(--border);
+
+  @include thin-scrollbar;
+}
+
+.sftp-dock-window {
+  display: flex;
+  flex: none;
+  align-items: center;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 6px;
+}
+
+.sftp-dock-window.is-active {
+  color: var(--foreground);
+  background: var(--default);
+}
+
+.sftp-dock-main {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.sftp-dock-index {
+  color: var(--muted);
+}
+
+.sftp-dock-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sftp-dock-close {
+  padding: 4px 7px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.sftp-dock-close:hover {
+  color: var(--danger);
+}
+
+// 窗口序号：多个窗口叠加时长得一样，靠它区分
+.sftp-window-index {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// 让 SFTP 窗口"浮"在终端之上而不是盖住它：
+// 遮罩完全透明，并且不接收鼠标事件，点击直接穿透到下面的终端；
+// 窗口本体（.sftp-dialog）再把事件收回来，否则自己也没法点。
+.sftp-backdrop {
+  pointer-events: none;
+  background: transparent;
+}
+
+.sftp-dialog {
+  pointer-events: auto;
+}
+
+// 非铺满时的浮动尺寸：占大半屏、四周留白，露出下面的终端
+.sftp-dialog--floating {
+  width: min(1100px, 92vw);
+
+  // HeroUI 的 size="lg" 自带 max-w-lg，不覆盖的话宽度会被卡在 512px
+  max-width: none;
+  height: min(720px, 88vh);
+}
+
+.sftp-back button:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// 注：收起的窗口是**直接不渲染**（见 SftpWindow），不能靠这里 display:none
+// —— HeroUI 的 Modal 走 Portal 挂到 body，外层容器的隐藏对它无效。
+
+// 独立 SFTP 窗口的根容器：铺满客户区，不滚动
+.sftp-standalone {
+  height: 100vh;
+  overflow: hidden;
+  background: var(--background);
+}
+
+// 窗口主体：标题栏固定在顶部，内容区吃掉剩余高度
+.sftp-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+// 自绘标题栏（窗口没有系统装饰，decorations: false）：
+// 这一条同时充当窗口拖动区，右侧是自绘的最小化 / 最大化 / 关闭。
+.sftp-titlebar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 40px;
+  padding-left: 12px;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.sftp-titlebar-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+// 内容区：两栏吃掉剩余高度，传输面板固定在底部
+.sftp-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+// SFTP 窗口用 HeroUI Modal 的 size="full" 铺满主窗口；内容纵向撑满：
+// Header 固定、Body 吃掉剩余高度、两栏各自内部滚动。
+// dialog 默认没有 gap，这里补上 Header 与 Body 之间的间距。
+.sftp-dialog {
+  gap: 16px;
+
+  // 铺满模式下不该有内边距，否则控制按钮与内容都会离窗口边缘一截
+  padding: 0;
+}
+
+// 铺满时清掉 HeroUI 容器的内边距（非铺满时保留，对话框才不会贴边）
+.sftp-container--full {
+  padding: 0;
+}
+
+.sftp-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}

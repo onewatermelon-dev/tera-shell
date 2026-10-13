@@ -14,7 +14,7 @@ import {
   MIN_RATIO,
   MAX_RATIO,
   type PaneNode
-} from "@/terminal/lib/paneLayout";
+} from "@/terminal/lib/pane/paneLayout";
 
 /**
  * 搭一棵两列三行的网格：主栏再纵向二分，形成 3 个窗格。

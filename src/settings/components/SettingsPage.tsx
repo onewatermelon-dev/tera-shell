@@ -21,7 +21,7 @@ import SettingsRow from "@/settings/components/SettingsRow";
 import Toggle from "@/shared/components/Toggle";
 import DataDirRow from "@/settings/components/DataDirRow";
 import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
-import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
+import { resolveColorScheme } from "@/terminal/lib/pane/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
 import ShortcutSettings from "@/settings/components/ShortcutSettings";
 import SettingsSelect, {

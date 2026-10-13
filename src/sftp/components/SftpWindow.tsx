@@ -15,9 +15,9 @@ import {
   parentOf,
   pathsToTerminalText
 } from "@/sftp/lib/sftpUtils";
-import type { FileAction } from "@/sftp/components/FileContextMenu";
+import type { FileAction } from "@/sftp/components/panes/FileContextMenu";
 import SftpPanel from "@/sftp/components/SftpPanel";
-import TransferPolicyDialog from "@/sftp/components/TransferPolicyDialog";
+import TransferPolicyDialog from "@/sftp/components/dialogs/TransferPolicyDialog";
 
 /** 等用户选策略的一次跨栏传输：冲突清单 + 选定后的执行动作。 */
 type PendingTransfer = {

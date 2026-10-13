@@ -24,7 +24,10 @@ import {
  * vitest 的 node 环境跑不起来（记忆里记过：本项目测试环境没有 DOM）。
  */
 
-import useTerminalsSource from "@/terminal/lib/useTerminals.ts?raw";
+import useTerminalsSource from "@/terminal/lib/session/useTerminals.ts?raw";
+import listenersSource from "@/terminal/lib/session/useTerminalGlobalListeners.ts?raw";
+import paneOpsSource from "@/terminal/lib/session/useTerminalPaneOps.ts?raw";
+import appearanceSource from "@/terminal/lib/session/useTerminalAppearance.ts?raw";
 import webglSource from "@/terminal/lib/webglRenderer.ts?raw";
 import appHeaderSource from "@/app/components/AppHeader.tsx?raw";
 import webglRendererRaw from "@/terminal/lib/webglRenderer.ts?raw";
@@ -71,18 +74,23 @@ describe("WebGL 渲染器：启用时机", () => {
 });
 
 describe("WebGL 渲染器：资源清理", () => {
-  const code = stripComments(useTerminalsSource);
+  const listeners = stripComments(
+    listenersSource
+  );
+  const paneOps = stripComments(paneOpsSource);
 
   it("关闭会话时先 disableWebgl 再 dispose 终端", () => {
-    // 顺序反了：终端先 dispose，addon 会对已销毁的 screenElement 操作
-    expect(code).toMatch(
+    // 顺序反了：终端先 dispose，addon 会对已销毁的 screenElement 操作。
+    // 2026-10-14 拆分后关会话流程搬去了 useTerminalPaneOps
+    expect(paneOps).toMatch(
       /disableWebgl\(closing\.terminal\);[\s\S]{0,120}closing\.terminal\.dispose\(\)/
     );
   });
 
   it("组件卸载时释放全部 WebGL context", () => {
-    // 不清会泄漏：context 一直挂着直到达上限，之后新终端全拿不到 WebGL
-    expect(code).toMatch(
+    // 不清会泄漏：context 一直挂着直到达上限，之后新终端全拿不到 WebGL。
+    // 2026-10-14 拆分后释放在全局监听的卸载清理里（useTerminalGlobalListeners）
+    expect(listeners).toMatch(
       /for \(const session of openedRef\.current\)[\s\S]{0,80}disableWebgl/
     );
   });
@@ -217,8 +225,12 @@ describe("回归防护：WebGL 未被回退", () => {
   });
 
   it("enableWebgl / disableWebgl 都接上了", () => {
+    // 启用在 useTerminals 的挂载 layout effect；释放在全局监听的
+    // 卸载清理（2026-10-14 拆到 useTerminalGlobalListeners）
     expect(code).toContain("enableWebgl");
-    expect(code).toContain("disableWebgl");
+    expect(
+      stripComments(listenersSource)
+    ).toContain("disableWebgl");
   });
 });
 
@@ -226,6 +238,9 @@ describe("硬件加速开关（设置项）", () => {
   const code = stripComments(useTerminalsSource);
   const webglSource = stripComments(
     webglRendererRaw
+  );
+  const appearanceCode = stripComments(
+    appearanceSource
   );
 
   it("开关有 setWebglEnabled 入口，且关掉时释放 addon", () => {
@@ -246,8 +261,9 @@ describe("硬件加速开关（设置项）", () => {
     ).not.toMatch(
       /webglByTerminal\.(values|clear)\(/
     );
-    // 调用处把当前所有会话的 terminal 传了进去
-    expect(code).toContain(
+    // 调用处把当前所有会话的 terminal 传了进去。
+    // 2026-10-14 拆分后调用处在外观 effect（useTerminalAppearance）
+    expect(appearanceCode).toContain(
       "openedRef.current.map(s => s.terminal)"
     );
   });

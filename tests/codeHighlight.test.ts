@@ -143,13 +143,14 @@ describe("代码块语法着色", () => {
   });
 
   it("面板两处渲染都走同一个组件（漏一处就「有的有颜色有的没有」）", async () => {
+    // 2026-10-13：两处渲染随消息列表拆到 AiMessageList.tsx
     const src = (
-      await import("@/terminal/components/AiPanel.tsx?raw")
+      await import("@/terminal/components/ai/AiMessageList.tsx?raw")
     ).default;
     const uses = src.match(/<AiMarkdown/g) ?? [];
     expect(
       uses,
-      "AiPanel 里的 <AiMarkdown> 少于两处 —— 历史消息/流式有一处漏了"
+      "AiMessageList 里的 <AiMarkdown> 少于两处 —— 历史消息/流式有一处漏了"
     ).toHaveLength(2);
     // 别再直接用 Streamdown，否则那两处会丢掉围栏补语言和高亮插件
     expect(src).not.toContain("<Streamdown");
@@ -157,7 +158,7 @@ describe("代码块语法着色", () => {
 
   it("高亮插件在组件里只创建一次", async () => {
     const src = (
-      await import("@/terminal/components/aicss/AiMarkdown.tsx?raw")
+      await import("@/terminal/components/ai/AiMarkdown.tsx?raw")
     ).default;
     // ⚠️ 每次渲染新建实例 → 内部 token 缓存全失效 → 每帧重拆 ANSI。
     // 也不能写模块级变量在渲染期赋值（eslint react-hooks 会报）

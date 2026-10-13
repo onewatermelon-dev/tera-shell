@@ -3,7 +3,7 @@ import {
   formatMessageAge,
   positionMessageTip,
   shouldDismissTipOnScroll
-} from "@/terminal/components/aicss/ChatMessageActions";
+} from "@/terminal/components/ai/ChatMessageActions";
 
 /**
  * 最小 DOM 替身：只实现被测函数用到的那一个方法。

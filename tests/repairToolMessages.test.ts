@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   repairToolMessages,
   type ProtocolMessage
-} from "../src/terminal/lib/aiChat";
+} from "../src/terminal/lib/ai/aiChat";
 
 const assistantCalls = (
   ...ids: string[]

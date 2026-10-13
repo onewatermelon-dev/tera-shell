@@ -159,7 +159,7 @@ describe("Streamdown 导出接管", () => {
 
   it("面板确实挂上了接管", async () => {
     const src = (
-      await import("@/terminal/components/AiPanel.tsx?raw")
+      await import("@/terminal/components/ai/AiPanel.tsx?raw")
     ).default;
     expect(src).toContain(
       "attachStreamdownExport"

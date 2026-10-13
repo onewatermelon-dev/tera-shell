@@ -15,9 +15,9 @@ import type {
   TransferTask
 } from "@/sftp/lib/useSftp";
 import { formatSize } from "@/sftp/lib/fileFormat";
-import type { FileAction } from "@/sftp/components/FileContextMenu";
-import FilePane from "@/sftp/components/FilePane";
-import TransferPanel from "@/sftp/components/TransferPanel";
+import type { FileAction } from "@/sftp/components/panes/FileContextMenu";
+import FilePane from "@/sftp/components/panes/FilePane";
+import TransferPanel from "@/sftp/components/panes/TransferPanel";
 import { usePaneDrag } from "@/sftp/lib/usePaneDrag";
 import {
   bookmarkPathsFor,

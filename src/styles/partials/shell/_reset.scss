@@ -1,0 +1,52 @@
+// 全局重置：:root 字体与配色、box-sizing、全局禁选（终端子树与输入框例外）、
+// 全屏 html/body、button/input 字体继承。必须排在所有 partial 最前。
+
+:root {
+  font-family:
+    "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+// 全局禁止划词选取：桌面应用里拖选界面文字没有意义，还会干扰拖拽等操作。
+// 例外只有两处 —— 终端输出（xterm 自带选择逻辑）与输入控件。
+*,
+*::before,
+*::after {
+  user-select: none;
+}
+
+// 终端区域整棵子树恢复可选（xterm 依赖它做拖选、双击选词）；
+// AI 面板的对话文字同样要能划选复制
+.terminal-host,
+.terminal-host *,
+.ai-panel,
+.ai-panel *,
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}

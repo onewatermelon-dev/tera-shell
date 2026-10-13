@@ -6,8 +6,8 @@ import {
 } from "vitest";
 // ?raw 读源码：整个 AiPanel 的依赖链太长（xterm/tauri/streamdown），
 // 单测里 import 组件会连带把它们全加载
-import aiPanelSource from "@/terminal/components/AiPanel.tsx?raw";
-import queueRowSource from "@/terminal/components/aicss/QueuedMessageRow.tsx?raw";
+import aiPanelSource from "@/terminal/components/ai/AiPanel.tsx?raw";
+import queueRowSource from "@/terminal/components/ai/QueuedMessageRow.tsx?raw";
 
 /**
  * AI 助手面板的文字要能划词复制。

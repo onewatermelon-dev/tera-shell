@@ -1,0 +1,93 @@
+// AI 面板底部：输入行（PromptInput 外层）、流式思考内容与消息里的
+// 图片缩略图。
+// 2026-10-13 从 _sidebar.scss 拆出。
+// 细滚动条 mixin 在 _scrollbar.scss —— 思考内容区要用。
+// `as *` 不能省：scss 的 @use 是按文件隔离的命名空间，不加就得写
+// @include scrollbar.thin-scrollbar 这种全名。
+@use "../scrollbar" as *;
+
+.ai-panel-compose {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.ai-panel-compose .ai-panel-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ai-panel-send {
+  flex: none;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--accent-foreground);
+  cursor: pointer;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+// 流式思考内容：实时增长区，弱化色 + 限高滚动
+.ai-live-reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-live-reasoning-head {
+  display: flex;
+  align-items: center;
+}
+
+.ai-live-reasoning pre {
+  max-height: 160px;
+  padding: 8px 10px;
+  margin: 0;
+  overflow-y: auto;
+  font:
+    12px Consolas,
+    monospace;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+
+  @include thin-scrollbar;
+}
+
+// PromptInput（CSS module 限宽 420）在面板里撑满剩余宽度
+.ai-panel-compose > div {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}
+
+// 用户消息里的图片缩略图
+.ai-entry-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.ai-entry-images img {
+  max-width: 140px;
+  max-height: 140px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

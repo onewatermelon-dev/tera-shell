@@ -1,0 +1,205 @@
+// 窗格标签条：标签胶囊（溢出横向滚动 + 名称跑马灯）、
+// 右侧「新建 / 更多」按钮。⚠️ .pane-tab--on 必须排在 .pane-tab 之后。
+
+// ===== 窗格标签条 =====
+// 所有窗格共用一套（不再区分主栏/拆分栏）：标签在条内按内容收宽横向排列，
+// 溢出可滚（onWheel 平移 scrollLeft）。flex: none 是关键 —— 它是 .pane-tabs
+// 这个 flex 容器里的项目，默认可被压缩（flex-shrink:1），不给 none 就永远
+// 压回容器宽度、溢不出来也就滚不动
+.pane-tabs {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  height: 32px;
+  overflow: auto hidden;
+
+  // 标签溢出时仍可横向滚动，但隐藏浏览器原生滚动条
+  scrollbar-width: none;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border);
+
+  // ⚠️ **每条标签条的左右上角都圆**（半径与 Card 的 rounded-xl 一致）。
+  // 原先没有任何标签条显式声明圆角 —— 第一格看起来是圆的纯属外层
+  // `.terminal-pane`（Card rounded-xl + overflow:hidden）**碰巧**裁出来的，
+  // 属于「碰巧」而非设计；上下拆分后下方那格在网格中间、不贴卡片边，
+  // 于是露成直角，看起来两个窗格不是一套（用户报「向下拆分的标签栏和
+  // 上面的样式不一样」）。显式给每条都加，靠自身的 `overflow: auto hidden`
+  // 裁切横向滚动内容，不再依赖外层 Card —— 网格一旦重排，Card 那层不一定
+  // 还盖得住。
+  // ⚠️ **别改成「只给左上角那一格加」**（试过，反而更不一致）：
+  // 用户要的「一致」是**每条标签条观感一致**，不是「与卡片圆角对齐」。
+  // 同理别只圆左边：右侧上方（贴「新建 / 更多」那侧）同样要圆。
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.pane-tabs ::-webkit-scrollbar {
+  display: none;
+}
+
+// 标签：在条内按内容收宽。胶囊圆角复刻原 HeroUI Tabs 的观感
+// （h-8 + rounded-full + 11px 字号）
+.pane-tab {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  min-width: 100px;
+  max-width: 160px;
+
+  // ⚠️ **胶囊高度由容器决定，不要写死 32px**：`.pane-tabs` 也是 32px，
+  // 两者刚好相等时看着没问题；但上下拆分后下方那格高度紧张、标签条被压矮，
+  // 胶囊仍按 32px 顶着 → 上边留出一段空隙，两个窗格的标签对不齐
+  // （用户报「向下拆分的标签栏和上面的不一样」）。
+  // `align-self: stretch` 让它填满标签条，任意窗格高度下间隙恒为 0。
+  height: auto;
+  padding: 0 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: var(--cursor-interactive);
+  background: transparent;
+  border: 0;
+  border-radius: 9999px;
+}
+
+// 选中胶囊：只给「活动窗格里正在显示的那只」加。
+// 必须排在 .pane-tab 基类之后 —— 同为单类选择器、权重相同，
+// 写在基类前面会被 background: transparent 盖掉，点了也没框
+.pane-tab--on {
+  color: var(--foreground);
+  background: var(--segment);
+}
+
+.pane-tab:hover {
+  color: var(--foreground);
+}
+
+// 标签里的会话名：占满剩余宽度并截断
+.pane-tab-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-tab i {
+  padding: 3px;
+  font-size: 15px;
+  font-style: normal;
+}
+
+.pane-tab i:hover {
+  color: var(--foreground);
+}
+
+// 悬停才滚：CSS 变量做开关，省掉三段选择器（prettier/stylelint 约定）。
+// 变量切的是动画名而不是 play-state —— 移开鼠标动画被摘掉，
+// 位移立刻回到起点（play-state: paused 会停在半路）
+.pane-tab-name:hover {
+  --name-anim: name-loop;
+}
+
+// 滚动轨道：两份文字首尾相接，位移 -50% 正好一份（含尾部间距）→ 无缝循环
+.pane-tab-name-track {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+// 每份文字自带尾部间距（循环时的间隔）；margin 不计入 offsetWidth，
+// 于是 JS 量"一份文字是否比名字盒宽"时不会把间距算进去
+.pane-tab-name-text {
+  display: inline-block;
+  margin-right: 32px;
+}
+
+// 名字被截断时（JS 挂类）悬停播放：头部从右侧进、尾巴从左侧出，循环
+.name-scroll {
+  animation-name: var(--name-anim, none);
+  animation-duration: 9s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+// 滚动时去掉省略号，否则右缘常驻一个 "..."
+.pane-tab-name:has(.name-scroll) {
+  text-overflow: clip;
+}
+
+@keyframes name-loop {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name-scroll {
+    animation-name: none;
+  }
+}
+
+// 标签条右侧的「新建」与「更多」：absolute 钉在可视区右缘。
+// 用 absolute 而非 sticky：sticky 在 overflow 容器里会随内容滚动
+.pane-tab-new,
+.pane-tabs-more {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+}
+
+.pane-tab-new {
+  width: 38px;
+  height: 100%;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 0;
+  border-radius: 0;
+}
+
+.pane-tab-new:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// 「更多」带一段渐变，遮住底下正在滚动的那几只标签的边缘
+.pane-tabs-more {
+  padding-left: 18px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--surface-secondary) 30%
+  );
+}
+
+.more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 100%;
+  padding: 0; // HeroUI Dropdown.Trigger 自带按钮内边距，冲掉以保持 30px 宽
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--surface-tertiary);
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.more-btn:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}

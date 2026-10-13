@@ -7,7 +7,7 @@ import {
   DashboardOutlined
 } from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
-import { aiRunCommand } from "@/terminal/lib/aiExec";
+import { aiRunCommand } from "@/terminal/lib/ai/aiExec";
 import {
   fmtShort,
   fmtUptime,
@@ -15,7 +15,7 @@ import {
   STATUS_SCRIPT,
   type StatusSample
 } from "@/terminal/lib/sysInfo";
-import type { OpenSession } from "@/terminal/lib/terminalTypes";
+import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 
 type StatusInfoBarProps = {
   /** 采集数据来源的 SSH 会话；省略时各项显示占位符。 */

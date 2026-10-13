@@ -31,7 +31,7 @@ let PromptInput: ComponentType<
 
 beforeAll(async () => {
   const mod =
-    await import("@/terminal/components/aicss/PromptInput");
+    await import("@/terminal/components/ai/PromptInput");
   PromptInput =
     mod.PromptInput as unknown as ComponentType<
       Record<string, unknown>

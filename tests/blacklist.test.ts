@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBlacklisted } from "../src/terminal/lib/aiChat";
+import { isBlacklisted } from "../src/terminal/lib/ai/aiChat";
 
 describe("isBlacklisted", () => {
   const list = ["rm", "kill"];

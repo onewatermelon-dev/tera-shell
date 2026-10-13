@@ -25,7 +25,7 @@ import {
   saveBlacklist,
   savePanelWidth,
   saveReopenTabTop
-} from "@/terminal/lib/aiPrefs";
+} from "@/terminal/lib/ai/aiPrefs";
 
 /** localStorage 的 node 内存替身（vitest node 环境没有这个全局）。 */
 const store = new Map<string, string>();

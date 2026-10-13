@@ -9,7 +9,7 @@ import {
   toSelectionCss,
   COLOR_SCHEMES,
   DEFAULT_COLOR_SCHEME
-} from "@/terminal/lib/colorSchemes";
+} from "@/terminal/lib/pane/colorSchemes";
 
 /**
  * 选区色接回配色方案。

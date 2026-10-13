@@ -23,7 +23,9 @@ import {
 import contextMenuSource from "@/terminal/lib/terminalContextMenu.ts?raw";
 import appHeaderSource from "@/app/components/AppHeader.tsx?raw";
 import appRailSource from "@/app/components/AppRail.tsx?raw";
-import useTerminalsSource from "@/terminal/lib/useTerminals.ts?raw";
+import useTerminalsSource from "@/terminal/lib/session/useTerminals.ts?raw";
+import listenersSource from "@/terminal/lib/session/useTerminalGlobalListeners.ts?raw";
+import terminalInputSource from "@/terminal/lib/session/terminalInput.ts?raw";
 import shortcutSettingsSource from "@/settings/components/ShortcutSettings.tsx?raw";
 import appSource from "@/app/components/App.tsx?raw";
 import * as appShortcutsModule from "@/shared/lib/appShortcuts";
@@ -863,36 +865,49 @@ describe("消费方读的是生效表", () => {
     );
   });
 
-  it("useTerminals 里 find / devtools 也读生效表（不能回到硬编码）", () => {
-    const code = stripComments(
-      useTerminalsSource
+  it("终端层 find / devtools 也读生效表（不能回到硬编码）", () => {
+    // 2026-10-12 拆分后：匹配入口 matchTerminalShortcut 住在
+    // session/terminalInput.ts；2026-10-14 起执行方是
+    // session/useTerminalGlobalListeners.ts（从 useTerminals 搬出），
+    // useTerminals 只在监听里调用它
+    const input = stripComments(
+      terminalInputSource
+    );
+    const listeners = stripComments(
+      listenersSource
     );
     // 有统一的匹配入口
-    expect(code).toContain(
+    expect(input).toContain(
       "function matchTerminalShortcut("
     );
-    // 查找与开发者工具都走它 —— 改键位才生效
-    expect(code).toMatch(
-      /matchTerminalShortcut\(\s*event,\s*"find"\s*\)/
-    );
-    expect(code).toMatch(
-      /matchTerminalShortcut\(\s*event,\s*"devtools"\s*\)/
+    // 读取的是生效表
+    expect(input).toContain(
+      "effectiveShortcuts()"
     );
     // ⚠️ 不能有硬编码的 Ctrl+F / F12 判定：
     // 那正是这次修掉的原问题（菜单显示新键位、按新键没反应）
-    expect(code).not.toMatch(/key === "f"/);
-    expect(code).not.toMatch(
-      /event\.key === "F12"/
+    for (const source of [
+      input,
+      listeners,
+      stripComments(useTerminalsSource)
+    ]) {
+      expect(source).not.toMatch(/key === "f"/);
+      expect(source).not.toMatch(
+        /event\.key === "F12"/
+      );
+    }
+    // 查找与开发者工具都走它 —— 改键位才生效
+    expect(listeners).toMatch(
+      /matchTerminalShortcut\(\s*event,\s*"find"\s*\)/
     );
-    // 读取的是生效表
-    expect(code).toContain(
-      "effectiveShortcuts()"
+    expect(listeners).toMatch(
+      /matchTerminalShortcut\(\s*event,\s*"devtools"\s*\)/
     );
   });
 
   it("devtools 的历史别名仍被认（Ctrl+Shift+I）", () => {
     expect(
-      stripComments(useTerminalsSource)
+      stripComments(listenersSource)
     ).toContain("DEVTOOLS_ALT_CHORD");
   });
 });

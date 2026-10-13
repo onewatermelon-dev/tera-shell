@@ -9,7 +9,7 @@ import {
   COLOR_SCHEMES,
   resolveColorScheme,
   type ColorScheme
-} from "@/terminal/lib/colorSchemes";
+} from "@/terminal/lib/pane/colorSchemes";
 import { useT } from "@/settings/lib/i18n";
 
 /** 首批渲染多少张卡片；464 个全量一次挂载会拖慢设置页，靠滚动追加 */

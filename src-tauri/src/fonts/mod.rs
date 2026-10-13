@@ -87,23 +87,8 @@ pub fn list_fonts() -> Vec<String> {
 	}
 }
 
+// 单元测试集中在 src-tauri/tests/unit/：#[path] 把模块编回本处，私有项仍可
+// 访问；tests/ 下的直接子文件才是 cargo 的集成测试目标，子目录不自动发现。
 #[cfg(test)]
-mod tests {
-	use super::*;
-
-	/// 过滤逻辑跑在系统枚举回调里，直接调真机验证：等宽字体必须留下
-	/// （Consolas 人人都有），比例字体必须滤掉（Arial 人人都有）。
-	#[test]
-	fn list_fonts_keeps_only_fixed_pitch() {
-		let fonts = list_fonts();
-		assert!(!fonts.is_empty(), "一个字体都没枚举到");
-		assert!(
-			fonts.iter().any(|f| f.contains("Consolas")),
-			"等宽字体 Consolas 被误滤掉"
-		);
-		assert!(
-			!fonts.iter().any(|f| f == "Arial"),
-			"比例字体 Arial 没被滤掉"
-		);
-	}
-}
+#[path = "../../tests/unit/fonts.rs"]
+mod tests;

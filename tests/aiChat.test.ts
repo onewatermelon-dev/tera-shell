@@ -10,7 +10,7 @@ import {
   responsesAdapter,
   trimToolOutput,
   type AiQueuedMessage
-} from "@/terminal/lib/aiChat";
+} from "@/terminal/lib/ai/aiChat";
 import {
   parseNetInfo,
   parseSysInfo

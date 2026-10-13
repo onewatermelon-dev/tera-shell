@@ -1,0 +1,212 @@
+/**
+ * AI 面板的消息流：欢迎卡片 + 历史条目 + 流式临时条目 + 错误行。
+ *
+ * 从 AiPanel.tsx 拆出（2026-10-13）：整段是「entries → 视图」的纯渲染，
+ * 交互全部经 props 回传（确认/跳过/存宏），面板本体只剩布局与装配。
+ */
+import { useMemo } from "react";
+import { useT } from "@/settings/lib/i18n";
+import { AiMarkdown } from "./AiMarkdown";
+import { ThinkingState } from "./ThinkingState";
+import { ReasoningBlock } from "./ReasoningBlock";
+import { ChatMessageActions } from "./ChatMessageActions";
+import { ToolCard } from "./ToolCard";
+import type {
+  AiChatEntry,
+  ExecCardMode
+} from "@/terminal/lib/ai/aiChat";
+
+/** 欢迎卡片的示例提示池：每次卡片出现随机展示一条（文案在 i18n） */
+const WELCOME_TIP_KEYS = [
+  "ai.welcome.tip.0",
+  "ai.welcome.tip.1",
+  "ai.welcome.tip.2",
+  "ai.welcome.tip.3",
+  "ai.welcome.tip.4",
+  "ai.welcome.tip.5",
+  "ai.welcome.tip.6",
+  "ai.welcome.tip.7"
+] as const;
+
+/** 正在流式生成的助手消息（null = 没有进行中的流）。 */
+type AiStream = {
+  text: string;
+  reasoning: string;
+};
+
+export function AiMessageList({
+  entries,
+  stream,
+  error,
+  saveError,
+  pendingCardId,
+  busy,
+  onConfirm,
+  onSkip,
+  onAddMacroCommand
+}: {
+  entries: AiChatEntry[];
+  stream: AiStream | null;
+  /** 聊天链路的错误气泡（来自 useAiChat） */
+  error: string;
+  /** 代码块/表格下载失败的提示（与 error 分开，见 AiPanel） */
+  saveError: string;
+  /** 等确认的卡片 id（useAiChat.pendingCardId） */
+  pendingCardId: string | null;
+  busy: boolean;
+  onConfirm: (
+    callId: string,
+    mode: ExecCardMode
+  ) => void;
+  onSkip: (callId: string) => void;
+  /** 把卡片命令存为快捷宏 */
+  onAddMacroCommand: (
+    name: string,
+    command: string
+  ) => void;
+}) {
+  const t = useT();
+  // 欢迎卡片的示例提示：卡片每次出现随机换一条 —— 依赖用 entries 的
+  // 数组引用而非长度：点「新对话」时 clear() 换上新数组，即便此前也是
+  // 空列表也会重抽。随机数发生在渲染期属于本功能的行为需求，显式豁免
+  // purity 检查
+  const welcomeTipKey = useMemo(
+    () =>
+      WELCOME_TIP_KEYS[
+        Math.floor(
+          // eslint-disable-next-line react-hooks/purity -- 欢迎语本就该随机
+          Math.random() * WELCOME_TIP_KEYS.length
+        )
+      ] ?? WELCOME_TIP_KEYS[0],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- entries 引用变化（含清空成新空数组）就是重抽时机
+    [entries]
+  );
+
+  return (
+    <>
+      {entries.length === 0 && !error && (
+        // 空面板欢迎卡片：介绍助手能力 + 一条随机示例用法（每次出现换一条）
+        <div className="ai-welcome">
+          <h3 className="ai-welcome-title">
+            {t("ai.welcome.title")}
+          </h3>
+          <div className="ai-welcome-divider" />
+          <p className="ai-welcome-desc">
+            {t("ai.welcome.desc")}
+          </p>
+          <p className="ai-welcome-tip">
+            💡 {t(welcomeTipKey)}
+          </p>
+        </div>
+      )}
+      {entries.map((entry, index) => {
+        if (entry.kind === "tool") {
+          return (
+            <ToolCard
+              key={entry.call.id}
+              call={entry.call}
+              awaitingConfirm={
+                pendingCardId === entry.call.id
+              }
+              busy={busy}
+              onConfirm={mode =>
+                onConfirm(entry.call.id, mode)
+              }
+              onAddMacro={() =>
+                onAddMacroCommand(
+                  entry.call.question,
+                  entry.call.command
+                )
+              }
+              onSkip={() => onSkip(entry.call.id)}
+            />
+          );
+        }
+        if (entry.kind === "assistant") {
+          // 助手回复是 markdown（表格 / 代码块），交给 Streamdown 渲染
+          return (
+            <div
+              key={`${index}-${entry.sentAt}`}
+              className="ai-assistant-message"
+            >
+              <div className="ai-entry is-assistant">
+                {entry.reasoning && (
+                  <ReasoningBlock
+                    reasoning={entry.reasoning}
+                    elapsedSeconds={
+                      entry.elapsedSeconds ?? 1
+                    }
+                  />
+                )}
+                {entry.text && (
+                  <AiMarkdown text={entry.text} />
+                )}
+              </div>
+              <ChatMessageActions
+                text={
+                  entry.text ||
+                  entry.reasoning ||
+                  ""
+                }
+                sentAt={entry.sentAt}
+                align="start"
+              />
+            </div>
+          );
+        }
+        // 用户消息的操作栏只在鼠标悬停或键盘聚焦时显示
+        return (
+          <div
+            key={`${index}-${entry.sentAt}`}
+            className="ai-user-message"
+          >
+            <div className="ai-entry is-user">
+              {entry.images?.length ? (
+                <span className="ai-entry-images">
+                  {entry.images.map((url, i) => (
+                    <img
+                      key={i}
+                      src={url}
+                      alt=""
+                    />
+                  ))}
+                </span>
+              ) : null}
+              {entry.text}
+            </div>
+            <ChatMessageActions
+              text={entry.text}
+              sentAt={entry.sentAt}
+            />
+          </div>
+        );
+      })}
+      {stream && (
+        // 流式进行中的临时条目：思考内容实时增长，正文就绪后交给 Streamdown
+        <div className="ai-entry is-assistant">
+          {stream.reasoning ? (
+            <div className="ai-live-reasoning">
+              <div className="ai-live-reasoning-head">
+                <ThinkingState />
+              </div>
+              <pre>{stream.reasoning}</pre>
+            </div>
+          ) : (
+            !stream.text && <ThinkingState />
+          )}
+          {stream.text && (
+            <AiMarkdown
+              text={stream.text}
+              streaming
+            />
+          )}
+        </div>
+      )}
+      {(error || saveError) && (
+        <p className="ai-entry is-error">
+          {error || saveError}
+        </p>
+      )}
+    </>
+  );
+}

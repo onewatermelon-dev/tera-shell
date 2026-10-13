@@ -3,7 +3,7 @@ import type { Terminal } from "@xterm/xterm";
 import {
   commandInDirectory,
   directoryFromPrompt
-} from "@/terminal/lib/aiChat";
+} from "@/terminal/lib/ai/aiChat";
 
 /** 构造只含当前提示符行的终端缓冲区。 */
 function terminalAt(prompt: string): Terminal {

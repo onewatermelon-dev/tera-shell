@@ -1,30 +1,12 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useMemo } from "react";
 import type { SavedSession } from "@/sessions/lib/session";
-import {
-  joinPath,
-  resolvePassword,
-  type PaneEntry,
-  type PaneListing,
-  type PaneSide,
-  type RemoteDiskUsage,
-  type TransferControlAction,
-  type TransferPolicy
-} from "@/sftp/lib/sftpUtils";
 import { useTransferTasks } from "@/sftp/lib/useTransferTasks";
-import {
-  loadBookmarks,
-  removedBookmark,
-  saveBookmarks,
-  toggledBookmarks,
-  type SftpBookmark
-} from "@/sftp/lib/sftpBookmarks";
+import { useSftpBookmarks } from "@/sftp/lib/useSftpBookmarks";
+import { useSftpNavigation } from "@/sftp/lib/useSftpNavigation";
+import { useSftpTransfers } from "@/sftp/lib/useSftpTransfers";
+import { useSftpEntryOps } from "@/sftp/lib/useSftpEntryOps";
+import { useSftpServerOps } from "@/sftp/lib/useSftpServerOps";
+import { useSftpClipboard } from "@/sftp/lib/useSftpClipboard";
 
 // 类型定义集中在 sftpUtils，这里重新导出，外部仍从 useSftp 引入
 export type {
@@ -40,839 +22,91 @@ export type {
 } from "@/sftp/lib/sftpUtils";
 
 /**
- * SFTP 窗口的数据源。
+ * SFTP 窗口的数据源（门面）。
+ *
+ * 按职责拆到几个 hook 里组合，外部仍只从这里引入：
+ * - `useSftpBookmarks` 目录书签；
+ * - `useSftpNavigation` 两侧目录的浏览状态与导航（含首屏加载）；
+ * - `useSftpTransfers` 批量传输与传输任务控制；
+ * - `useSftpEntryOps` 条目级操作（打开/新建/删除/重命名/改权限）；
+ * - `useSftpServerOps` 服务端 cp/mv 与归档（含底部进度文案）；
+ * - `useSftpClipboard` 内部剪贴板与粘贴分流。
  *
  * 本地目录走 `fs_list_dir`，远程目录走 `sftp_list`。首屏在打开动作用户点击时
  * 加载，之后的双击进入 / 上一级 / 右键菜单操作也都在事件回调里触发，
  * 所以组件内不需要用 effect 拉数据。
- * 传输任务的登记与进度跟踪交给 `useTransferTasks`。
  */
 export function useSftp(
   session: SavedSession | null = null
 ) {
-  const [local, setLocal] =
-    useState<PaneListing | null>(null);
-  const [localError, setLocalError] =
-    useState("");
-  const [remote, setRemote] =
-    useState<PaneListing | null>(null);
-  const [remoteError, setRemoteError] =
-    useState("");
-  const [remoteBusy, setRemoteBusy] =
-    useState(false);
-  // 同一时刻只允许一次远程导航：双击过快时后续请求会排在同一个连接锁上，
-  // 表现为"点了半天才一个个响应"，这里直接忽略重复触发。
-  const remoteBusyRef = useRef(false);
-  // 远程磁盘用量：每次导航成功后异步刷新；ref 记录"已请求的目录"，
-  // 结果回来时目录已切走就丢弃（响应乱序时不串台）
-  const [remoteUsage, setRemoteUsage] =
-    useState<RemoteDiskUsage | null>(null);
-  const remoteUsagePathRef = useRef<
-    string | null
-  >(null);
-  // 底部进度条：远程 exec 类操作（复制/挪动/压缩/解压）进行中的文案
-  const [remoteOpLabel, setRemoteOpLabel] =
-    useState<string | null>(null);
-  // 复制 / 粘贴用的内部剪贴板（记来源栏与一批条目，粘贴时才真正执行）
-  const [clipboard, setClipboard] = useState<{
-    pane: PaneSide;
-    entries: PaneEntry[];
-  } | null>(null);
-  // 目录书签：启动时从数据文件读一次，之后内存先行、异步落盘
-  const [bookmarks, setBookmarks] = useState<
-    SftpBookmark[]
-  >(loadBookmarks);
-
+  const {
+    bookmarks,
+    toggleBookmark,
+    removeBookmark
+  } = useSftpBookmarks();
+  // tasks 的 effect 要早于首屏加载的 effect（保持原 hook 内的顺序）
   const tasks = useTransferTasks();
-
-  /** 收藏 / 取消收藏某栏某主机的一个目录。 */
-  const toggleBookmark = useCallback(
-    (
-      side: PaneSide,
-      host: string,
-      path: string
-    ) => {
-      setBookmarks(previous => {
-        const next = toggledBookmarks(
-          previous,
-          side,
-          host,
-          path
-        );
-        saveBookmarks(next);
-        return next;
-      });
-    },
-    []
-  );
-
-  /** 删除一条书签。 */
-  const removeBookmark = useCallback(
-    (
-      side: PaneSide,
-      host: string,
-      path: string
-    ) => {
-      setBookmarks(previous => {
-        const next = removedBookmark(
-          previous,
-          side,
-          host,
-          path
-        );
-        saveBookmarks(next);
-        return next;
-      });
-    },
-    []
-  );
-
-  /** 浏览本地目录；不传路径表示用户主目录。 */
-  const navigateLocal = useCallback(
-    async (path?: string | null) => {
-      setLocalError("");
-      try {
-        setLocal(
-          await invoke<PaneListing>(
-            "fs_list_dir",
-            {
-              path: path ?? null
-            }
-          )
-        );
-      } catch (reason) {
-        setLocalError(String(reason));
-        setLocal(null);
-      }
-    },
-    []
-  );
-
-  /** 浏览远程目录；不传路径表示登录后的默认目录。 */
-  const navigateRemote = useCallback(
-    async (
-      target: SavedSession,
-      path?: string | null,
-      /** 手动刷新：跳过后端目录缓存，强制重新读取。 */
-      refresh = false
-    ) => {
-      // 上一次还没回来就忽略，避免请求在同一个连接上排队
-      if (remoteBusyRef.current) return;
-      remoteBusyRef.current = true;
-      setRemoteError("");
-      setRemoteBusy(true);
-      try {
-        // 密码解成明文过一次 IPC，后端只在内存里用，不写日志/落盘
-        const password = target.password
-          ? await resolvePassword(target.password)
-          : undefined;
-        const listing = await invoke<PaneListing>(
-          "sftp_list",
-          {
-            request: {
-              host: target.host,
-              port: target.port,
-              username: target.username,
-              password,
-              path: path ?? null,
-              refresh
-            }
-          }
-        );
-        setRemote(listing);
-        // 磁盘用量异步跟上：不阻塞目录列表。df/du 走同一条 SSH
-        // 会话的 exec 通道，超大目录的 du 会跑满会话超时后放弃
-        remoteUsagePathRef.current = listing.path;
-        void invoke<RemoteDiskUsage>(
-          "sftp_disk_usage",
-          {
-            job: {
-              host: target.host,
-              port: target.port,
-              username: target.username,
-              password,
-              local: "",
-              remote: listing.path
-            }
-          }
-        )
-          .then(usage => {
-            if (
-              remoteUsagePathRef.current ===
-              listing.path
-            )
-              setRemoteUsage(usage);
-          })
-          .catch(() => {
-            if (
-              remoteUsagePathRef.current ===
-              listing.path
-            )
-              setRemoteUsage(null);
-          });
-      } catch (reason) {
-        // 失败时保留原目录内容（错误文案会盖在上面），不清空以便重试
-        setRemoteError(String(reason));
-      } finally {
-        remoteBusyRef.current = false;
-        setRemoteBusy(false);
-      }
-    },
-    []
-  );
-
-  /** 组装远程操作需要的连接参数（含解密后的密码）。 */
-  const remoteConnection =
-    useCallback(async () => {
-      if (!session) {
-        throw new Error(
-          "当前没有活动的 SFTP 会话"
-        );
-      }
-      return {
-        host: session.host,
-        port: session.port,
-        username: session.username,
-        password: session.password
-          ? await resolvePassword(
-              session.password
-            )
-          : null
-      };
-    }, [session]);
-
-  /**
-   * 打开一个条目。
-   *
-   * 本地文件直接交给系统；远程文件本地程序够不着，先拉到临时目录再打开
-   * （`sftp_edit_remote` 返回本地路径），之后本地一保存就自动回传远程。
-   */
-  const openEntry = useCallback(
-    async (
-      pane: PaneSide,
-      entry: PaneEntry,
-      withNotepad: boolean
-    ) => {
-      const target =
-        pane === "remote"
-          ? await invoke<string>(
-              "sftp_edit_remote",
-              {
-                job: {
-                  ...(await remoteConnection()),
-                  local: "",
-                  remote: entry.path
-                }
-              }
-            )
-          : entry.path;
-      await invoke(
-        withNotepad
-          ? "fs_open_notepad"
-          : "fs_open_path",
-        { path: target }
-      );
-    },
-    [remoteConnection]
-  );
-
-  /**
-   * 批量传输：把一批条目从来源栏传到目标栏的指定目录（拖拽 / 右键传输 / 跨栏粘贴共用）。
-   *
-   * ① **目标目录显式传入** —— 拖拽可以落在子目录里，右键菜单的"传输"
-   *    永远只传到另一栏的当前目录；
-   * ② **不吞异常** —— 单个条目失败不该中断整批，逐个记 console 即可
-   *    （传输面板里每条任务各自有成败状态）；
-   * ③ **冲突策略** 随 job 传给后端，目录递归里的每个文件都会过一遍；
-   *    策略为"跳过"时，顶层冲突条目在这里就地剔除，不给它们登记
-   *    注定 0 字节的死任务（目录仍保留，其内部的冲突由后端兜底）。
-   *
-   * ⚠️ `joinPath` 会沿用目录的分隔符：本地 Windows 是 `\`、远程是 `/`，
-   * 传错目录会让拼接结果不对，所以这里不加工序，直接交给它判断。
-   */
-  const transferEntries = useCallback(
-    async (
-      from: PaneSide,
-      entries: PaneEntry[],
-      directory: string,
-      policy: TransferPolicy = "overwrite"
-    ) => {
-      if (entries.length === 0) return;
-      if (!directory) {
-        throw new Error("目标目录尚未加载");
-      }
-      // 跳过策略：顶层冲突不进队列（后端对目录内部仍有兜底）
-      let pending = entries;
-      if (policy === "skip") {
-        const targetEntries =
-          from === "local"
-            ? remote?.entries
-            : local?.entries;
-        if (targetEntries?.length) {
-          const names = new Set(
-            targetEntries.map(entry => entry.name)
-          );
-          pending = entries.filter(
-            entry => !names.has(entry.name)
-          );
-          if (pending.length === 0) return;
-        }
-      }
-      const connection = await remoteConnection();
-      for (const entry of pending) {
-        const id = tasks.registerTask(
-          entry.name,
-          from === "local"
-            ? "upload"
-            : "download",
-          entry.size
-        );
-        try {
-          if (from === "local") {
-            await invoke("sftp_upload", {
-              job: {
-                ...connection,
-                id,
-                local: entry.path,
-                remote: joinPath(
-                  directory,
-                  entry.name
-                ),
-                policy
-              }
-            });
-          } else {
-            await invoke("sftp_download", {
-              job: {
-                ...connection,
-                id,
-                remote: entry.path,
-                local: joinPath(
-                  directory,
-                  entry.name
-                ),
-                policy
-              }
-            });
-          }
-        } catch (reason) {
-          // 取消是用户主动行为，不算失败
-          if (tasks.failTask(id, String(reason)))
-            continue;
-          console.error(
-            `[sftp] 拖放传输失败：${entry.name}`,
-            reason
-          );
-          continue;
-        }
-        tasks.finishTask(id);
-      }
-      // 目标栏刷新，新文件立刻可见。批量只刷一次，
-      // 逐条刷会把远程栏的连接锁占满
-      if (from === "local") {
-        void navigateRemote(
-          session as SavedSession,
-          directory,
-          true
-        );
-      } else {
-        void navigateLocal(directory);
-      }
-    },
-    [
-      remoteConnection,
-      remote?.entries,
-      local?.entries,
-      tasks,
-      navigateRemote,
-      navigateLocal,
-      session
-    ]
-  );
-
-  /** 清空已结束的传输记录；正在传输的保留。 */
-  const clearTransfers = tasks.clearTransfers;
-
-  /** 删除单条已结束的传输记录。 */
-  const removeTransfer = tasks.removeTask;
-
-  /** 暂停 / 恢复 / 取消某个传输任务。 */
-  const controlTransfer = useCallback(
-    async (
-      id: string,
-      action: TransferControlAction
-    ) => {
-      await tasks.controlTransfer(id, action);
-    },
-    [tasks]
-  );
-
-  /** 在当前目录下新建文件夹或空文件。 */
-  const createEntry = useCallback(
-    async (
-      pane: PaneSide,
-      isDir: boolean,
-      name: string
-    ) => {
-      if (pane === "local") {
-        const directory = local?.path;
-        if (!directory) {
-          throw new Error("本地目录尚未加载");
-        }
-        await invoke(
-          isDir
-            ? "fs_make_dir"
-            : "fs_create_file",
-          { path: joinPath(directory, name) }
-        );
-        void navigateLocal(directory);
-        return;
-      }
-      const directory = remote?.path;
-      if (!directory) {
-        throw new Error("远程目录尚未加载");
-      }
-      const connection = await remoteConnection();
-      await invoke(
-        isDir
-          ? "sftp_make_dir"
-          : "sftp_create_file",
-        {
-          job: {
-            ...connection,
-            local: "",
-            remote: joinPath(directory, name)
-          }
-        }
-      );
-      void navigateRemote(
-        session as SavedSession,
-        directory,
-        true
-      );
-    },
-    [
-      remoteConnection,
-      remote?.path,
-      local?.path,
-      session,
-      navigateRemote,
-      navigateLocal
-    ]
-  );
-
-  /** 删除单个条目的实际执行：本地直接删，远程递归删并登记任务；不负责刷新。 */
-  const removeEntryCore = useCallback(
-    async (pane: PaneSide, entry: PaneEntry) => {
-      if (pane === "local") {
-        await invoke("fs_remove_path", {
-          path: entry.path
-        });
-        return;
-      }
-      const connection = await remoteConnection();
-      // 远程递归删除可能很慢，登记成一条任务走底部面板展示进度
-      const id = tasks.registerTask(
-        entry.name,
-        "delete",
-        entry.size
-      );
-      try {
-        await invoke("sftp_remove_path", {
-          job: {
-            ...connection,
-            id,
-            local: "",
-            remote: entry.path
-          }
-        });
-      } catch (reason) {
-        if (tasks.failTask(id, String(reason)))
-          return;
-        throw reason;
-      }
-      tasks.finishTask(id);
-    },
-    [remoteConnection, tasks]
-  );
-
-  /** 删除完成后刷新来源栏当前目录。 */
-  const refreshAfterRemove = useCallback(
-    (pane: PaneSide) => {
-      if (pane === "local") {
-        void navigateLocal(local?.path);
-      } else {
-        void navigateRemote(
-          session as SavedSession,
-          remote?.path,
-          true
-        );
-      }
-    },
-    [
-      local?.path,
-      remote?.path,
-      session,
-      navigateLocal,
-      navigateRemote
-    ]
-  );
-
-  /** 删除文件或目录（远程按递归删除，并在底部面板里显示进度）。 */
-  const removeEntry = useCallback(
-    async (pane: PaneSide, entry: PaneEntry) => {
-      await removeEntryCore(pane, entry);
-      refreshAfterRemove(pane);
-    },
-    [removeEntryCore, refreshAfterRemove]
-  );
-
-  /** 批量删除：逐项执行（远程每项一条任务进面板），完成后只刷新一次。 */
-  const removeEntries = useCallback(
-    async (
-      pane: PaneSide,
-      entries: PaneEntry[]
-    ) => {
-      for (const entry of entries) {
-        // 单项失败即中断：后续项很可能依赖同一故障（如权限），继续只是刷屏
-        await removeEntryCore(pane, entry);
-      }
-      refreshAfterRemove(pane);
-    },
-    [removeEntryCore, refreshAfterRemove]
-  );
-
-  /** 重命名文件或目录：新名字拼在原目录后面，目录本身不变。 */
-  const renameEntry = useCallback(
-    async (
-      pane: PaneSide,
-      entry: PaneEntry,
-      name: string
-    ) => {
-      const directory =
-        pane === "local"
-          ? local?.path
-          : remote?.path;
-      if (!directory) {
-        throw new Error(
-          pane === "local"
-            ? "本地目录尚未加载"
-            : "远程目录尚未加载"
-        );
-      }
-      const from = entry.path;
-      const to = joinPath(directory, name);
-      if (from === to) return;
-      if (pane === "local") {
-        await invoke("fs_rename_path", {
-          from,
-          to
-        });
-        void navigateLocal(directory);
-        return;
-      }
-      const connection = await remoteConnection();
-      await invoke("sftp_rename_path", {
-        request: { ...connection, from, to }
-      });
-      void navigateRemote(
-        session as SavedSession,
-        directory,
-        true
-      );
-    },
-    [
-      remoteConnection,
-      remote?.path,
-      local?.path,
-      session,
-      navigateRemote,
-      navigateLocal
-    ]
-  );
-
-  /** 修改一批远程条目的权限（Unix 概念，仅远程栏使用），完成后只刷新一次。 */
-  const changeModes = useCallback(
-    async (
-      entries: PaneEntry[],
-      mode: number
-    ) => {
-      const directory = remote?.path;
-      const connection = await remoteConnection();
-      for (const entry of entries) {
-        await invoke("sftp_chmod", {
-          job: {
-            ...connection,
-            local: "",
-            remote: entry.path
-          },
-          mode
-        });
-      }
-      void navigateRemote(
-        session as SavedSession,
-        directory,
-        true
-      );
-    },
-    [
-      remoteConnection,
-      remote?.path,
-      session,
-      navigateRemote
-    ]
-  );
-
-  /** 修改远程文件 / 目录的权限（Unix 概念，仅远程栏使用）。 */
-  const changeMode = useCallback(
-    async (entry: PaneEntry, mode: number) => {
-      await changeModes([entry], mode);
-    },
-    [changeModes]
-  );
-
-  /** 复制：只记入内部剪贴板（多选整批），粘贴时才真正执行。 */
-  const copyToClipboard = useCallback(
-    (pane: PaneSide, entries: PaneEntry[]) => {
-      setClipboard(
-        entries.length ? { pane, entries } : null
-      );
-    },
-    []
-  );
-
-  /**
-   * 乐观改写远程当前目录的条目列表。
-   *
-   * 高延迟链路下一次 readdir 要 0.6~1.6s（日志实测），复制/挪动后
-   * 等它对账体感很差：先按已知结果改本地列表立即呈现，随后台的
-   * 强制刷新（refresh=true，会顺带更新后端目录缓存）再对账。
-   */
-  const patchRemoteEntries = useCallback(
-    (
-      update: (
-        entries: PaneEntry[]
-      ) => PaneEntry[]
-    ) => {
-      setRemote(previous =>
-        previous
-          ? {
-              ...previous,
-              entries: update(previous.entries)
-            }
-          : previous
-      );
-    },
-    []
-  );
-
-  /**
-   * 远程同服务器文件操作：copy（cp -a 复制）或 move（mv 挪动）。
-   *
-   * 服务端自己执行，数据不过本机。成功后**乐观更新**当前列表
-   * （挪动=移除条目，复制=插入占位条目）立即呈现，再后台强制
-   * 刷新对账（顺带更新后端目录缓存，防止普通导航读到旧缓存）。
-   * ⚠️ 刷新可能被 remoteBusyRef 守卫丢掉，那段时间占位元数据
-   * （size=0）会多留一会儿，下次任意刷新自然修正。
-   */
-  const remoteFileOp = useCallback(
-    async (
-      mode: "copy" | "move",
-      entries: PaneEntry[],
-      targetDir: string
-    ) => {
-      if (!entries.length) return;
-      setRemoteOpLabel(
-        mode === "copy"
-          ? `正在复制 ${entries.length} 项…`
-          : `正在挪动 ${entries.length} 项…`
-      );
-      try {
-        const connection =
-          await remoteConnection();
-        await invoke("sftp_remote_fs", {
-          job: {
-            ...connection,
-            local: "",
-            remote: entries[0]?.path ?? ""
-          },
-          mode,
-          paths: entries.map(entry => entry.path),
-          targetDir
-        });
-        if (mode === "move") {
-          // 挪走 = 从当前列表移除（拖拽的来源一定是当前目录）
-          const moved = new Set(
-            entries.map(entry => entry.path)
-          );
-          patchRemoteEntries(previous =>
-            previous.filter(
-              entry => !moved.has(entry.path)
-            )
-          );
-        } else {
-          // 复制 = 在目标目录（即当前目录）插入占位条目，
-          // size/mtime 未知先置空，刷新对账后变成真实值
-          patchRemoteEntries(previous => [
-            ...previous,
-            ...entries.map(entry => ({
-              name: entry.name,
-              path: joinPath(
-                targetDir,
-                entry.name
-              ),
-              isDir: entry.isDir,
-              size: 0,
-              modified: null,
-              perm: null,
-              owner: null,
-              group: null,
-              iconKey: entry.isDir
-                ? "dir"
-                : (entry.iconKey ?? undefined)
-            }))
-          ]);
-        }
-        if (session) {
-          void navigateRemote(
-            session as SavedSession,
-            remote?.path,
-            true
-          );
-        }
-      } finally {
-        setRemoteOpLabel(null);
-      }
-    },
-    [
-      remoteConnection,
-      session,
-      remote?.path,
-      patchRemoteEntries,
-      navigateRemote
-    ]
-  );
-
-  /** 粘贴：同栏走本地复制 / 服务端 cp，跨栏走批量传输。 */
-  const pasteInto = useCallback(
-    async (
-      pane: PaneSide,
-      policy: TransferPolicy = "overwrite"
-    ) => {
-      if (!clipboard?.entries.length) return;
-      if (clipboard.pane === pane) {
-        if (pane === "remote") {
-          // 远程 → 远程：服务端 cp -a，数据不过本机
-          const directory = remote?.path;
-          if (!directory) {
-            throw new Error("远程目录尚未加载");
-          }
-          await remoteFileOp(
-            "copy",
-            clipboard.entries,
-            directory
-          );
-          return;
-        }
-        const directory = local?.path;
-        if (!directory) {
-          throw new Error("本地目录尚未加载");
-        }
-        for (const entry of clipboard.entries) {
-          await invoke("fs_copy_path", {
-            from: entry.path,
-            to: directory
-          });
-        }
-        void navigateLocal(directory);
-        return;
-      }
-      // 跨栏粘贴 = 上传 / 下载（transferEntries 自带逐条任务与刷新）
-      const directory =
-        clipboard.pane === "local"
-          ? remote?.path
-          : local?.path;
-      if (!directory) {
-        throw new Error("目标目录尚未加载");
-      }
-      await transferEntries(
-        clipboard.pane,
-        clipboard.entries,
-        directory,
-        policy
-      );
-    },
-    [
-      clipboard,
-      local?.path,
-      remote?.path,
-      navigateLocal,
-      remoteFileOp,
-      transferEntries
-    ]
-  );
-
-  /**
-   * 远程归档：compress（tar.gz 打包）或 extract（解压到所在目录）。
-   *
-   * 后端走 exec 通道跑 tar / unzip；成功后强制刷新远程当前目录。
-   */
-  const archiveEntries = useCallback(
-    async (
-      mode: "compress" | "extract",
-      paths: string[],
-      target: string
-    ) => {
-      setRemoteOpLabel(
-        mode === "compress"
-          ? `正在压缩 ${paths.length} 项…`
-          : "正在解压…"
-      );
-      try {
-        const connection =
-          await remoteConnection();
-        await invoke("sftp_archive", {
-          job: {
-            ...connection,
-            local: "",
-            remote: paths[0] ?? ""
-          },
-          mode,
-          paths,
-          target
-        });
-        if (session) {
-          void navigateRemote(
-            session as SavedSession,
-            remote?.path,
-            true
-          );
-        }
-      } finally {
-        setRemoteOpLabel(null);
-      }
-    },
-    [
-      remoteConnection,
-      session,
-      remote?.path,
-      navigateRemote
-    ]
-  );
-
-  // 首屏：挂载（或换会话）时拉两侧目录。
-  // 依赖都是稳定的 useCallback，因此只在会话变化时重新加载。
-  useEffect(() => {
-    if (!session) return;
-    // 放进微任务：加载首屏会写状态，直接在 effect 体内调用会被
-    // react-hooks/set-state-in-effect 判为级联渲染
-    void Promise.resolve().then(() => {
-      void navigateLocal();
-      // 本机终端没有远程目录，只有 SSH 会话才连 SFTP
-      if (session.kind === "ssh")
-        void navigateRemote(session);
-    });
-  }, [session, navigateLocal, navigateRemote]);
+  const {
+    local,
+    localError,
+    remote,
+    remoteError,
+    remoteBusy,
+    remoteUsage,
+    navigateLocal,
+    navigateRemote,
+    patchRemoteEntries
+  } = useSftpNavigation(session);
+  const {
+    transferEntries,
+    clearTransfers,
+    removeTransfer,
+    controlTransfer
+  } = useSftpTransfers({
+    session,
+    local,
+    remote,
+    tasks,
+    navigateLocal,
+    navigateRemote
+  });
+  const {
+    openEntry,
+    createEntry,
+    removeEntry,
+    removeEntries,
+    renameEntry,
+    changeMode,
+    changeModes
+  } = useSftpEntryOps({
+    session,
+    local,
+    remote,
+    tasks,
+    navigateLocal,
+    navigateRemote
+  });
+  const {
+    remoteFileOp,
+    archiveEntries,
+    remoteOpLabel
+  } = useSftpServerOps({
+    session,
+    remote,
+    patchRemoteEntries,
+    navigateRemote
+  });
+  const {
+    clipboard,
+    copyToClipboard,
+    pasteInto
+  } = useSftpClipboard({
+    local,
+    remote,
+    navigateLocal,
+    transferEntries,
+    remoteFileOp
+  });
 
   // 返回值做 memo：调用方可以安全地把它整体放进 useCallback 依赖，
   // 也不会因为每次渲染新建对象而打穿下层组件的 memo。

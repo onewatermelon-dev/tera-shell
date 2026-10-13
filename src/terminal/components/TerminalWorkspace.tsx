@@ -1,57 +1,39 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent
+  type CSSProperties
 } from "react";
 import type {
   OpenSession,
   PaneState
-} from "@/terminal/lib/useTerminals";
+} from "@/terminal/lib/session/useTerminals";
 import type {
   PaneNode,
   SplitDirection
-} from "@/terminal/lib/paneLayout";
-import {
-  Button,
-  Card,
-  EmptyState,
-  Input,
-  Surface,
-  ToggleButton,
-  Typography
-} from "@heroui/react";
-import Hint from "@/shared/components/Hint";
-import AiPanel from "@/terminal/components/AiPanel";
-import MacroBar from "@/terminal/components/MacroBar";
-import StatusInfoBar from "@/terminal/components/StatusInfoBar";
-import SystemInfoDrawer from "@/terminal/components/SystemInfoDrawer";
-import ProcessInfoDrawer from "@/terminal/components/ProcessInfoDrawer";
-import NetworkInfoDrawer from "@/terminal/components/NetworkInfoDrawer";
-import PaneGrid from "@/terminal/components/PaneGrid";
-import PaneTabBar from "@/terminal/components/PaneTabBar";
+} from "@/terminal/lib/pane/paneLayout";
+import { Card } from "@heroui/react";
+import AiPanel from "@/terminal/components/ai/AiPanel";
+import { useAiPanelLayout } from "@/terminal/components/ai/useAiPanelLayout";
+import PaneGrid from "@/terminal/components/pane/PaneGrid";
+import PaneTabBar from "@/terminal/components/pane/PaneTabBar";
 import TabContextMenu, {
   type TabAction
-} from "@/terminal/components/TabContextMenu";
+} from "@/terminal/components/pane/TabContextMenu";
+import {
+  BottomDrawer,
+  type BottomDrawerMode
+} from "@/terminal/components/drawers/BottomDrawer";
+import { EmptyTerminal } from "@/terminal/components/workspace/EmptyTerminal";
+import { FindBox } from "@/terminal/components/workspace/FindBox";
+import { TerminalStatus } from "@/terminal/components/workspace/TerminalStatus";
+import { WelcomeCard } from "@/terminal/components/workspace/WelcomeCard";
+import { startTabDrag } from "@/terminal/lib/pane/tabDrag";
+import { useTerminalRefocus } from "@/terminal/lib/session/useTerminalRefocus";
 import { useT } from "@/settings/lib/i18n";
 import type { StatusMode } from "@/settings/lib/settings";
-import type { TerminalMacro } from "@/terminal/lib/terminalMacros";
-import {
-  loadPanelWidth,
-  loadReopenTabTop,
-  savePanelWidth,
-  saveReopenTabTop
-} from "@/terminal/lib/aiPrefs";
-import {
-  PlusOutlined,
-  DesktopOutlined,
-  LeftOutlined,
-  LinkOutlined
-} from "@ant-design/icons";
+import type { TerminalMacro } from "@/terminal/lib/macro/terminalMacros";
+import { LeftOutlined } from "@ant-design/icons";
 
 type Props = {
   opened: OpenSession[];
@@ -73,7 +55,7 @@ type Props = {
   /** 强制所有窗格重新按当前容器尺寸 fit（AI 面板开合后要补一次）。 */
   onResize: () => void;
   /** 挂起 PTY 尺寸同步 600ms 且**不补同步**
-   *  （AI 面板开合时防 ConPTY 整屏重发丢内容）。 */
+   * （AI 面板开合时防 ConPTY 整屏重发丢内容）。 */
   onPausePtySync: () => void;
   onSearch: (
     query: string,
@@ -156,12 +138,14 @@ type Props = {
 };
 
 /**
- * 收起后浮窗按钮的高度（px）。与 `.ai-reopen-tab` 的 height 一致 ——
- * 窗口变矮后要把存下来的 top 钳回可视区，得知道按钮有多高。
- * 兜底值和 CSS 保持同步，改 CSS 时这里也要改。
+ * 终端工作区：窗格网格 + AI 面板 + 底部状态栏 + 查找浮层的装配层。
+ *
+ * 2026-10-13 拆分：标签拖拽去 lib/pane/tabDrag.ts，焦点回还去
+ * lib/session/useTerminalRefocus.ts，AI 面板布局（宽度/收起/浮窗
+ * 位置）去 components/ai/useAiPanelLayout.ts；查找浮层、空状态、
+ * 欢迎卡片、底部抽屉与状态栏各自成组件（components/workspace、
+ * components/drawers）。本文件只留 props 编排与网格装配。
  */
-const REOPEN_TAB_HEIGHT = 72;
-
 export default function TerminalWorkspace({
   opened,
   active,
@@ -214,8 +198,6 @@ export default function TerminalWorkspace({
     paneId: string;
     canCloseRight: boolean;
   } | null>(null);
-  const searchInputRef =
-    useRef<HTMLInputElement>(null);
 
   /**
    * 每个窗格的标签列表：按 tabIds 顺序取会话。
@@ -247,164 +229,11 @@ export default function TerminalWorkspace({
   // 成 terminals.active），宏执行落在用户正对着的那一格
   const macroTargetId = active?.id;
 
-  // 焦点回还：窗口重新抢回系统焦点、或点击终端区空白处时，只要用户
-  // 没有明确在别处打字（AI 输入框 / 搜索框等文本控件），且设置页没开，
-  // 就把键盘焦点交还给正对着的终端 —— 光标常亮闪烁，不用每次先点一下。
-  const refocusTerminal = useCallback(() => {
-    if (document.querySelector(".settings-page"))
-      return;
-    const el = document.activeElement;
-    if (
-      el instanceof HTMLElement &&
-      (el.tagName === "INPUT" ||
-        el.tagName === "TEXTAREA" ||
-        el.isContentEditable)
-    )
-      return;
-    if (macroTargetId)
-      onFocusTerminal(macroTargetId);
-  }, [macroTargetId, onFocusTerminal]);
-
-  useEffect(() => {
-    window.addEventListener(
-      "focus",
-      refocusTerminal
-    );
-    return () =>
-      window.removeEventListener(
-        "focus",
-        refocusTerminal
-      );
-  }, [refocusTerminal]);
-
-  /**
-   * 拖标签在窗格之间搬移 / 窗格内换位。
-   *
-   * 原生 HTML5 拖放在 WebView2 里完全拖不动且不报错（本项目已踩过），
-   * 所以手写 pointer 拖拽：按下记录候选，移动超阈值才进拖拽，松开时
-   * 按落点判定。选中不在这里做 —— 选中挂在按下那一下（onSelect），
-   * 挂到 click / 松手上会被手抖阈值和 preventDefault 吞掉。
-   */
-  function startTabDrag(
-    event: ReactMouseEvent,
-    fromPaneId: string,
-    id: string
-  ) {
-    // 只响应主键；× 关闭钮自己会 stopPropagation，不会进到这里
-    if (event.button !== 0) return;
-    event.preventDefault();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    let dragging = false;
-    let ghost: HTMLElement | null = null;
-    const label =
-      (
-        event.currentTarget as HTMLElement
-      ).textContent
-        ?.replace("×", "")
-        .trim() || "";
-
-    const onMove = (ev: MouseEvent) => {
-      if (
-        !dragging &&
-        Math.hypot(
-          ev.clientX - startX,
-          ev.clientY - startY
-        ) > 6
-      ) {
-        dragging = true;
-        document.body.classList.add(
-          "tab-dragging"
-        );
-        ghost = document.createElement("div");
-        ghost.className = "tab-drag-ghost";
-        ghost.textContent = label;
-        document.body.appendChild(ghost);
-      }
-      // 浮标中心对齐抓手：先移到指针位置，再回退自身一半宽高
-      if (ghost)
-        ghost.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px) translate(-50%, -50%)`;
-      ev.preventDefault();
-    };
-    const onUp = (ev: MouseEvent) => {
-      window.removeEventListener(
-        "pointermove",
-        onMove
-      );
-      window.removeEventListener(
-        "pointerup",
-        onUp
-      );
-      ghost?.remove();
-      document.body.classList.remove(
-        "tab-dragging"
-      );
-      // 没超阈值＝按下那一下已经完成选中，这里不搬动
-      if (!dragging) return;
-      ev.preventDefault();
-      // elementFromPoint 拿落点元素（标签被拖走后 pointer 命中的是
-      // 别的元素，不能用 ev.target）
-      const under = document.elementFromPoint(
-        ev.clientX,
-        ev.clientY
-      );
-      // 落点标签条：data-pane-tabs 就是窗格 id。落在标签条上任意空白处
-      // （+ 按钮、溢出按钮那一带）同样算"进这个窗格"
-      const hit = under?.closest(
-        "[data-pane-tabs]"
-      );
-      if (!hit) return;
-      const toPaneId = hit.getAttribute(
-        "data-pane-tabs"
-      );
-      if (!toPaneId) return;
-      // 跨窗格＝搬移；同窗格＝换位
-      if (toPaneId !== fromPaneId) {
-        onMoveTab(id, toPaneId);
-        onFocusPane(toPaneId);
-        return;
-      }
-      // 落点标签：指针过中线就插到它后面（取它右边那个标签当锚点，
-      // 没有就是末尾）；落在空白处（最后一个标签右侧）＝追加到末尾
-      const el = under?.closest(
-        "[data-pane-tab-id]"
-      ) as HTMLElement | null;
-      let beforeId: string | null = null;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const after =
-          ev.clientX > rect.left + rect.width / 2;
-        const anchor = el.getAttribute(
-          "data-pane-tab-id"
-        );
-        const list =
-          paneSessions.get(fromPaneId) ?? [];
-        const index = list.findIndex(
-          item => item.id === anchor
-        );
-        if (index >= 0)
-          beforeId = after
-            ? (list[index + 1]?.id ?? null)
-            : anchor;
-      }
-      if (beforeId !== id)
-        onReorderTab(fromPaneId, id, beforeId);
-    };
-    window.addEventListener(
-      "pointermove",
-      onMove
-    );
-    window.addEventListener("pointerup", onUp);
-  }
-
-  // 搜索框打开时自动聚焦全选
-  useEffect(() => {
-    if (!searchOpen) return;
-    requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-    });
-  }, [searchOpen]);
+  // 窗口抢回焦点 / 点终端空白处：焦点回还给正对着的终端
+  useTerminalRefocus(
+    macroTargetId,
+    onFocusTerminal
+  );
 
   // 活动标签可能落在分隔条之外被裁掉（切窗格时尤其明显）。
   // 这里在活动会话变化后把它滚进可视区，保证"新开的标签自己会露出来"
@@ -420,28 +249,13 @@ export default function TerminalWorkspace({
       });
   }, [active?.id]);
 
-  function toggleAndSearch(toggle: () => void) {
-    toggle();
-    onSearch(query, "input");
-  }
-
-  const searchCount = searchResult.count;
-  const searchIndex = searchResult.index;
-
-  // AI 面板可拖宽度：默认 390，最窄 320，最宽到终端区域的一半（见 max）
   // 底部抽屉：none / 系统信息 / 进程信息 / 网络信息
   const [bottomDrawer, setBottomDrawer] =
-    useState<"none" | "sys" | "proc" | "net">(
-      "none"
-    );
+    useState<BottomDrawerMode>("none");
   const drawerOpen = bottomDrawer !== "none";
-  // SSH 欢迎卡片：ConPTY 整屏重绘会抹掉直写 xterm 的内容，
-  // 欢迎说明只能做在终端缓冲之外的浮层上；记录已关闭的会话 id
+  // SSH 欢迎卡片：记录已关闭的会话 id
   const [welcomeClosedFor, setWelcomeClosedFor] =
     useState<string | null>(null);
-  // AI 面板收起状态：收起后贴窗口右缘成浮窗按钮
-  const [aiCollapsed, setAiCollapsed] =
-    useState(false);
 
   // 抽屉开合只缩/放本地视口，期间暂停向 PTY 同步行高：ConPTY 在 PTY
   // 尺寸变化时会整屏重绘，若把 PTY 缩到十几行再放大，重绘内容只剩那
@@ -453,208 +267,21 @@ export default function TerminalWorkspace({
     setPtyResizePaused(drawerOpen);
   }, [drawerOpen, setPtyResizePaused]);
 
-  const [aiWidth, setAiWidth] = useState<number>(
-    () => {
-      // 最小宽度 390：旧存档里更小的值一并抬回来
-      return Math.max(
-        390,
-        loadPanelWidth() ?? 390
-      );
-    }
-  );
-
-  /**
-   * AI 面板开合：先挂起 PTY 同步、再补一次全量 fit。
-   *
-   * 两个动作缺一不可：
-   *
-   * 1. **挂起 PTY 同步**（`onPausePtySync`）：面板开合只是本地容器宽度变了，
-   *    没必要惊动 ConPTY。一旦把新列数同步过去，会触发
-   *    「ConPTY 整屏重发视口 + 远端 readline 重绘 + xterm reflow」三方叠加，
-   *    屏幕内容被整屏重发挤掉 —— 表现为「开合 AI 助手后内容变少」（丢中段）。
-   *    挂起期间只做本地 fit：显示立刻正确，缓冲不丢。
-   *    ⚠️ 挂起**不补同步**（flush=false）：那次补同步本身就是丢内容的动作，
-   *    而远端不需要知道新列数（本地 fit 已让显示正确）。
-   *
-   * 2. **等两帧再 fit**：rAF 保证 DOM 已更新，第二帧保证 grid 布局落定。
-   *    面板收起时 `has-panel` 类被摘掉、面板整体卸载，列定义重排有中间态；
-   *    只靠 ResizeObserver 常会命中中间态，按过期宽度算出列数。
-   */
-  useEffect(() => {
-    onPausePtySync();
-    let inner = 0;
-    const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => {
-        onResize();
-      });
-    });
-    return () => {
-      cancelAnimationFrame(outer);
-      if (inner) cancelAnimationFrame(inner);
-    };
-  }, [
-    aiCollapsed,
+  // AI 面板布局：宽度 / 收起态 / 收起浮窗位置（含各自的拖拽与持久化）
+  const {
+    aiHostRef,
     aiWidth,
-    onResize,
-    onPausePtySync
-  ]);
-
-  const aiHostRef = useRef<HTMLDivElement>(null);
-  /** 拖拽开始时钉住容器矩形，避免拖动过程中重读布局 */
-  const aiDragRef = useRef<DOMRect | null>(null);
-
-  function startAiResize(
-    event: ReactPointerEvent<HTMLDivElement>
-  ) {
-    const host = aiHostRef.current;
-    if (!host) return;
-    event.currentTarget.setPointerCapture(
-      event.pointerId
-    );
-    aiDragRef.current =
-      host.getBoundingClientRect();
-  }
-
-  function moveAiResize(
-    event: ReactPointerEvent<HTMLDivElement>
-  ) {
-    const rect = aiDragRef.current;
-    if (!rect) return;
-    const min = 390;
-    // 上限 = 容器一半（再减去分隔条 5px 与两条 4px 间隙）
-    const max = (rect.width - 13) / 2;
-    const next = Math.min(
-      Math.max(min, rect.right - event.clientX),
-      Math.max(min, max)
-    );
-    setAiWidth(Math.round(next));
-  }
-
-  function endAiResize() {
-    aiDragRef.current = null;
-    savePanelWidth(aiWidth);
-  }
-
-  /**
-   * 收起后的浮窗按钮：默认贴右缘垂直居中，可**上下拖动**改位置，
-   * 位置跟着 `ai_prefs.json` 走（下次启动还在原处）。
-   *
-   * `reopenTop` 为 null 表示「不指定，交给 CSS 居中」—— 用 null 而不是
-   * 一个算出来的数字，是为了让「首次运行」和「窗口缩放后」都保持居中：
-   * 存死像素值的话，窗口一变高按钮就偏在旧位置上了。
-   */
-  const [reopenTop, setReopenTop] = useState<
-    number | null
-  >(() => loadReopenTabTop());
-  /** 拖拽中：钉住「指针相对按钮顶边」的偏移 + 起手时的 clientY */
-  const reopenDragRef = useRef<{
-    grabOffset: number;
-    startY: number;
-    moved: boolean;
-  } | null>(null);
-  /**
-   * 本次手势是否拖过（松手后仍要留着，供 click 判断）。
-   * 单独一个 ref 而不是读reopenDragRef —— 后者在 endReopenDrag
-   * 里就被清空了，click 拿到的是 null，拖过也会误判成「点击」。
-   */
-  const reopenDraggedRef = useRef(false);
-  /**
-   * 与 state 同步的镜像（写入与 setState 同一处）。用于松手时落盘：
-   * pointerup 那一刻 state 可能还没提交，读它会拿到上一帧的值。
-   * ⚠️ 渲染期不能写 ref —— 只在 move/起手这些事件回调里写。
-   */
-  const reopenTopRef = useRef(reopenTop);
-
-  function startReopenDrag(
-    event: ReactPointerEvent<HTMLButtonElement>
-  ) {
-    // 指针不在按钮内也要能起手（比如从按钮上方按下再往下拖）
-    const rect =
-      event.currentTarget.getBoundingClientRect();
-    event.currentTarget.setPointerCapture(
-      event.pointerId
-    );
-    reopenDragRef.current = {
-      grabOffset: event.clientY - rect.top,
-      startY: event.clientY,
-      moved: false
-    };
-  }
-
-  function moveReopenDrag(
-    event: ReactPointerEvent<HTMLButtonElement>
-  ) {
-    const drag = reopenDragRef.current;
-    if (!drag) return;
-    if (
-      !drag.moved &&
-      Math.abs(event.clientY - drag.startY) < 3
-    )
-      // 3px 内当点击处理，否则松手会既展开面板又改位置
-      return;
-    drag.moved = true;
-    reopenDraggedRef.current = true;
-    // 全局挂抓取光标（悬浮在按钮外的那些像素也要变）
-    document.body.classList.add(
-      "reopen-dragging"
-    );
-    const height =
-      event.currentTarget.offsetHeight ||
-      REOPEN_TAB_HEIGHT;
-    // 钳在窗口内：上下都留边，别拖到屏幕外找不回来
-    const max = Math.max(
-      0,
-      window.innerHeight - height
-    );
-    const next = Math.min(
-      max,
-      Math.max(0, event.clientY - drag.grabOffset)
-    );
-    // ref 与 setState 同步更新：松手时要从 ref 读最新值
-    reopenTopRef.current = next;
-    setReopenTop(next);
-  }
-
-  /**
-   * 窗口变矮后，存下来的旧位置可能已经跑到屏幕外（按钮找不回来）。
-   * 监听 resize 把位置钳回可视区，但不落盘 —— 那是拖动时给的基准，
-   * 下次窗口又变高时用户期望它还在原来的相对位置。
-   */
-  useEffect(() => {
-    const clamp = () => {
-      const current = reopenTopRef.current;
-      if (current === null) return;
-      const max = Math.max(
-        0,
-        window.innerHeight - REOPEN_TAB_HEIGHT
-      );
-      if (current > max) {
-        reopenTopRef.current = max;
-        setReopenTop(max);
-      }
-    };
-    window.addEventListener("resize", clamp);
-    return () =>
-      window.removeEventListener("resize", clamp);
-  }, []);
-
-  function endReopenDrag(
-    event: ReactPointerEvent<HTMLButtonElement>
-  ) {
-    reopenDragRef.current = null;
-    document.body.classList.remove(
-      "reopen-dragging"
-    );
-    // 落盘拖完的位置。⚠️ 从同步的ref 读，**不要写进 setState 的
-    // updater 里落盘**（updater 是副作用重灾区：StrictMode 下跑两次、
-    // 且返回值必须是纯的）；ref 在每次 move 里就更新好了，比 state 新
-    saveReopenTabTop(reopenTopRef.current);
-    // 拖过就不当点击 —— 否则松手会顺带把面板拉回来
-    if (reopenDraggedRef.current) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-  }
+    aiCollapsed,
+    setAiCollapsed,
+    reopenTop,
+    startAiResize,
+    moveAiResize,
+    endAiResize,
+    startReopenDrag,
+    moveReopenDrag,
+    endReopenDrag,
+    reopenDraggedRef
+  } = useAiPanelLayout(onResize, onPausePtySync);
 
   return (
     // SSH 会话激活时右侧并排 AI 聊天面板（占位态），本地会话只有终端卡片
@@ -752,7 +379,13 @@ export default function TerminalWorkspace({
                         startTabDrag(
                           ev,
                           paneId,
-                          id
+                          id,
+                          {
+                            paneSessions,
+                            onMoveTab,
+                            onFocusPane,
+                            onReorderTab
+                          }
                         )
                       }
                     />
@@ -841,329 +474,61 @@ export default function TerminalWorkspace({
             )}
           </div>
         ) : (
-          <EmptyState
-            key="empty"
-            className="empty-terminal"
-          >
-            {/* HeroUI Surface 做圆形图标底盘：空状态的视觉重心，
-              比原先裸放的 42px 灰图标更有层次 */}
-            <Surface className="empty-icon">
-              <LinkOutlined />
-            </Surface>
-            <Typography.Heading
-              level={3}
-              className="empty-title"
-            >
-              {t("terminal.emptyTitle")}
-            </Typography.Heading>
-            <Typography.Paragraph
-              size="sm"
-              className="empty-desc"
-            >
-              {t("terminal.emptyDesc")}
-            </Typography.Paragraph>
-            <div className="empty-actions">
-              <Button
-                variant="primary"
-                size="sm"
-                onPress={onCreate}
-              >
-                <PlusOutlined />
-                {t("terminal.newTab")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onPress={onOpenLocal}
-              >
-                <DesktopOutlined />
-                {t("app.menu.openLocal")}
-              </Button>
-            </div>
-          </EmptyState>
+          <EmptyTerminal
+            onCreate={onCreate}
+            onOpenLocal={onOpenLocal}
+          />
         )}
 
+        {/* SSH 欢迎卡片：钉在终端区顶部的浮层，手动关闭 */}
         {welcomeCard &&
           active?.kind === "ssh" &&
           active.id !== welcomeClosedFor && (
-            // SSH 欢迎卡片：钉在终端区顶部的浮层，手动关闭
-            <div className="term-welcome">
-              <button
-                type="button"
-                className="term-welcome-close"
-                aria-label={t("app.action.close")}
-                onClick={() =>
-                  setWelcomeClosedFor(active.id)
-                }
-              >
-                ×
-              </button>
-              <p>
-                <span className="is-title">
-                  ✓ Tera Shell 智能终端
-                </span>{" "}
-                <span className="is-gray">
-                  AI Edition
-                </span>{" "}
-                ·{" "}
-                <span className="is-red">
-                  {active.username}@{active.host}:
-                  {active.port}
-                </span>
-              </p>
-              <p>
-                ✓ 直接 SSH 连接 · 独立 exec
-                执行通道 · AI 运维助手（右侧面板）
-              </p>
-              <p>
-                ✓
-                快捷命令解释：输入「命令/?」回车，如
-                ls -a/?
-              </p>
-              <p>
-                ✓ 系统 / 进程 /
-                网络信息见底部状态栏 ·
-                密码输入不回显
-              </p>
-              <p className="is-gray">
-                💡 内容由 AI
-                生成，执行前请仔细甄别
-              </p>
-            </div>
+            <WelcomeCard
+              session={active}
+              onClose={() =>
+                setWelcomeClosedFor(active.id)
+              }
+            />
           )}
 
-        {drawerOpen &&
-          active?.kind === "ssh" &&
-          (bottomDrawer === "sys" ? (
-            <SystemInfoDrawer
-              session={active}
-              onClose={() =>
-                setBottomDrawer("none")
-              }
-            />
-          ) : bottomDrawer === "net" ? (
-            <NetworkInfoDrawer
-              session={active}
-              onClose={() =>
-                setBottomDrawer("none")
-              }
-            />
-          ) : (
-            <ProcessInfoDrawer
-              session={active}
-              onClose={() =>
-                setBottomDrawer("none")
-              }
-            />
-          ))}
+        <BottomDrawer
+          session={active}
+          mode={bottomDrawer}
+          onClose={() => setBottomDrawer("none")}
+        />
 
-        {/* 底部状态栏只在有活动的 SSH 会话时显示：本地会话用不到快捷宏与
-            系统信息，没有任何会话时更不该挂着一条空栏 */}
-        {active && active.kind !== "local" && (
-          <div className="terminal-status">
-            {/* 快捷宏挤在状态栏最前面：常驻可见，又不单独占一行 */}
-            {statusMode === "info" ? (
-              // 信息形态：左侧信息入口 + 右侧负载 / 网络，整组替换宏与 LOCAL/UTF-8
-              <StatusInfoBar
-                session={
-                  active?.kind === "ssh"
-                    ? active
-                    : undefined
-                }
-                onNotify={onNotify}
-                onOpenSystem={
-                  active?.kind === "ssh"
-                    ? () => setBottomDrawer("sys")
-                    : undefined
-                }
-                onOpenProcess={
-                  active?.kind === "ssh"
-                    ? () =>
-                        setBottomDrawer("proc")
-                    : undefined
-                }
-                onOpenNetwork={
-                  active?.kind === "ssh"
-                    ? () => setBottomDrawer("net")
-                    : undefined
-                }
-                activeEntry={
-                  bottomDrawer === "sys"
-                    ? "system"
-                    : bottomDrawer === "proc"
-                      ? "process"
-                      : bottomDrawer === "net"
-                        ? "network"
-                        : undefined
-                }
-              />
-            ) : (
-              <>
-                <MacroBar
-                  macros={macros}
-                  disabled={
-                    !macroTargetId ||
-                    disconnected[
-                      macroTargetId
-                    ] === true
-                  }
-                  onRun={macro => {
-                    if (macroTargetId)
-                      onRunMacro(
-                        macro,
-                        macroTargetId
-                      );
-                  }}
-                  onAdd={onAddMacro}
-                  onEdit={onEditMacro}
-                  onDelete={onDeleteMacro}
-                  onReorder={onReorderMacro}
-                />
-                {/* 状态文字单独成组并禁止收缩：宏再多也不会被顶出可视区 */}
-                <div className="status-meta">
-                  <span>
-                    {active?.kind === "ssh"
-                      ? "SSH"
-                      : "LOCAL"}
-                  </span>
-                  <span>UTF-8</span>
-                  <span>
-                    {active?.terminal.cols || 0} ×{" "}
-                    {active?.terminal.rows || 0}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        <TerminalStatus
+          active={active}
+          statusMode={statusMode}
+          macros={macros}
+          disconnected={disconnected}
+          macroTargetId={macroTargetId}
+          onRunMacro={onRunMacro}
+          onAddMacro={onAddMacro}
+          onEditMacro={onEditMacro}
+          onDeleteMacro={onDeleteMacro}
+          onReorderMacro={onReorderMacro}
+          onNotify={onNotify}
+          bottomDrawer={bottomDrawer}
+          onOpenDrawer={setBottomDrawer}
+        />
 
         {searchOpen && (
-          // HeroUI Surface：查找浮层的底色/描边/阴影跟随主题 token
-          <Surface className="find-box">
-            <Input
-              ref={searchInputRef}
-              className="find-input"
-              placeholder={t(
-                "terminal.find.placeholder"
-              )}
-              value={query}
-              onChange={e => {
-                setQuery(e.target.value);
-                onSearch(e.target.value, "input");
-              }}
-              onKeyDown={e => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey
-                ) {
-                  e.preventDefault();
-                  onSearch(query, "next");
-                }
-                if (
-                  e.key === "Enter" &&
-                  e.shiftKey
-                ) {
-                  e.preventDefault();
-                  onSearch(query, "prev");
-                }
-                if (e.key === "Escape")
-                  onCloseSearch();
-              }}
-            />
-            <span className="find-count">
-              {searchError ||
-                (searchCount
-                  ? `${searchIndex + 1}/${searchCount}`
-                  : query
-                    ? t("terminal.find.noMatch")
-                    : "")}
-            </span>
-            <Hint label={t("terminal.find.prev")}>
-              <Button
-                className="find-btn"
-                variant="tertiary"
-                size="sm"
-                aria-label={t(
-                  "terminal.find.prev"
-                )}
-                onPress={() =>
-                  onSearch(query, "prev")
-                }
-              >
-                ↑
-              </Button>
-            </Hint>
-            <Hint label={t("terminal.find.next")}>
-              <Button
-                className="find-btn"
-                variant="tertiary"
-                size="sm"
-                aria-label={t(
-                  "terminal.find.next"
-                )}
-                onPress={() =>
-                  onSearch(query, "next")
-                }
-              >
-                ↓
-              </Button>
-            </Hint>
-            <Hint
-              label={t(
-                "terminal.find.caseSensitive"
-              )}
-            >
-              <ToggleButton
-                className="find-btn"
-                variant="ghost"
-                size="sm"
-                aria-label={t(
-                  "terminal.find.caseSensitive"
-                )}
-                isSelected={searchCaseSensitive}
-                onChange={() =>
-                  toggleAndSearch(
-                    onToggleCaseSensitive
-                  )
-                }
-              >
-                Aa
-              </ToggleButton>
-            </Hint>
-            <Hint
-              label={t("terminal.find.regex")}
-            >
-              <ToggleButton
-                className="find-btn"
-                variant="ghost"
-                size="sm"
-                aria-label={t(
-                  "terminal.find.regex"
-                )}
-                isSelected={searchRegex}
-                onChange={() =>
-                  toggleAndSearch(onToggleRegex)
-                }
-              >
-                .*
-              </ToggleButton>
-            </Hint>
-            <Hint
-              label={t("terminal.find.close")}
-            >
-              <Button
-                className="find-btn"
-                variant="tertiary"
-                size="sm"
-                aria-label={t(
-                  "terminal.find.close"
-                )}
-                onPress={onCloseSearch}
-              >
-                ×
-              </Button>
-            </Hint>
-          </Surface>
+          <FindBox
+            query={query}
+            onQueryChange={setQuery}
+            result={searchResult}
+            error={searchError}
+            caseSensitive={searchCaseSensitive}
+            regex={searchRegex}
+            onSearch={onSearch}
+            onCloseSearch={onCloseSearch}
+            onToggleCaseSensitive={
+              onToggleCaseSensitive
+            }
+            onToggleRegex={onToggleRegex}
+          />
         )}
       </Card>
       {active?.kind === "ssh" && !aiCollapsed && (
