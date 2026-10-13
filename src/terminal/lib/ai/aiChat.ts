@@ -23,12 +23,14 @@ import {
   ownsRound,
   repairToolMessages,
   type AiChatEntry,
+  type AiFileCall,
   type AiToolCall,
   type ExecCardMode,
   type ProtocolMessage
 } from "./protocol";
 import {
   isBlacklisted,
+  parseFileToolArguments,
   parseToolArguments,
   type AiModelOption
 } from "./tools";
@@ -37,6 +39,11 @@ import {
   cancelChatStream
 } from "./stream";
 import { executeToolCard } from "./cardExec";
+import { executeFileCall } from "./fileTransfer";
+import {
+  TOOL_DOWNLOAD_FILE,
+  TOOL_UPLOAD_FILE
+} from "./adapters";
 import {
   SYSTEM_PROMPT,
   workspaceContext
@@ -73,8 +80,10 @@ export {
   trimToolOutput,
   parseWrappedOutput,
   type AiChatEntry,
+  type AiFileCall,
   type AiToolCall,
   type ExecCardMode,
+  type FileTransferDirection,
   type ProtocolMessage,
   type StreamAccumulator,
   type StreamDelta
@@ -83,18 +92,27 @@ export {
   commandInDirectory,
   directoryFromPrompt,
   isBlacklisted,
+  isAbsoluteRemotePath,
   listOpenAiModels,
+  parseFileToolArguments,
   parseToolArguments,
   type AiModelOption
 } from "./tools";
 export {
   anthropicAdapter,
-  responsesAdapter
+  responsesAdapter,
+  TOOL_DOWNLOAD_FILE,
+  TOOL_UPLOAD_FILE,
+  TOOL_RUN_COMMAND
 } from "./adapters";
 export {
   cancelChatStream,
   streamChatCompletion
 } from "./stream";
+export {
+  executeFileCall,
+  remoteFileName
+} from "./fileTransfer";
 
 /** 面板内一轮对话的状态与动作。 */
 export function useAiChat(
@@ -175,11 +193,25 @@ export function useAiChat(
   const resumeRef = useRef<(() => void) | null>(
     null
   );
-  /** 挂起中卡片的执行信息（命令文本），确认时取用 */
+  /**
+   * 挂起中卡片的执行信息，确认时取用。
+   *
+   * 用判别联合而不是两个 Map：一次只挂起一张卡，两个 Map 意味着 confirm /
+   * skip 里要「先查命令表、没有再查传输表」，漏一处就是点按钮没反应。
+   */
   const pendingRef = useRef<
     Map<
       string,
-      { call: AiToolCall; toolCallId: string }
+      | {
+          kind: "tool";
+          call: AiToolCall;
+          toolCallId: string;
+        }
+      | {
+          kind: "file";
+          call: AiFileCall;
+          toolCallId: string;
+        }
     >
   >(new Map());
   const [error, setError] = useState("");
@@ -232,6 +264,35 @@ export function useAiChat(
         call,
         toolCallId,
         mode,
+        skip,
+        session,
+        () => setEntries(list => [...list])
+      );
+      messagesRef.current.push({
+        role: "tool",
+        content,
+        tool_call_id: toolCallId
+      });
+    },
+    [session]
+  );
+
+  /**
+   * 执行一张文件传输卡片并把结果回填进协议流。
+   *
+   * 与 `executeCard` 平级而非塞进去：命令卡片要选 terminal / background
+   * 两种执行通道，传输卡片没有这个概念（必然走 SFTP + 系统弹窗），
+   * 硬塞会让 mode 参数对不上语义。
+   */
+  const executeFileCard = useCallback(
+    async (
+      call: AiFileCall,
+      toolCallId: string,
+      skip = false
+    ) => {
+      const content = await executeFileCall(
+        call,
+        toolCallId,
         skip,
         session,
         () => setEntries(list => [...list])
@@ -319,10 +380,61 @@ export function useAiChat(
         if (calls.length === 0) return; // 普通回复，本轮结束
         let yielded = false;
         for (const call of calls) {
+          const toolCallId = call.id;
+          const toolName = call.function.name;
+          // ---- 文件传输工具：结构与命令卡片不同，单独分支 ----
+          // ⚠️ 必须先判工具名：`parseToolArguments` 只认 command 字段，
+          // 拿传输工具的参数去解会得到 null，白白回填一条「参数解析失败」。
+          if (
+            toolName === TOOL_UPLOAD_FILE ||
+            toolName === TOOL_DOWNLOAD_FILE
+          ) {
+            const fileArgs =
+              parseFileToolArguments(
+                call.function.arguments
+              );
+            if (!fileArgs) {
+              messagesRef.current.push({
+                role: "tool",
+                content:
+                  "[文件路径无效或不是绝对路径，请给出服务器上的绝对路径后重试]",
+                tool_call_id: toolCallId
+              });
+              continue;
+            }
+            const fileCall: AiFileCall = {
+              id: toolCallId,
+              direction:
+                toolName === TOOL_UPLOAD_FILE
+                  ? "upload"
+                  : "download",
+              remotePath: fileArgs.remotePath,
+              question: fileArgs.question,
+              state: "pending"
+            };
+            console.info(
+              "[ai-file]",
+              fileCall.direction,
+              fileCall.remotePath
+            );
+            setEntries(list => [
+              ...list,
+              { kind: "file", call: fileCall }
+            ]);
+            // 传输**一律等用户确认**，不参与自动执行 / 自动应用：
+            // 它要读写用户的本地磁盘，且必然弹系统框自动弹窗也不合语义
+            pendingRef.current.set(toolCallId, {
+              kind: "file",
+              call: fileCall,
+              toolCallId
+            });
+            setPendingCardId(toolCallId);
+            yielded = true;
+            break;
+          }
           const parsed = parseToolArguments(
             call.function.arguments
           );
-          const toolCallId = call.id;
           if (!parsed) {
             // 参数不合法也要回填 tool 消息，否则协议流断裂
             messagesRef.current.push({
@@ -381,6 +493,7 @@ export function useAiChat(
           }
           // 未开自动执行 / 应用：登记后暂停循环，等用户点执行 / 跳过
           pendingRef.current.set(toolCallId, {
+            kind: "tool",
             call: card,
             toolCallId
           });
@@ -526,12 +639,21 @@ export function useAiChat(
       stoppedRef.current = true;
       if (held) {
         pendingRef.current.delete(pendingCardId);
-        void executeCard(
-          held.call,
-          held.toolCallId,
-          "background",
-          true
-        ).then(() => {
+        // 判别联合：传输卡片走自己的执行器（skip 分支同样不弹框）
+        const skipped =
+          held.kind === "file"
+            ? executeFileCard(
+                held.call,
+                held.toolCallId,
+                true
+              )
+            : executeCard(
+                held.call,
+                held.toolCallId,
+                "background",
+                true
+              );
+        void skipped.then(() => {
           // executeCard 的 skip 分支固定写「用户跳过了这条命令」，
           // 但用户点的是停止。改文案并再刷一次卡片 —— executeCard
           // 末尾那次 setEntries 已经跑完了。
@@ -563,7 +685,12 @@ export function useAiChat(
         "[ai] 停止生成（当前没有进行中的流）"
       );
     console.info("[ai] 用户停止生成");
-  }, [busy, pendingCardId, executeCard]);
+  }, [
+    busy,
+    pendingCardId,
+    executeCard,
+    executeFileCard
+  ]);
 
   /**
    * 新一轮开始前清掉停止标记。
@@ -681,11 +808,19 @@ export function useAiChat(
       setBusy(true);
       pendingRef.current.delete(cardId);
       resumeRef.current?.();
-      await executeCard(
-        held.call,
-        held.toolCallId,
-        mode
-      );
+      // 判别联合分派：传输卡片没有执行通道之分，mode 直接忽略
+      if (held.kind === "file") {
+        await executeFileCard(
+          held.call,
+          held.toolCallId
+        );
+      } else {
+        await executeCard(
+          held.call,
+          held.toolCallId,
+          mode
+        );
+      }
       try {
         await runLoop(option);
       } catch (reason) {
@@ -703,7 +838,12 @@ export function useAiChat(
         }
       }
     },
-    [executeCard, runLoop, beginRound]
+    [
+      executeCard,
+      executeFileCard,
+      runLoop,
+      beginRound
+    ]
   );
 
   /** 跳过一张待确认的卡片：以"用户跳过"回填后继续循环。 */
@@ -720,12 +860,20 @@ export function useAiChat(
       const round = (roundRef.current += 1);
       setBusy(true);
       pendingRef.current.delete(cardId);
-      await executeCard(
-        held.call,
-        held.toolCallId,
-        "background",
-        true
-      );
+      if (held.kind === "file") {
+        await executeFileCard(
+          held.call,
+          held.toolCallId,
+          true
+        );
+      } else {
+        await executeCard(
+          held.call,
+          held.toolCallId,
+          "background",
+          true
+        );
+      }
       try {
         await runLoop(option);
       } catch (reason) {
@@ -743,7 +891,12 @@ export function useAiChat(
         }
       }
     },
-    [executeCard, runLoop, beginRound]
+    [
+      executeCard,
+      executeFileCard,
+      runLoop,
+      beginRound
+    ]
   );
 
   return {

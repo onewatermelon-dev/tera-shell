@@ -103,6 +103,60 @@ export function parseToolArguments(raw: string): {
   }
 }
 
+/**
+ * 解析文件传输工具的参数（`upload_local_file` / `download_remote_file`）。
+ *
+ * ⚠️ 只有 `remote_path`，**没有本地路径** —— 本地文件由用户在系统弹窗里
+ * 亲自挑（见 `adapters.ts` 里 schema 的注释）。远程路径必须是绝对路径：
+ * 模型的工作目录概念不可靠，相对路径会传到意想不到的地方。
+ */
+export function parseFileToolArguments(
+  raw: string
+): {
+  remotePath: string;
+  question: string;
+} | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      unknown
+    >;
+    const remotePath =
+      typeof parsed.remote_path === "string"
+        ? parsed.remote_path.trim()
+        : "";
+    if (!isAbsoluteRemotePath(remotePath))
+      return null;
+    return {
+      remotePath,
+      question:
+        typeof parsed.question === "string"
+          ? parsed.question
+          : ""
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 远程路径是否可用：必须是绝对路径（Linux `/`、Windows 盘符或 UNC）。
+ *
+ * 挡掉 `../../etc/passwd`、`~root/.ssh/id_rsa` 这类 —— 前者靠相对路径
+ * 逃出预期目录，后者是 ssh 的波浪号展开语法，很多远程 shell 不认，
+ * 直接当字面目录名会传到别处去。
+ */
+export function isAbsoluteRemotePath(
+  value: string
+): boolean {
+  if (!value) return false;
+  if (value.startsWith("/")) return true;
+  // UNC：`\\server\share`（Windows 与 Samba 共享）
+  if (/^[\\/]{2}[^\\/]/.test(value)) return true;
+  // Windows 盘符 `C:\...`；`C:a` 是盘符相对路径，不算绝对
+  return /^[a-zA-Z]:[\\/]/.test(value);
+}
+
 /** 从当前终端提示符读取目录；没有可识别的提示符时返回 null。 */
 export function directoryFromPrompt(
   terminal: Terminal | undefined

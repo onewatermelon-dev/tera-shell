@@ -30,7 +30,39 @@ export type AiChatEntry =
       /** 思考耗时（秒） */
       elapsedSeconds?: number;
     }
-  | { kind: "tool"; call: AiToolCall };
+  | { kind: "tool"; call: AiToolCall }
+  | { kind: "file"; call: AiFileCall };
+
+/** 文件传输方向。 */
+export type FileTransferDirection =
+  "upload" | "download";
+
+/**
+ * 一次文件传输卡片。
+ *
+ * 与 `AiToolCall` 分开而不是复用：那条的命令是 shell 命令、要走黑名单
+ * 与自动执行开关，而传输卡片的「命令」是文件路径、执行必然经过系统弹窗
+ * （本地文件必须用户亲自挑），语义与交互都不同。
+ */
+export type AiFileCall = {
+  id: string;
+  direction: FileTransferDirection;
+  /** 模型给的远程路径（上传=落点，下载=源点） */
+  remotePath: string;
+  /** 模型给的执行说明，展示给用户 */
+  question: string;
+  /** pending=等确认，running=执行中，done/failed=已结束 */
+  state:
+    "pending" | "running" | "done" | "failed";
+  /** 用户在系统弹窗里选的本地文件名（文件名，不含目录） */
+  localName?: string;
+  /** 传输结束后的本地绝对路径 */
+  localPath?: string;
+  /** 字节数 */
+  bytes?: number;
+  /** 传输失败 / 被跳过的原因（仅 UI 展示） */
+  error?: string;
+};
 
 /** 一次命令执行卡片的状态。 */
 export type AiToolCall = {

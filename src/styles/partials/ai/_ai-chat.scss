@@ -292,6 +292,54 @@
     color: #f59e0b;
     background: rgb(245 158 11 / 18%);
   }
+
+  // 传输徽章放的是图标不是 RO/RW 文字，所以尺寸对齐改用行高撑开
+  &.is-file {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 5px;
+    font-size: 11px;
+    color: var(--muted);
+    background: rgb(0 0 0 / 12%);
+  }
+}
+
+// 文件传输卡片的两端路径（本地 ⇄ 服务器）
+.ai-file-paths {
+  padding: 6px 8px;
+  background: var(--surface-secondary);
+  border-radius: 6px;
+}
+
+.ai-file-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+
+  & + & {
+    margin-top: 4px;
+  }
+}
+
+.ai-file-side {
+  flex: none;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.ai-file-path {
+  min-width: 0;
+  overflow-x: auto;
+  text-overflow: ellipsis;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--foreground);
+  white-space: nowrap;
+
+  @include thin-scrollbar;
 }
 
 // 命令下方的作用解释行（ⓘ + 一句话说明）

@@ -233,6 +233,131 @@ pub async fn save_text_file(
 	Ok(Some(path))
 }
 
+/// 用户选定的本地文件。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickedFile {
+	path: String,
+	/// 文件名（含扩展名），传输卡片展示用
+	name: String,
+	/// 字节数；取不到时为 0（不因此报错 —— 传输本身还会再校验一次）
+	size: u64,
+}
+
+/// 弹出系统「打开文件」框，返回选中的文件信息；用户取消则为 `None`。
+///
+/// 用途：AI 的「上传文件到服务器」工具 —— 模型只知道远程目标路径，
+/// 本地源文件必须由**用户亲自在系统框里挑**，不能让模型指定任意本地
+/// 路径去读取（那等于开了任意文件读取的口子）。
+///
+/// ⚠️ `blocking_pick_file` 会阻塞线程直到用户操作完，必须放进
+/// `spawn_blocking`，跑在主线程会卡死 UI（与 `data::pick_data_dir` 同理）。
+#[tauri::command(rename = "fs_pick_file")]
+pub async fn pick_file(
+	app: tauri::AppHandle,
+) -> Result<Option<PickedFile>, String> {
+	use tauri_plugin_dialog::DialogExt;
+
+	// 不加扩展名过滤：服务器上什么文件都可能要传，限定类型等于
+	// 让用户在「想传但类型没列全」时反复试
+	let picked = tauri::async_runtime::spawn_blocking(
+		move || app.dialog().file().blocking_pick_file(),
+	)
+	.await
+	.map_err(|error| {
+		format!("打开文件选择框失败：{error}")
+	})?;
+
+	let Some(path) = picked else {
+		tracing::info!("用户取消了文件选择");
+		return Ok(None);
+	};
+
+	let path = path.to_string();
+	let name = Path::new(&path)
+		.file_name()
+		.map(|value| {
+			value.to_string_lossy().into_owned()
+		})
+		.unwrap_or_else(|| path.clone());
+	// 大小取不到不是致命问题：真正的传输会自己再校验一遍
+	let size = std::fs::metadata(&path)
+		.map(|meta| meta.len())
+		.unwrap_or(0);
+	tracing::info!(
+		path = %path,
+		bytes = size,
+		"用户选择了要上传的本地文件"
+	);
+	Ok(Some(PickedFile {
+		path,
+		name,
+		size
+	}))
+}
+
+/// 弹出系统「另存为」框，只返回用户选定的目标路径（**不写任何内容**）。
+///
+/// 用途：AI 的「下载文件到本地」工具。这里与 `save_text_file` 分成两个
+/// 命令 —— 下载的内容来自远程 SFTP 流，前端拿到路径后自己调
+/// `sftp_download`，由传输层负责分块、进度与续传，后端不该把整份文件
+/// 读进内存再落盘。
+#[tauri::command(rename = "fs_pick_save_path")]
+pub async fn pick_save_path(
+	app: tauri::AppHandle,
+	suggested_name: String,
+) -> Result<Option<String>, String> {
+	use tauri_plugin_dialog::DialogExt;
+
+	// 扩展名切出来当过滤器：与 save_text_file 同规则（只预选，不强制）
+	let extension = suggested_name
+		.rsplit_once('.')
+		.map(|(_, ext)| ext.to_lowercase())
+		.filter(|ext| {
+			!ext.is_empty() &&
+				ext.chars().all(|ch| {
+					ch.is_ascii_alphanumeric() ||
+						ch == '+' ||
+						ch == '-'
+				})
+		});
+	// 文件名只作建议值：系统框允许改名，但**去掉路径部分** —— 前端传进来
+	// 的远程路径（`/etc/xxx.conf`）直接当文件名会被 Windows 判为非法
+	let suggestion = Path::new(&suggested_name)
+		.file_name()
+		.map(|value| {
+			value.to_string_lossy().into_owned()
+		})
+		.filter(|value| !value.is_empty())
+		.unwrap_or_else(|| "download".to_string());
+
+	let picked = tauri::async_runtime::spawn_blocking(
+		move || {
+			let mut builder = app
+				.dialog()
+				.file()
+				.set_file_name(suggestion);
+			if let Some(extension) = extension {
+				builder = builder
+					.add_filter(&extension, &[&extension]);
+			}
+			builder.blocking_save_file()
+		},
+	)
+	.await
+	.map_err(|error| {
+		format!("打开保存对话框失败：{error}")
+	})?;
+
+	let Some(path) = picked else {
+		tracing::info!("用户取消了下载保存位置选择");
+		return Ok(None);
+	};
+	let path = path.to_string();
+	tracing::info!(path = %path, "用户选择了下载目标位置");
+	Ok(Some(path))
+}
+
 /// 删除文件或目录（目录按递归删除）。
 #[tauri::command(rename = "fs_remove_path")]
 pub fn remove_path(path: String) -> Result<(), String> {

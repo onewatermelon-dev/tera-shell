@@ -70,6 +70,8 @@ pub fn run() {
             fs::remove_path,
             fs::copy_path,
             fs::save_text_file,
+            fs::pick_file,
+            fs::pick_save_path,
             fs::rename::rename_local,
             sftp::browse::list,
             sftp::transfer::upload,

@@ -250,6 +250,15 @@ const zhCN = {
   "ai.card.execute": "执行",
   "ai.card.background": "后台执行",
   "ai.card.skip": "跳过",
+  "ai.file.title": "准备传输文件",
+  "ai.file.upload": "上传到服务器",
+  "ai.file.download": "下载到本地",
+  "ai.file.local": "本地",
+  "ai.file.remote": "服务器",
+  "ai.file.pick": "选择文件并传输",
+  "ai.file.bytes": "大小",
+  "ai.file.hint":
+    "本地文件由你在系统弹窗里亲自挑选，AI 无法指定要读取的本地路径。",
 
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
@@ -777,6 +786,15 @@ const enUS: Record<MessageKey, string> = {
   "ai.card.execute": "Execute",
   "ai.card.background": "Run in background",
   "ai.card.skip": "Skip",
+  "ai.file.title": "Ready to transfer a file",
+  "ai.file.upload": "Upload to server",
+  "ai.file.download": "Download to local",
+  "ai.file.local": "Local",
+  "ai.file.remote": "Server",
+  "ai.file.pick": "Choose file & transfer",
+  "ai.file.bytes": "Size",
+  "ai.file.hint":
+    "You pick the local file in a system dialog — the AI cannot choose which local path to read.",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",

@@ -185,6 +185,9 @@ export default function AiPanel({
           onConfirm={(callId, mode) => {
             void confirm(callId, selected, mode);
           }}
+          onConfirmFile={callId => {
+            void confirm(callId, selected);
+          }}
           onSkip={callId => {
             void skip(callId, selected);
           }}

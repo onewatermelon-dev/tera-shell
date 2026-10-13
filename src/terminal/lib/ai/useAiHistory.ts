@@ -121,7 +121,10 @@ export function useAiHistory(options: {
       setEntries(
         (history.entries as AiChatEntry[]).map(
           entry =>
-            entry.kind !== "tool"
+            // 卡片条目（命令 / 文件传输）没有 sentAt，
+            // 别给它硬塞一个 —— 它们的 key 用的是 call.id
+            entry.kind === "user" ||
+            entry.kind === "assistant"
               ? {
                   ...entry,
                   sentAt:

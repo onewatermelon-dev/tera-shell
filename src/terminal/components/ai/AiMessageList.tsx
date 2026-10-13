@@ -11,6 +11,8 @@ import { ThinkingState } from "./ThinkingState";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { ChatMessageActions } from "./ChatMessageActions";
 import { ToolCard } from "./ToolCard";
+import { FileCard } from "./FileCard";
+import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import type {
   AiChatEntry,
   ExecCardMode
@@ -42,6 +44,7 @@ export function AiMessageList({
   pendingCardId,
   busy,
   onConfirm,
+  onConfirmFile,
   onSkip,
   onAddMacroCommand
 }: {
@@ -58,6 +61,8 @@ export function AiMessageList({
     callId: string,
     mode: ExecCardMode
   ) => void;
+  /** 文件传输卡片没有 terminal/background 之分，落点唯一 */
+  onConfirmFile: (callId: string) => void;
   onSkip: (callId: string) => void;
   /** 把卡片命令存为快捷宏 */
   onAddMacroCommand: (
@@ -122,6 +127,22 @@ export function AiMessageList({
             />
           );
         }
+        if (entry.kind === "file") {
+          return (
+            <FileCard
+              key={entry.call.id}
+              call={entry.call}
+              awaitingConfirm={
+                pendingCardId === entry.call.id
+              }
+              busy={busy}
+              onConfirm={() =>
+                onConfirmFile(entry.call.id)
+              }
+              onSkip={() => onSkip(entry.call.id)}
+            />
+          );
+        }
         if (entry.kind === "assistant") {
           // 助手回复是 markdown（表格 / 代码块），交给 Streamdown 渲染
           return (
@@ -143,11 +164,16 @@ export function AiMessageList({
                 )}
               </div>
               <ChatMessageActions
-                text={
+                text={sanitizeToolNames(
                   entry.text ||
-                  entry.reasoning ||
-                  ""
-                }
+                    entry.reasoning ||
+                    "",
+                  // 正文为空时会退回复制思考内容，那条路同样
+                  // 按纯文本规则处理
+                  entry.text
+                    ? "markdown"
+                    : "plain"
+                )}
                 sentAt={entry.sentAt}
                 align="start"
               />
@@ -189,7 +215,14 @@ export function AiMessageList({
               <div className="ai-live-reasoning-head">
                 <ThinkingState />
               </div>
-              <pre>{stream.reasoning}</pre>
+              <pre>
+                {/* plain 模式：流式思考是 <pre> 纯文本，模型自己写的
+                    ``` 分段不构成代码块保护理由 */}
+                {sanitizeToolNames(
+                  stream.reasoning,
+                  "plain"
+                )}
+              </pre>
             </div>
           ) : (
             !stream.text && <ThinkingState />

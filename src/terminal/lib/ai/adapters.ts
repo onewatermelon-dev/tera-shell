@@ -34,6 +34,57 @@ const RUN_COMMAND_PARAMETERS = {
   ]
 };
 
+/**
+ * upload_local_file 工具的 JSON Schema。
+ *
+ * ⚠️ **没有本地路径参数**：模型不能指定要读哪个本地文件，那等于开了
+ * 任意文件读取的口子 —— 用户必须在系统「打开文件」框里亲自挑。所以这里
+ * 只描述远程落点。
+ */
+const UPLOAD_FILE_PARAMETERS = {
+  type: "object",
+  properties: {
+    remote_path: {
+      type: "string",
+      description:
+        "服务器上的目标路径（绝对路径），如 /tmp/deploy.tar.gz"
+    },
+    question: {
+      type: "string",
+      description: "向用户解释这次上传的用途"
+    }
+  },
+  required: ["remote_path", "question"]
+};
+
+/**
+ * download_remote_file 工具的 JSON Schema。
+ *
+ * 落点同样由用户在「另存为」框里定，模型只给源路径。
+ */
+const DOWNLOAD_FILE_PARAMETERS = {
+  type: "object",
+  properties: {
+    remote_path: {
+      type: "string",
+      description:
+        "服务器上要下载的文件路径（绝对路径）"
+    },
+    question: {
+      type: "string",
+      description: "向用户解释这次下载的用途"
+    }
+  },
+  required: ["remote_path", "question"]
+};
+
+/** 三个工具的名字：前端按 `function.name` 分派，三处注入必须一致。 */
+export const TOOL_RUN_COMMAND = "run_command";
+export const TOOL_UPLOAD_FILE =
+  "upload_local_file";
+export const TOOL_DOWNLOAD_FILE =
+  "download_remote_file";
+
 /** 模型的最大输出 Token：取模型配置，没填给 4096 兜底。 */
 function maxTokensOf(
   option: AiModelOption
@@ -99,10 +150,28 @@ const openAiAdapter: FormatAdapter = {
       {
         type: "function",
         function: {
-          name: "run_command",
+          name: TOOL_RUN_COMMAND,
           description:
             "在当前 SSH 服务器上执行一条 shell 命令并返回输出",
           parameters: RUN_COMMAND_PARAMETERS
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: TOOL_UPLOAD_FILE,
+          description:
+            "让用户从本地选一个文件并上传到服务器指定路径（用户会在系统弹窗里亲自挑选本地文件）",
+          parameters: UPLOAD_FILE_PARAMETERS
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: TOOL_DOWNLOAD_FILE,
+          description:
+            "把服务器上的一个文件下载到本地（用户会在系统弹窗里亲自选择保存位置）",
+          parameters: DOWNLOAD_FILE_PARAMETERS
         }
       }
     ],
@@ -243,10 +312,22 @@ export const anthropicAdapter: FormatAdapter = {
       messages: converted,
       tools: [
         {
-          name: "run_command",
+          name: TOOL_RUN_COMMAND,
           description:
             "在当前 SSH 服务器上执行一条 shell 命令并返回输出",
           input_schema: RUN_COMMAND_PARAMETERS
+        },
+        {
+          name: TOOL_UPLOAD_FILE,
+          description:
+            "让用户从本地选一个文件并上传到服务器指定路径（用户会在系统弹窗里亲自挑选本地文件）",
+          input_schema: UPLOAD_FILE_PARAMETERS
+        },
+        {
+          name: TOOL_DOWNLOAD_FILE,
+          description:
+            "把服务器上的一个文件下载到本地（用户会在系统弹窗里亲自选择保存位置）",
+          input_schema: DOWNLOAD_FILE_PARAMETERS
         }
       ],
       tool_choice: { type: "auto" }
@@ -370,10 +451,24 @@ export const responsesAdapter: FormatAdapter = {
       tools: [
         {
           type: "function",
-          name: "run_command",
+          name: TOOL_RUN_COMMAND,
           description:
             "在当前 SSH 服务器上执行一条 shell 命令并返回输出",
           parameters: RUN_COMMAND_PARAMETERS
+        },
+        {
+          type: "function",
+          name: TOOL_UPLOAD_FILE,
+          description:
+            "让用户从本地选一个文件并上传到服务器指定路径（用户会在系统弹窗里亲自挑选本地文件）",
+          parameters: UPLOAD_FILE_PARAMETERS
+        },
+        {
+          type: "function",
+          name: TOOL_DOWNLOAD_FILE,
+          description:
+            "把服务器上的一个文件下载到本地（用户会在系统弹窗里亲自选择保存位置）",
+          parameters: DOWNLOAD_FILE_PARAMETERS
         }
       ],
       tool_choice: "auto"

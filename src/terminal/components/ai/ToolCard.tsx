@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
+import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import type {
   AiToolCall,
   ExecCardMode
@@ -87,7 +88,8 @@ export function ToolCard({
       {call.question && (
         <div className="ai-card-question">
           <InfoCircleOutlined />
-          {call.question}
+          {/* question 由模型生成，同样可能带出工具内部标识 */}
+          {sanitizeToolNames(call.question)}
         </div>
       )}
       <div className="ai-card-actions">
