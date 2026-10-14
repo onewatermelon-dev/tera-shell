@@ -75,9 +75,10 @@
   min-height: 0;
   overflow: hidden;
 }
-/* viewport: grows with the content, then caps at MAX_H. While thinking
-   the stream auto-scrolls behind a soft fade; once unfolded by the user
-   it becomes natively scrollable and the fades follow the scroll position. */
+/* viewport: 展开后随内容增高，超过 180px（组件的 MAX_VIEWPORT_PX）
+   转为内部滚动；展开定位在顶部，从思考的开头读起。流式期间的实时
+   增长区不在这里 —— 见 AiMessageList 的 .ai-live-reasoning pre
+   （那边贴底跟随最新文字），本块只渲染已完成的思考。 */
 .trViewport {
   margin-top: 6px;
   overflow: hidden;

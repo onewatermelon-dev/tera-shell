@@ -4,7 +4,11 @@
  * 从 AiPanel.tsx 拆出（2026-10-13）：整段是「entries → 视图」的纯渲染，
  * 交互全部经 props 回传（确认/跳过/存宏），面板本体只剩布局与装配。
  */
-import { useMemo } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef
+} from "react";
 import { useT } from "@/settings/lib/i18n";
 import { AiMarkdown } from "./AiMarkdown";
 import { ThinkingState } from "./ThinkingState";
@@ -86,6 +90,30 @@ export function AiMessageList({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- entries 引用变化（含清空成新空数组）就是重抽时机
     [entries]
   );
+
+  // 流式思考区（.ai-live-reasoning pre）超过 160px 上限后内部滚动，
+  // 与面板本体同一套「贴底才跟随」礼仪：默认跟着最新文字走，用户
+  // 翻上去看历史时不被拽回（onScroll 把 liveAtBottomRef 置 false）
+  const liveReasoningRef =
+    useRef<HTMLPreElement>(null);
+  const liveAtBottomRef = useRef(true);
+  const liveReasoning = stream?.reasoning ?? "";
+  useEffect(() => {
+    const node = liveReasoningRef.current;
+    if (node && liveAtBottomRef.current) {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [liveReasoning]);
+  // 离开底部 40px 以外算「翻历史」，停止跟随；贴回底部恢复
+  const onLiveReasoningScroll = () => {
+    const node = liveReasoningRef.current;
+    if (!node) return;
+    const distance =
+      node.scrollHeight -
+      node.scrollTop -
+      node.clientHeight;
+    liveAtBottomRef.current = distance < 40;
+  };
 
   return (
     <>
@@ -215,7 +243,10 @@ export function AiMessageList({
               <div className="ai-live-reasoning-head">
                 <ThinkingState />
               </div>
-              <pre>
+              <pre
+                ref={liveReasoningRef}
+                onScroll={onLiveReasoningScroll}
+              >
                 {/* plain 模式：流式思考是 <pre> 纯文本，模型自己写的
                     ``` 分段不构成代码块保护理由 */}
                 {sanitizeToolNames(
