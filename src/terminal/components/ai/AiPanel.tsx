@@ -252,6 +252,7 @@ export default function AiPanel({
       {/* 输入框：@aicss/react PromptInput 改造版，模型选择在「+」菜单里 */}
       <div className="ai-panel-compose">
         <PromptInput
+          session={session}
           models={options.map(option => ({
             id: `${option.providerId}::${option.modelId}`,
             name: option.model.name,

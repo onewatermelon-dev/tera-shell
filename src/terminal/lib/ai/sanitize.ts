@@ -1,5 +1,5 @@
 /**
- * 抹掉回答里泄漏的工具内部标识。
+ * 抹掉回答里泄漏的内部符号：工具标识符 + 客户端上下文标签。
  *
  * ## 为什么提示词还不够
  *
@@ -7,6 +7,11 @@
  * 模型在解释自己行为、或复述工具 schema 时很容易顺口带出
  * `run_command` / `remote_path` 这类标识符，用户看到的是一串毫无
  * 意义的英文。这里在渲染前做一道定向替换兜底。
+ *
+ * 上下文标签同理：`@` 引用把 `<terminal_screen>` 等快照块注入用户
+ * 消息后，模型复述内容时会顺口把标签也打出来（「我看到
+ * `<terminal_screen>` 里第 12 行…」）。只剥**标签本身**，不动标签里
+ * 的内容 —— 那是模型选择引用的日志，删了反而丢信息。
  *
  * ## 两条克制原则
  *
@@ -33,6 +38,16 @@ const TOOL_LABELS: Record<string, string> = {
 
 /** 依次要抹掉的标识符。 */
 const TOOL_NAMES = Object.keys(TOOL_LABELS);
+
+/**
+ * 客户端注入用户消息的上下文标签（开标签可带属性）。
+ *
+ * terminal_* 三个是 `@` 引用终端内容的快照块（见 terminalRefs.ts），
+ * current_workspace 是会话环境块（见 promptContext.ts）—— 同一类
+ * 内部协议符号，模型复述时都会带出来。
+ */
+const CONTEXT_TAGS =
+  /<\/?(?:terminal_(?:screen|scrollback|selection)|current_workspace)\b[^>]*>/gi;
 
 /** 围栏起始行：与 fillCodeFenceLanguage 同一套判定（``` 或 ~~~）。 */
 const FENCE_LINE = /^\s*(`{3,}|~{3,})/;
@@ -63,7 +78,7 @@ export function sanitizeToolNames(
   if (!text) return text;
   // 纯文本：没有代码块概念，直接整篇替换
   if (mode === "plain") {
-    return replaceNames(text);
+    return stripContextTags(replaceNames(text));
   }
   let inFence = false;
   let fenceMarker = "";
@@ -86,9 +101,19 @@ export function sanitizeToolNames(
       if (inFence) return line;
       // 反引号个数为奇数 → 这行有段没闭合的行内代码，整体别动
       if (countTicks(line) % 2 === 1) return line;
-      return replaceNames(line);
+      return stripContextTags(replaceNames(line));
     })
     .join("\n");
+}
+
+/**
+ * 剥掉上下文标签本身，标签内的内容原样保留。
+ *
+ * 与工具名替换走同一条管线（同模式、同保护规则），所以复用时直接
+ * 串在 replaceNames 之后 —— 顺序无所谓，两者命中不重叠。
+ */
+function stripContextTags(text: string): string {
+  return text.replace(CONTEXT_TAGS, "");
 }
 
 /** 数一行里反引号的个数（连续三个按一个围栏记号算）。 */

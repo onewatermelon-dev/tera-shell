@@ -329,3 +329,91 @@ describe("回答里抹掉工具标识", () => {
     );
   });
 });
+
+/**
+ * 回答里不能出现客户端注入的上下文标签。
+ *
+ * 背景：`@` 引用把 `<terminal_screen>` 等快照块拼进用户消息后，模型
+ * 复述内容时会顺口把标签也打出来（「我看到 `<terminal_screen>` 里第
+ * 12 行…」）。与工具名同一套哲学：提示词禁令是请求，替换兜底是保证。
+ *
+ * 克制原则：**只剥标签本身，不动标签里的内容** —— 那是模型选择引用
+ * 的日志，删了反而丢信息；代码块内不剥（与工具名同一保护规则）。
+ */
+describe("回答里抹掉客户端上下文标签", () => {
+  it("剥掉 terminal_screen 开闭标签，内容保留", () => {
+    const echoed =
+      '我看到 <terminal_screen lines="24" note="用户正在看的终端屏幕（视口可见内容）">\nERROR at line 12\n</terminal_screen> 里第 12 行报错';
+    expect(sanitizeToolNames(echoed)).toBe(
+      "我看到 \nERROR at line 12\n 里第 12 行报错"
+    );
+  });
+
+  it("三类终端标签与 current_workspace 都认", () => {
+    for (const tag of [
+      "terminal_screen",
+      "terminal_scrollback",
+      "terminal_selection",
+      "current_workspace"
+    ]) {
+      // 只剥尖括号标签本身；裸词（不带尖括号）是普通文本，不动
+      const text = `前 <${tag}> 内容 </${tag}> 后`;
+      expect(sanitizeToolNames(text)).toBe(
+        "前  内容  后"
+      );
+    }
+  });
+
+  it("反引号包裹的也剥（模型最常见的引用写法）", () => {
+    expect(
+      sanitizeToolNames(
+        "标签是 `<terminal_screen>` 这个"
+      )
+    ).toBe("标签是 `` 这个");
+  });
+
+  it("大小写不敏感（模型可能改写成 Terminal_Screen）", () => {
+    expect(
+      sanitizeToolNames(
+        "<Terminal_Screen>x</TERMINAL_SCREEN>"
+      )
+    ).toBe("x");
+  });
+
+  it("markdown 模式代码块内不剥（与工具名同一保护规则）", () => {
+    const fenced =
+      '```json\n{"block": "<terminal_screen>"}\n```';
+    expect(sanitizeToolNames(fenced)).toBe(
+      fenced
+    );
+  });
+
+  it("plain 模式全剥（思考过程没有代码块概念）", () => {
+    const fenced =
+      "先看这段 ```\n<terminal_scrollback>\n```";
+    expect(
+      sanitizeToolNames(fenced, "plain")
+    ).toBe("先看这段 ```\n\n```");
+  });
+
+  it("没有标签的文本原样返回", () => {
+    const text =
+      "今天 nginx 起来了，500 在 access.log 里";
+    expect(sanitizeToolNames(text)).toBe(text);
+  });
+
+  it("系统提示词把上下文标签也划进禁写范围", () => {
+    // 兜底之外，提示词里要先告诉模型这些符号的存在与禁令
+    for (const tag of [
+      "terminal_screen",
+      "terminal_scrollback",
+      "terminal_selection",
+      "current_workspace"
+    ]) {
+      expect(SYSTEM_PROMPT).toContain(tag);
+    }
+    expect(SYSTEM_PROMPT).toContain(
+      "绝不在自己的输出里原样写出这些标签"
+    );
+  });
+});

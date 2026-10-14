@@ -177,7 +177,7 @@ const zhCN = {
   "ai.welcome.tip.7":
     "想批量操作？把目标描述清楚，我会拆成命令逐步执行并等你确认",
   "ai.input":
-    "输入消息或粘贴图片…（Shift+Enter换行）",
+    "输入消息或粘贴图片…（Shift+Enter换行，@ 引用终端）",
   "ai.thinking": "思考中…",
   "ai.thoughtFor": "思考了 {s} 秒",
   "ai.selectModel": "选择模型",
@@ -221,6 +221,11 @@ const zhCN = {
   "ai.menu.blacklist": "自动执行黑名单",
   "ai.menu.blacklistHint":
     "黑名单中的命令不会被自动执行，一律弹出确认卡片",
+  "ai.ref.title": "引用终端内容",
+  "ai.ref.screen": "当前屏幕",
+  "ai.ref.scrollback": "终端回滚",
+  "ai.ref.selection": "选中内容",
+  "ai.ref.selectionEmpty": "无选区",
   "ai.blacklist.title": "命令黑名单",
   "ai.blacklist.lead":
     "黑名单中的命令不会被自动执行",
@@ -713,7 +718,7 @@ const enUS: Record<MessageKey, string> = {
   "ai.welcome.tip.7":
     "Batch operations? Describe the goal and I'll break it into commands, running them step by step with your confirmation",
   "ai.input":
-    "Type a message or paste an image… (Shift+Enter for newline)",
+    "Type a message or paste an image… (Shift+Enter for newline, @ to reference the terminal)",
   "ai.thinking": "Thinking",
   "ai.thoughtFor": "Thought for {s}s",
   "ai.selectModel": "Select model",
@@ -757,6 +762,11 @@ const enUS: Record<MessageKey, string> = {
   "ai.menu.blacklist": "Execution blacklist",
   "ai.menu.blacklistHint":
     "Blacklisted commands are never auto-executed; they always wait for confirmation",
+  "ai.ref.title": "Reference terminal content",
+  "ai.ref.screen": "Current screen",
+  "ai.ref.scrollback": "Scrollback",
+  "ai.ref.selection": "Selected text",
+  "ai.ref.selectionEmpty": "no selection",
   "ai.blacklist.title": "Command blacklist",
   "ai.blacklist.lead":
     "Blacklisted commands are never auto-executed",

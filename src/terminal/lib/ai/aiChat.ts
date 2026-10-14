@@ -48,6 +48,11 @@ import {
   SYSTEM_PROMPT,
   workspaceContext
 } from "./promptContext";
+import {
+  extractTerminalRefs,
+  formatTerminalRefBlock,
+  readTerminalLines
+} from "./terminalRefs";
 import { useAiQueue } from "./useAiQueue";
 import { useAiHistory } from "./useAiHistory";
 
@@ -554,6 +559,26 @@ export function useAiChat(
       // 复制一份：调用方（AiPanel）发完立刻 setAttachments([])，
       // entries 与协议流里存的都不该跟它共享引用
       const images = [...picked];
+      // @ 令牌 → 终端引用。正文剥掉令牌发给模型（可见 entry 仍保留
+      // 带令牌的原文）；快照在**发送瞬间**从终端实时读，不随消息缓存
+      const { text: asked, refs } =
+        extractTerminalRefs(trimmed);
+      const refBlocks = refs.map(ref =>
+        formatTerminalRefBlock(
+          ref.kind,
+          readTerminalLines(
+            session.terminal,
+            ref.kind
+          )
+        )
+      );
+      if (refs.length > 0) {
+        console.info(
+          `[ai] 引用终端内容：${refs
+            .map(ref => ref.kind)
+            .join("、")}`
+        );
+      }
       setError("");
       // 认领本轮：后续收尾只在本轮仍是当轮时才生效（见 roundRef 注释）
       const round = (roundRef.current += 1);
@@ -576,7 +601,11 @@ export function useAiChat(
       }
       messages.push({
         role: "user",
-        content: `${trimmed}\n\n${workspaceContext(session)}`,
+        content: `${asked}\n\n${workspaceContext(session)}${
+          refBlocks.length > 0
+            ? `\n\n${refBlocks.join("\n\n")}`
+            : ""
+        }`,
         ...(images.length ? { images } : {})
       });
       try {

@@ -24,15 +24,20 @@ import {
   useRef,
   useState,
   type ChangeEvent as ReactChangeEvent,
-  type ClipboardEvent as ReactClipboardEvent
+  type ClipboardEvent as ReactClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent
 } from "react";
 import { useT } from "@/settings/lib/i18n";
 import styles from "./PromptInput.module.css";
 import controlStyles from "./PromptInputControls.module.css";
 import { PromptInputMenu } from "./PromptInputMenu";
+import { PromptMentionMenu } from "./PromptMentionMenu";
 import { PromptAttachments } from "./PromptAttachments";
 import { usePromptEditor } from "./usePromptEditor";
 import { fileToDataUrl } from "./promptInputUtils";
+import type { TerminalRefItem } from "@/terminal/lib/ai/terminalRefs";
+import { TERMINAL_REF_ITEMS } from "@/terminal/lib/ai/terminalRefs";
+import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 
 export type PromptModel = {
   /** 稳定 id：providerId::modelId */
@@ -44,6 +49,8 @@ export type PromptModel = {
 };
 
 type PromptInputProps = {
+  /** 当前会话：@ 引用菜单靠它探测终端选区 */
+  session: OpenSession;
   models: PromptModel[];
   /** 当前选中的模型 id */
   modelId: string;
@@ -86,6 +93,7 @@ type PromptInputProps = {
 export { stepPromptHistory } from "./promptInputUtils";
 
 export function PromptInput({
+  session,
   models,
   modelId,
   onModelChange,
@@ -107,6 +115,18 @@ export function PromptInput({
   const [menuOpen, setMenuOpen] = useState(false);
   const fileInputRef =
     useRef<HTMLInputElement>(null);
+  // 「@」引用菜单：编辑器里输入 @ 唤起，选中项把令牌插回光标处
+  const [mentionOpen, setMentionOpen] =
+    useState(false);
+  const [mentionIndex, setMentionIndex] =
+    useState(0);
+  // 「选中内容」项要不要置灰：菜单打开时（@ 键按下那一下）探一次
+  // 终端选区 —— 放 keydown 里而不是 effect：effect 里同步 setState
+  // 会触发级联渲染（react-hooks/set-state-in-effect）
+  const [
+    hasTerminalSelection,
+    setHasTerminalSelection
+  ] = useState(false);
 
   const {
     hasText,
@@ -172,6 +192,139 @@ export function PromptInput({
     if (accepted.length) onAddImages(accepted);
   };
 
+  /**
+   * 菜单选中一项：把令牌插进编辑器。
+   *
+   * 顺手删掉触发菜单的那个 @（仅在它就位于光标前时）—— 不删的话
+   * 文本里会留下「@@终端回滚」这种双符号。光标不在编辑器里时
+   * （鼠标点的菜单）退化为追加到末尾，同样先剃掉行尾的 @。
+   */
+  const pickMention = (item: TerminalRefItem) => {
+    setMentionOpen(false);
+    const editor = editorRef.current;
+    if (!editor) return;
+    const selection = window.getSelection();
+    const range =
+      selection && selection.rangeCount > 0
+        ? selection.getRangeAt(0)
+        : null;
+    if (
+      range &&
+      editor.contains(range.startContainer)
+    ) {
+      if (range.collapsed) {
+        const node = range.startContainer;
+        const offset = range.startOffset;
+        const before =
+          node.nodeType === Node.TEXT_NODE
+            ? (node.textContent ?? "").slice(
+                offset - 1,
+                offset
+              )
+            : "";
+        if (before === "@") {
+          range.setStart(node, offset - 1);
+          range.deleteContents();
+        }
+      }
+      const token = document.createTextNode(
+        item.token
+      );
+      range.insertNode(token);
+      range.setStartAfter(token);
+      range.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    } else {
+      const text = editor.textContent ?? "";
+      editor.textContent = text.endsWith("@")
+        ? `${text.slice(0, -1)}${item.token}`
+        : `${text}${item.token}`;
+      const caret = document.createRange();
+      caret.selectNodeContents(editor);
+      caret.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(caret);
+    }
+    syncFromEditor();
+    requestAnimationFrame(() => editor.focus());
+  };
+
+  /**
+   * 编辑器按键：@ 引用菜单优先，其余交回 usePromptEditor。
+   *
+   * ⚠️ 菜单开着时 Enter 是「选中当前项」而不是发送 —— 用户开了菜单
+   * 却把消息发出去，是这类浮层最常见的误触；置灰项吞掉 Enter，
+   * 既不发送也不选中。
+   */
+  const handleEditorKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>
+  ) => {
+    if (
+      event.key === "@" &&
+      !mentionOpen &&
+      !event.nativeEvent.isComposing
+    ) {
+      // @ 照常输入（不 preventDefault），pick 时再删
+      setMentionOpen(true);
+      setMentionIndex(0);
+      // 选中内容项据此置灰：选区在用户点进输入框后仍在 xterm 里
+      setHasTerminalSelection(
+        Boolean(
+          session.terminal.getSelection().trim()
+        )
+      );
+    }
+    if (mentionOpen) {
+      if (event.key === "Escape") {
+        setMentionOpen(false);
+        event.preventDefault();
+        return;
+      }
+      if (
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp"
+      ) {
+        event.preventDefault();
+        const step =
+          event.key === "ArrowDown" ? 1 : -1;
+        setMentionIndex(index => {
+          const last =
+            TERMINAL_REF_ITEMS.length - 1;
+          const next = index + step;
+          return next < 0
+            ? last
+            : next > last
+              ? 0
+              : next;
+        });
+        return;
+      }
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.nativeEvent.isComposing
+      ) {
+        // mentionIndex 恒在项数范围内，noUncheckedIndexedAccess
+        // 下仍要显式收窄
+        const item =
+          TERMINAL_REF_ITEMS[mentionIndex];
+        if (!item) return;
+        const disabled =
+          item.kind === "selection" &&
+          !hasTerminalSelection;
+        // 置灰项：吞掉 Enter，别落到发送逻辑上
+        event.preventDefault();
+        if (!disabled) pickMention(item);
+        return;
+      }
+      // 其他可打印键：用户在接着手打正文，菜单该退了
+      if (event.key.length === 1)
+        setMentionOpen(false);
+    }
+    onEditorKeyDown(event);
+  };
+
   return (
     <div className={styles.wrap}>
       <div className={styles.frame}>
@@ -187,11 +340,21 @@ export function PromptInput({
             data-empty={!hasText || undefined}
             data-placeholder={placeholder}
             onInput={syncFromEditor}
-            onKeyDown={onEditorKeyDown}
+            onKeyDown={handleEditorKeyDown}
             onPaste={event =>
               void onEditorPaste(event)
             }
           />
+          {mentionOpen && (
+            <PromptMentionMenu
+              activeIndex={mentionIndex}
+              hasSelection={hasTerminalSelection}
+              onPick={pickMention}
+              onClose={() =>
+                setMentionOpen(false)
+              }
+            />
+          )}
         </div>
 
         {images.length > 0 && (
