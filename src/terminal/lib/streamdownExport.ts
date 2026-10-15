@@ -1,5 +1,5 @@
 /**
- * Streamdown「导出类」按钮的接管（代码块下载 + 表格下载）。
+ * Streamdown「导出类」按钮的接管（表格下载）。
  *
  * ## 为什么不能直接用 Streamdown 自带的下载
  *
@@ -10,9 +10,15 @@
  *
  * 复制按钮没这个问题：它走 `navigator.clipboard`，那条路 WebView2 是通的。
  *
+ * ## 只管表格
+ *
+ * 代码块的下载钮在 2026-10-15 随代码块外观改造一起退了场 —— 代码块
+ * 现在由 AiCodeBlock 自己渲染，「另存为」直接调 `fs_save_text_file`，
+ * 不再需要 document 捕获 hack（见 AiCodeBlock.tsx）。
+ *
  * ## 做法
  *
- * 在 **document** 上挂**捕获阶段** click，命中下载类按钮就
+ * 在 **document** 上挂**捕获阶段** click，命中表格下载项就
  * `preventDefault` + `stopPropagation` + `stopImmediatePropagation`
  * （不让 Streamdown 的 React onClick 跑），改成调 `fs_save_text_file`
  * 弹系统另存为框落盘。
@@ -23,10 +29,10 @@
  *
  * ⚠️ 必须**捕获**阶段：Streamdown 的 onClick 挂在 React 根容器上。
  *
- * ⚠️ 表格的下载按钮**没有 `data-streamdown` 标记**（代码块那个有），
- * 只能靠 `title` 文本认。而 `title` 来自 Streamdown 的 i18n 词条，
- * 本项目**没有传 `translations`**，所以固定是默认英文 —— 认英文即可，
- * 一旦将来接了自定义词条，这里要跟着改（已在测试里钉住）。
+ * ⚠️ 表格的下载按钮**没有 `data-streamdown` 标记**，只能靠 `title`
+ * 文本认。而 `title` 来自 Streamdown 的 i18n 词条，本项目**没有传
+ * `translations`**，所以固定是默认英文 —— 认英文即可，一旦将来接了
+ * 自定义词条，这里要跟着改（已在测试里钉住）。
  *
  * ⚠️ 别改 `components` 去覆盖按钮：Streamdown 的按钮是 CodeBlock /
  * Table **内部**渲染的，`components.code` 覆盖不到。
@@ -39,10 +45,6 @@ import {
   tableDataToCSV,
   tableDataToMarkdown
 } from "streamdown";
-
-/** 代码块下载按钮的选择器（Streamdown 打在 DOM 上的标记）。 */
-export const CODE_DOWNLOAD_SELECTOR =
-  '[data-streamdown="code-block-download-button"]';
 
 /** 表格包装容器，用来往上找 `<table>`。 */
 const TABLE_WRAPPER_SELECTOR =
@@ -129,37 +131,6 @@ export function tableFileName(
 }
 
 /**
- * 从点击目标往上定位代码块，取出「文件名 + 正文」。
- *
- * 正文取 `pre code` 的 `textContent`：高亮后的每个 token 是一个
- * `<span>`，`textContent` 天然把它们拼回原文。Streamdown 自己会去掉
- * 末尾换行（`$r`），这里同样处理，免得存出来的文件多一行空白。
- */
-export function readCodeBlock(
-  target: EventTarget | null
-): {
-  fileName: string;
-  code: string;
-} | null {
-  if (!(target instanceof Element)) return null;
-  const container = target.closest(
-    '[data-streamdown="code-block"]'
-  );
-  if (!container) return null;
-  const language =
-    container.getAttribute("data-language") ?? "";
-  const code = (
-    container.querySelector("pre code")
-      ?.textContent ?? ""
-  ).replace(/\n+$/, "");
-  if (!code) return null;
-  return {
-    fileName: codeBlockFileName(language),
-    code
-  };
-}
-
-/**
  * 从点击目标往上定位表格，取出「文件名 + 序列化后的正文」。
  *
  * 复用 Streamdown **导出的** `extractTableDataFromElement` /
@@ -207,20 +178,11 @@ export function attachStreamdownExport(
     const button = target?.closest?.("button");
     if (!button) return;
 
-    let payload: {
-      fileName: string;
-      code: string;
-    } | null = null;
-
-    if (button.matches(CODE_DOWNLOAD_SELECTOR)) {
-      payload = readCodeBlock(button);
-    } else {
-      const format = tableFormatOf(
-        button.getAttribute("title")
-      );
-      if (format)
-        payload = readTable(button, format);
-    }
+    const format = tableFormatOf(
+      button.getAttribute("title")
+    );
+    if (!format) return;
+    const payload = readTable(button, format);
     if (!payload) return;
 
     // 必须在 Streamdown 的 React onClick 之前拦下来

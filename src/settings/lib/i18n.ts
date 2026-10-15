@@ -226,6 +226,10 @@ const zhCN = {
   "ai.ref.scrollback": "终端回滚",
   "ai.ref.selection": "选中内容",
   "ai.ref.selectionEmpty": "无选区",
+  "ai.code.copy": "复制",
+  "ai.code.copied": "已复制",
+  "ai.code.save": "另存为",
+  "ai.code.saveFailed": "保存失败",
   "ai.blacklist.title": "命令黑名单",
   "ai.blacklist.lead":
     "黑名单中的命令不会被自动执行",
@@ -767,6 +771,10 @@ const enUS: Record<MessageKey, string> = {
   "ai.ref.scrollback": "Scrollback",
   "ai.ref.selection": "Selected text",
   "ai.ref.selectionEmpty": "no selection",
+  "ai.code.copy": "Copy",
+  "ai.code.copied": "Copied",
+  "ai.code.save": "Save",
+  "ai.code.saveFailed": "Save failed",
   "ai.blacklist.title": "Command blacklist",
   "ai.blacklist.lead":
     "Blacklisted commands are never auto-executed",

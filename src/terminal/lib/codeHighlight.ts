@@ -1,11 +1,14 @@
 /**
  * AI 回答里代码块的语法着色。
  *
- * ## 为什么 Streamdown 默认是纯色的
+ * ## 消费者
  *
- * 它的 `CodeBlock` 有两条路：传了 `plugins.code`（Shiki 插件）就按 token
- * 上色，没传就走 `co` 兜底渲染 —— 每个 token 的 `color` 都是
- * `"inherit"`，也就是**整块一个颜色**。所以不配插件 = 没有任何着色。
+ * `AiCodeBlock`（外观改造自 @aicss/react 的 CodeBlock）—— 它自己渲染
+ * 卡片外壳与行号，着色 tokens 由本文件的 `createTokenSource()` 提供。
+ * 早年这条路经过 Streamdown 的 `plugins.code` 插件，后来代码块外观换成
+ * aicss 卡片，插件壳就没了用处，只剩里面的核心。
+ *
+ * ## 为什么不用现成高亮器
  *
  * Shiki 那套要额外装 `@streamdown/code`（体积不小，且要异步 wasm）。
  * 本项目已经有 `cli-highlight`（Highlight.js 内核）给终端 `cat` 着色用了，
@@ -15,9 +18,9 @@
  * ## 适配思路
  *
  * `cli-highlight` 的输出是 **ANSI 字符串**（`\x1b[38;2;R;G;Bm…\x1b[39m`），
- * 而 Streamdown 的 `HighlightResult` 要的是 `tokens[][]`（每行一组 token，
- * 每个 token 带 `color`）。中间用 `ansiToTokens` 拆 —— 这是本文件里唯一
- * 有难度的部分，单独抽成纯函数好单测。
+ * 而渲染要的是 `tokens[][]`（每行一组 token，每个 token 带 `color`）。
+ * 中间用 `ansiToTokens` 拆 —— 这是本文件里唯一有难度的部分，单独抽成
+ * 纯函数好单测。
  *
  * ⚠️ **必须 `chalk.level = 3`**：chalk 检测到不是真 TTY（WebView 里就是）
  * 会把 level 降到 0 = 输出纯文本，一个 ANSI 码都没有。这和 `catView.ts`
@@ -25,12 +28,15 @@
  */
 
 import chalk, { type Chalk } from "chalk";
-import type { CodeHighlighterPlugin } from "streamdown";
 
-// ⚠️ Streamdown 的 `HighlightResult` / `HighlightToken` **没有 export**
-// （只在 .d.ts 里 declare，运行时也用不到），所以这里按它的结构本地
-// 复刻一份。字段名与 .d.ts 保持一致 —— 少一个字段 TS 不会报错，
-// 但 Streamdown 读不到，颜色就静默丢失。
+/**
+ * 单个着色 token：内容 + 浅色色值。
+ *
+ * 深色值放在 `htmlStyle["--shiki-dark"]` —— 与当年 Streamdown 的约定
+ * 一致：`color` 给浅色，内联 CSS 变量给深色，渲染端一套 token 同时服务
+ * 明暗两套配色，**不用在渲染期判断当前主题**（见 AiCodeBlock.module.css
+ * 里 `.cbTok` 的三条主题分支）。
+ */
 export interface HighlightToken {
   bgColor?: string;
   color?: string;
@@ -38,33 +44,6 @@ export interface HighlightToken {
   htmlAttrs?: Record<string, string>;
   htmlStyle?: Record<string, string>;
   offset?: number;
-}
-
-export interface HighlightResult {
-  bg?: string;
-  fg?: string;
-  rootStyle?: string | false;
-  tokens: HighlightToken[][];
-}
-
-/**
- * `highlight` 的入参。Streamdown 会连 `themes` 一起传进来，但那是给它
- * 自己那套 Shiki 主题用的 —— 本插件的配色写死在 `HLJS_THEME` 里，所以
- * 这里声明成可选（顺带让单测不必构造它）。
- */
-interface HighlightOptions {
-  code: string;
-  language: string;
-  /**
-   * Streamdown 会连主题一起传进来（`ThemeInput`，可能是字符串也可能是
-   * 注册对象），但那是给它自己那套 Shiki 用的 —— 本插件的配色写死在
-   * `LIGHT_PALETTE` / `DARK_PALETTE` 里，所以类型放宽到 `unknown` 且可选
-   *（顺带让单测不必构造它）。
-   *
-   * ⚠️ 不能写成 `string[]`：Streamdown 传的是 `ThemeInput`，
-   * 函数参数是逆变的 —— 声明得比实际窄会在赋值处直接报 TS2322。
-   */
-  themes?: unknown;
 }
 
 // 同catView.ts：WebView 里没有真 TTY，chalk 会自动降级成全灰。
@@ -269,7 +248,7 @@ export function truecolorToHex(
 }
 
 /**
- * ANSI 着色文本 → Streamdown 的 `tokens[][]`（每行一组）。
+ * ANSI 着色文本 → `tokens[][]`（每行一组）。
  *
  * 只认两种序列：开前景色的 `38;2;R;G;B` 和复位前景色的 `39`/`0`。
  * 换行一定是裸的 `\n`（chalk 不给换行上色），所以**先按行切再逐行解析**
@@ -316,30 +295,26 @@ export function ansiToTokens(
   });
 }
 
-/** 无色结果：每个 token 只有内容，`color` 缺省= 继承前景色。 */
-function plainResult(
+/** 无色结果：每行一个只有内容的 token，`color` 缺省 = 继承前景色。 */
+function plainTokens(
   code: string
-): HighlightResult {
-  return {
-    tokens: code
-      .split("\n")
-      .map(line => [{ content: line }])
-  };
+): HighlightToken[][] {
+  return code
+    .split("\n")
+    .map(line => [{ content: line }]);
 }
 
 /**
  * 合并浅色 / 深色两份 token。
  *
- * ## Streamdown 的双主题机制
+ * ## 双主题机制
  *
- * 它给每个 token 渲染的 class 是
- * `text-[var(--sdm-c,inherit)] dark:text-[var(--shiki-dark,var(--sdm-c,inherit))]`
- * —— 浅色读 `--sdm-c`、深色读 `--shiki-dark`。而 `htmlStyle` 里的
- * **任意 key 都会原样写成内联 CSS 变量**（只有 `color` /
- * `background-color` 两个key 被特殊接管成 `--sdm-c` / `--sdm-tbg`）。
+ * 渲染端（AiCodeBlock.module.css 的 `.cbTok`）给每个 token 的规则是
+ * 「浅色读 `--sdm-c`、深色读 `--shiki-dark`」，两者都来自同一个 span 的
+ * 内联 CSS 变量。而 `htmlStyle` 里的任意 key 都会原样写成内联变量。
  *
  * 所以：`color` 放浅色值，`htmlStyle: { "--shiki-dark": 深色值 }`
- * 就能一套token 同时服务明暗两套配色，**不用在渲染期判断当前主题**。
+ * 就能一套 token 同时服务明暗两套配色，**不用在渲染期判断当前主题**。
  *
  * 顺带好处：切换主题不需要清缓存 —— 两个值本来就在同一个 token 里。
  *
@@ -373,41 +348,51 @@ export function mergeThemedTokens(
   );
 }
 
+/** token 源：同步取到就返回，没就绪异步 callback 补。 */
+export type TokenSource = {
+  get: (
+    code: string,
+    language: string,
+    callback: (tokens: HighlightToken[][]) => void
+  ) => HighlightToken[][] | null;
+};
+
 /**
- * 生成 Streamdown 的代码高亮插件。
+ * 高亮 token 源：缓存 + cli-highlight 动态 import + 异步回调。
  *
- * `highlight` 的契约：**同步返回值，没准备好就返回 `null` 并在
- * `callback` 里异步补**。cli-highlight 是动态 import（体积不小，
- * 与 `catView.ts` 同样的理由），首帧必然走 callback 这条路。
+ * `get` 的契约：**同步能拿到就返回 tokens，没就绪返回 `null` 并在
+ * `callback` 里异步补**。cli-highlight 是动态 import（体积不小，与
+ * `catView.ts` 同样的理由），首帧必然走 callback 这条路。
  *
- * 注意 Streamdown 每次渲染都会调 `highlight`，所以这里**必须带缓存**，
- * 否则同一个代码块每次 re-render 都要重新拆一遍 token。
+ * ⚠️ 调用方（AiCodeBlock）每次渲染都会调 `get`，所以这里**必须带缓存**，
+ * 否则同一个代码块每次 re-render 都要重新拆一遍 token。一个代码块
+ * 整个生命周期只建一个源（`useState(createTokenSource)`）。
  */
-export function createCodeHighlighter(): CodeHighlighterPlugin {
+export function createTokenSource(): TokenSource {
   const cache = new Map<
     string,
-    HighlightResult | null
+    HighlightToken[][]
   >();
   let loader: Promise<
     typeof import("cli-highlight")
   > | null = null;
-  // ⚠️ 必须声明在 `toResult` 之前：`toResult` 里要用它，
-  // 而它由 `highlight` 回调写入 —— 顺序反了会撞 TDZ。
+  // ⚠️ 必须声明在 `toTokens` 之前：`toTokens` 里要用它，
+  // 而它由异步回调写入 —— 顺序反了会撞 TDZ。
   const callbacks = new Map<
     string,
-    Array<(result: HighlightResult) => void>
+    Array<(tokens: HighlightToken[][]) => void>
   >();
 
-  const toResult = (
+  const toTokens = (
     code: string,
     language: string
-  ): HighlightResult | null => {
+  ): HighlightToken[][] | null => {
     if (!loader) loader = import("cli-highlight");
-    const key = `${language} ${code}`;
+    const key = `${language} ${code}`;
     const hit = cache.get(key);
     if (hit) return hit;
     if (code.length > MAX_HIGHLIGHT_BYTES) {
-      const plain = plainResult(code);
+      const plain = plainTokens(code);
       cache.set(key, plain);
       return plain;
     }
@@ -436,25 +421,22 @@ export function createCodeHighlighter(): CodeHighlighterPlugin {
             dark
           );
           if (!tokens) {
-            // 两侧分段对不上（理论上不会）—— 宁可不 colouring，
+            // 两侧分段对不上（理论上不会）—— 宁可不着色，
             // 也不能错位把文字染到别的段上。
-            cache.set(key, plainResult(code));
+            cache.set(key, plainTokens(code));
             return;
           }
-          const result: HighlightResult = {
-            tokens
-          };
-          cache.set(key, result);
+          cache.set(key, tokens);
           callbacks
             .get(key)
-            ?.forEach(cb => cb(result));
+            ?.forEach(cb => cb(tokens));
         } catch (error) {
           // 高亮失败不是致命问题：退化成无色，别让整块代码块报错
           console.warn(
             "[ai] 代码高亮失败，回退纯文本",
             error
           );
-          const plain = plainResult(code);
+          const plain = plainTokens(code);
           cache.set(key, plain);
           callbacks
             .get(key)
@@ -474,26 +456,21 @@ export function createCodeHighlighter(): CodeHighlighterPlugin {
   };
 
   return {
-    name: "shiki",
-    type: "code-highlighter",
-    getThemes: () => ["one-dark", "one-dark"],
-    getSupportedLanguages: () =>
-      Object.values(LANGUAGE_ALIAS),
-    supportsLanguage: (language: string) =>
-      normalizeLanguage(language) !==
-        "plaintext" || language === "plaintext",
-    highlight: (
-      options: HighlightOptions,
-      callback?: (result: HighlightResult) => void
+    get: (
+      code: string,
+      language: string,
+      callback: (
+        tokens: HighlightToken[][]
+      ) => void
     ) => {
-      const result = toResult(
-        options.code,
-        normalizeLanguage(options.language)
+      const result = toTokens(
+        code,
+        normalizeLanguage(language)
       );
       if (result) return result;
-      const key = `${normalizeLanguage(options.language)} ${options.code}`;
+      const key = `${normalizeLanguage(language)} ${code}`;
       const list = callbacks.get(key) ?? [];
-      list.push(callback ?? (() => undefined));
+      list.push(callback);
       callbacks.set(key, list);
       return null;
     }

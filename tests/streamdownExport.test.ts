@@ -3,13 +3,12 @@ import {
   codeBlockFileName,
   languageExtension,
   tableFileName,
-  tableFormatOf,
-  CODE_DOWNLOAD_SELECTOR
+  tableFormatOf
 } from "@/terminal/lib/streamdownExport";
 import { defaultTranslations } from "streamdown";
 
 /**
- * Streamdown「导出类」按钮的接管（代码块下载 + 表格下载）。
+ * Streamdown「导出类」按钮的接管（表格下载）。
  *
  * ## 根因：它的下载是纯浏览器实现
  *
@@ -19,10 +18,14 @@ import { defaultTranslations } from "streamdown";
  *
  * 复制按钮不受影响：它走 `navigator.clipboard`，WebView2 通。
  *
- * ## 表格比代码块多两个坑
+ * 代码块的下载在 2026-10-15 退出了这条 hack 链路 —— 代码块改由
+ * AiCodeBlock 渲染，「另存为」按钮直接调 `fs_save_text_file`，
+ * 这里只剩表格（测试也只剩表格用例）。
  *
- * ① 表格的下载按钮**没有 `data-streamdown` 标记**（代码块那个有），
- *    只能靠 `title` 文本认；
+ * ## 表格两个坑
+ *
+ * ① 表格的下载按钮**没有 `data-streamdown` 标记**，只能靠 `title`
+ *    文本认；
  * ② 表格「全屏」模式把整张表 **portal 到 `document.body`**，挂在
  *    AI 面板元素上的监听器收不到那次点击 —— 症状是「面板里能下载，
  *    一按全屏就又不行了」。所以监听必须挂 `document`。
@@ -70,14 +73,6 @@ describe("Streamdown 导出接管", () => {
     );
     expect(codeBlockFileName("bash")).toBe(
       "file.sh"
-    );
-  });
-
-  it("代码块选择器就是 Streamdown 打的那个标记", () => {
-    // ⚠️ 标记名写错整条链路静默失效（点按钮还是没反应），
-    // 而 TS / eslint / build 全绿 —— 必须钉死
-    expect(CODE_DOWNLOAD_SELECTOR).toBe(
-      '[data-streamdown="code-block-download-button"]'
     );
   });
 

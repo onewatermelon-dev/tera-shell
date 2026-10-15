@@ -1,28 +1,33 @@
 import { describe, it, expect } from "vitest";
 import {
   ansiToTokens,
-  createCodeHighlighter,
+  createTokenSource,
   mergeThemedTokens,
   normalizeLanguage,
   truecolorToHex,
-  MAX_HIGHLIGHT_BYTES
+  MAX_HIGHLIGHT_BYTES,
+  type HighlightToken
 } from "@/terminal/lib/codeHighlight";
-import type { HighlightResult } from "@/terminal/lib/codeHighlight";
 
 /**
  * AI 回答代码块的语法着色。
  *
- * ## 根因：不传 plugins.code 就是整块一个颜色
+ * ## 根因：不接高亮器就是整块一个颜色
  *
- * Streamdown 的 CodeBlock 有两条路：传了 Shiki 插件按 token 上色，
- * 没传就走兜底渲染 —— 每个 token 的 color 都是 `"inherit"`。
- * 所以「代码块没有颜色渲染」不是配色问题，是**根本没接高亮器**。
+ * 早年 Streamdown 的 CodeBlock 有两条路：传了 `plugins.code`（Shiki
+ * 插件）就按 token 上色，没传就走兜底渲染 —— 每个 token 的 `color`
+ * 都是 `"inherit"`。所以「代码块没有颜色渲染」不是配色问题，是
+ * **根本没接高亮器**。
  *
- * ## 适配：cli-highlight 的 ANSI → Streamdown 的 tokens
+ * 2026-10-15：代码块外观换成 aicss 卡片（AiCodeBlock），高亮从
+ * Streamdown 插件改成本文件的 `createTokenSource()`，着色管线
+ * （ANSI → tokens）原样保留。
+ *
+ * ## 适配：cli-highlight 的 ANSI → tokens
  *
  * 本项目已有 `cli-highlight`（给终端 `cat` 着色用），但它输出的是 ANSI
- * 字符串，而 Streamdown 要 `tokens[][]`。中间这层转换是本文件唯一有
- * 难度的地方，所以拆成纯函数单独测 —— 高亮插件本体要真跑 Highlight.js，
+ * 字符串，而渲染要 `tokens[][]`。中间这层转换是本文件唯一有难度的
+ * 地方，所以拆成纯函数单独测 —— 高亮本体要真跑 Highlight.js，
  * node 环境下测不动。
  */
 describe("代码块语法着色", () => {
@@ -156,16 +161,26 @@ describe("代码块语法着色", () => {
     expect(src).not.toContain("<Streamdown");
   });
 
-  it("高亮插件在组件里只创建一次", async () => {
+  it("高亮源在组件里只创建一次", async () => {
     const src = (
-      await import("@/terminal/components/ai/AiMarkdown.tsx?raw")
+      await import("@/terminal/components/ai/AiCodeBlock.tsx?raw")
     ).default;
     // ⚠️ 每次渲染新建实例 → 内部 token 缓存全失效 → 每帧重拆 ANSI。
     // 也不能写模块级变量在渲染期赋值（eslint react-hooks 会报）
     expect(src).toMatch(
-      /useState\(\s*createCodeHighlighter\s*\)/
+      /useState\(\s*createTokenSource\s*\)/
     );
-    expect(src).toContain("plugins=");
+    // 块级代码的外观入口确实接到了 AiCodeBlock（漏了就走 Streamdown
+    // 自己那套 chrome，下载钮在 WebView2 里还是没反应）
+    const md = (
+      await import("@/terminal/components/ai/AiMarkdown.tsx?raw")
+    ).default;
+    expect(md).toContain("AiCodeBlock");
+    expect(md).toContain("components=");
+    // 行内代码的默认渲染被我们的覆盖替掉了，必须自己复刻样式
+    expect(md).toContain(
+      'data-streamdown="inline-code"'
+    );
   });
 
   it("必须强制 chalk.level = 3（WebView 里没有真 TTY）", async () => {
@@ -224,31 +239,27 @@ describe("代码块语法着色", () => {
   });
 
   /**
-   * 端到端：真跑一遍 cli-highlight，拿到 Streamdown 能用的 token。
+   * 端到端：真跑一遍 cli-highlight，拿到渲染能用的 token。
    *
    * 前面那些都是「给定 ANSI 能否正确拆分」，这例反过来验证「给定 bash
    * 代码能否真的拆出带颜色的 token」—— 两头都对了，中间那层才成立。
-   * 高亮器是动态 import，首调返回 null + 走 callback，这里等 callback。
+   * 高亮源是动态 import，首调返回 null + 走 callback，这里等 callback。
    */
   it("端到端：bash 代码真的能拆出带颜色的 token", async () => {
-    const plugin = createCodeHighlighter();
-    expect(plugin.type).toBe("code-highlighter");
+    const source = createTokenSource();
     const code =
       'if [ -f /etc/passwd ]; then\n  echo "hi" # note\nfi';
     const run = () =>
-      new Promise<HighlightResult | null>(
+      new Promise<HighlightToken[][] | null>(
         (resolve, reject) => {
           const timer = setTimeout(
             () =>
               reject(new Error("高亮回调超时")),
             5000
           );
-          const result = plugin.highlight(
-            {
-              code,
-              language: "bash",
-              themes: ["one-dark", "one-dark"]
-            },
+          const result = source.get(
+            code,
+            "bash",
             r => {
               clearTimeout(timer);
               resolve(r);
@@ -260,9 +271,7 @@ describe("代码块语法着色", () => {
           }
         }
       );
-    const result = await run();
-    expect(result).not.toBeNull();
-    const tokens = result?.tokens ?? [];
+    const tokens = (await run()) ?? [];
     // 三行 → 三组
     expect(tokens).toHaveLength(3);
     // 必须真有颜色（不是全 undefined）—— 这才是「有颜色渲染」的判据
@@ -279,7 +288,7 @@ describe("代码块语法着色", () => {
     // 亮绿亮紫配白底几乎看不清，正是要修的病。
     expect(colors).toContain("#a626a4");
     expect(colors).toContain("#a0a1a7");
-    // 深色那套必须同时挂在 --shiki-dark 上（Streamdown 深色模式读它）
+    // 深色那套必须同时挂在 --shiki-dark 上（AiCodeBlock 深色模式读它）
     const darkColors = tokens
       .flat()
       .map(t => t.htmlStyle?.["--shiki-dark"])
@@ -295,42 +304,36 @@ describe("代码块语法着色", () => {
     ).toEqual(code.split("\n"));
   }, 10_000);
 
-  it("超长代码跳过着色（逐字符拆 token 成本太高）", async () => {
-    const plugin = createCodeHighlighter();
+  it("超长代码跳过着色（逐字符拆 token 成本太高）", () => {
+    const source = createTokenSource();
     const code = "x".repeat(
       MAX_HIGHLIGHT_BYTES + 1
     );
-    const result = plugin.highlight({
+    const result = source.get(
       code,
-      language: "bash",
-      themes: ["one-dark", "one-dark"]
-    });
+      "bash",
+      () => undefined
+    );
     // 超长走同步路径：直接给无色结果，不排异步任务
     expect(result).not.toBeNull();
     expect(
-      (result?.tokens ?? [])
-        .flat()
-        .every(t => !t.color)
+      (result ?? []).flat().every(t => !t.color)
     ).toBe(true);
   });
 
   it("高亮失败退化成无色，不抛错", async () => {
-    const plugin = createCodeHighlighter();
+    const source = createTokenSource();
     // 故意传一个 Highlight.js 不认的语言：不能整块代码块崩掉
-    const result =
-      await new Promise<HighlightResult | null>(
-        resolve => {
-          const r = plugin.highlight(
-            {
-              code: "随机内容",
-              language: "绝对不存在的语言-xyz",
-              themes: ["one-dark", "one-dark"]
-            },
-            resolve
-          );
-          if (r) resolve(r);
-        }
+    const tokens = await new Promise<
+      HighlightToken[][] | null
+    >(resolve => {
+      const r = source.get(
+        "随机内容",
+        "绝对不存在的语言-xyz",
+        resolve
       );
-    expect(result).not.toBeNull();
+      if (r) resolve(r);
+    });
+    expect(tokens).not.toBeNull();
   });
 });
