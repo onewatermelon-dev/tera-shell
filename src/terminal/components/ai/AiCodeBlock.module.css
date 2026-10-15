@@ -143,11 +143,17 @@
   grid-template-columns: 32px 1fr;
 }
 .cbLn {
-  user-select: none;
   text-align: right;
   padding: 0 7px;
   color: #a1a1a1;
   font-size: 11px;
+}
+/* 行号不参与划选 —— 复制代码不该带上行号。
+   ⚠️ 必须写成 `.cb .cbLn` 双类（0,2,0）：_reset.scss 的全局白名单
+   `.ai-panel * { user-select: text }` 是 (0,1,1)，单类 .cbLn 盖不过它
+   （2026-10-15 踩过：行号被原样复制出来） */
+.cb .cbLn {
+  user-select: none;
 }
 .cbCode {
   white-space: pre;

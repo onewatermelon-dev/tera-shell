@@ -138,6 +138,18 @@ describe("AI 代码块外观（aicss 改造版）", () => {
     expect(src).not.toContain("cbCopyLead");
   });
 
+  it("行号不参与划选（划词复制不带行号）", async () => {
+    const css = await compileCss(
+      "src/terminal/components/ai/AiCodeBlock.module.css"
+    );
+    // ⚠️ 必须双类 `.cb .cbLn`：_reset.scss 的 `.ai-panel *` 恢复可选
+    // 规则是 (0,1,1)，单类 .cbLn (0,1,0) 盖不过 —— 行号会被原样
+    // 复制出来（2026-10-15 踩过）。降 specificity  = 功能静默失效
+    expect(css).toMatch(
+      /\.cb \.cbLn \{[^}]*user-select: none/
+    );
+  });
+
   it("块级判定用 data-block，且不许覆盖 pre", async () => {
     const md = (
       await import("@/terminal/components/ai/AiMarkdown.tsx?raw")
