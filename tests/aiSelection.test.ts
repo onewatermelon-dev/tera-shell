@@ -99,9 +99,35 @@ describe("AI 面板文字可划词复制", () => {
     );
   });
 
-  it("终端子树仍然可选（别被这次改动误伤）", () => {
+  it("终端子树不在可选白名单（xterm 不依赖原生可选）", () => {
+    // 2026-10-15 翻转：旧断言钉的是「终端子树要可选」，而那条白名单
+    // 正是病根 —— 开着它，从 AI 面板拖出的原生选区越过面板边界会伸进
+    // .terminal-host，把选择高亮糊进终端区域（用户报「划词划到终端里」）。
+    // xterm 的拖选/双击选词/复制全走自己的 buffer 选区（其 bundle 里
+    // user-select 与 getSelection 零调用），不需要原生可选；开着它反而
+    // 有上面那个副作用，所以删掉。
     expect(
-      ruleDeclaring("\\.terminal-host")
-    ).toContain("user-select: text");
+      ruleDeclaring("\\.terminal-host"),
+      ".terminal-host 又回白名单了 —— AI 面板的选区会越过边界糊进终端"
+    ).not.toContain("user-select: text");
+  });
+
+  it("面板顶栏不参与划词（品牌名/会话标题不带进复制结果）", () => {
+    // 2026-10-15 用户报：从消息流往上拖选到顶栏，会把「AI 助手」和
+    // 当前对话标题一起复制走。顶栏是 chrome 不是内容，必须不可选。
+    const rule = ruleDeclaring("ai-panel-head");
+    expect(
+      rule,
+      ".ai-panel-head 没有 user-select:none —— 拖选会带上品牌名和会话标题"
+    ).toContain("user-select: none");
+    // ⚠️ 必须双类 .ai-panel .ai-panel-head：白名单 `.ai-panel *` 是
+    // (0,1,1)，单类 (0,1,0) 盖不过它（ specificity 输 = 规则静默失效）
+    const matched = css.match(
+      /[^{}]*ai-panel-head[^{}]*\{[^}]*user-select: none[^}]*\}/
+    );
+    expect(
+      matched?.[0] ?? "",
+      "顶栏规则不是双类写法 —— 盖不过 .ai-panel * 白名单"
+    ).toContain(".ai-panel .ai-panel-head");
   });
 });

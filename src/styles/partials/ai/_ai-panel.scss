@@ -50,6 +50,17 @@
   font-weight: 400;
 }
 
+// 顶栏是界面 chrome（品牌名 / 当前对话标题 / 动作按钮），不参与划词 ——
+// 从消息流往上拖选时，选区不该伸进顶栏把「AI 助手」和会话标题带进
+// 复制结果（2026-10-15 用户报）。
+// ⚠️ 必须双类 .ai-panel .ai-panel-head：_reset.scss 的白名单
+// `.ai-panel *` 是 (0,1,1)，单类 .ai-panel-head (0,1,0) 盖不过它
+// （同 AiCodeBlock 的 .cb .cbLn 踩过的坑）。
+.ai-panel .ai-panel-head,
+.ai-panel .ai-panel-head * {
+  user-select: none;
+}
+
 // 左侧品牌名：同样显式钉在第 1 列，与 .ai-panel-head-actions 的
 // grid-column: 3 配对 —— 两端都锚定，中间列的 center 才是稳定的真中点。
 .ai-panel-head-brand {

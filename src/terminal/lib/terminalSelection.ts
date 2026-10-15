@@ -39,6 +39,25 @@ function getTextEnd(
 }
 
 /**
+ * 按文档顺序整理拖选起点和当前鼠标位置，支持从下往上、从右往左选择。
+ *
+ * 提到模块级并导出：反向拖选的顺序一旦写反，症状是选区整体错位到另一段
+ * 文字，很难和「坐标算错」区分开 —— 单独一个纯函数才好单测。
+ */
+export function normalizeRange(
+  anchor: IBufferRange["start"],
+  pointer: IBufferRange["end"]
+): IBufferRange {
+  const pointerBeforeAnchor =
+    pointer.y < anchor.y ||
+    (pointer.y === anchor.y &&
+      pointer.x < anchor.x);
+  return pointerBeforeAnchor
+    ? { start: pointer, end: anchor }
+    : { start: anchor, end: pointer };
+}
+
+/**
  * 使用按行覆盖层绘制“仅文字区域”的终端选区。
  *
  * xterm 原生选区是一个连续线性区间：跨行选择时，中间行必然高亮到终端最右侧，
@@ -212,20 +231,6 @@ export function renderTextOnlySelection(
     };
   }
 
-  /** 按文档顺序整理拖选起点和当前鼠标位置，支持从下往上、从右往左选择。 */
-  function normalizeRange(
-    anchor: IBufferRange["start"],
-    pointer: IBufferRange["end"]
-  ): IBufferRange {
-    const pointerBeforeAnchor =
-      pointer.y < anchor.y ||
-      (pointer.y === anchor.y &&
-        pointer.x < anchor.x);
-    return pointerBeforeAnchor
-      ? { start: pointer, end: anchor }
-      : { start: anchor, end: pointer };
-  }
-
   /**
    * 直接由原始 mousemove 驱动覆盖层，不等待 xterm 较晚触发的 onSelectionChange。
    * 浏览器处理完本次鼠标事件时，覆盖层已经具有当前指针对应的位置。
@@ -240,8 +245,17 @@ export function renderTextOnlySelection(
       );
   }
 
-  /** 结束直接绘制，并在 xterm 完成本次 mouseup 后同步一次真实选区。 */
-  function handleMouseUp() {
+  /**
+   * 结束「直接绘制」状态：摘监听、清拖拽态，并把覆盖层同步回 xterm 的
+   * **真实**选区（拖拽中途的覆盖层按指针位置画，未必与 xterm 一致）。
+   *
+   * mouseup 与 window blur 走同一条清理路径 —— 鼠标在窗口外松开时页面
+   * 收不到 mouseup，只摘 mouseup 一条会让 document 上的 mousemove 一直
+   * 挂着、dragStart 也不清：之后在 AI 面板里划词，指针坐标会被
+   * locateMouse 折算成终端网格坐标，在终端里画出用户并没有做的选区
+   * （2026-10-15 修复，症状是「从 AI 助手划词却划到终端里」）。
+   */
+  function stopDirectDraw() {
     dragging = false;
     dragStart = undefined;
     document.removeEventListener(
@@ -251,8 +265,12 @@ export function renderTextOnlySelection(
     );
     document.removeEventListener(
       "mouseup",
-      handleMouseUp,
+      stopDirectDraw,
       true
+    );
+    window.removeEventListener(
+      "blur",
+      stopDirectDraw
     );
     queueMicrotask(() => drawImmediately());
   }
@@ -263,6 +281,9 @@ export function renderTextOnlySelection(
       if (event.button !== 0) return;
       //鼠标开始框选：当前选区不再来自搜索，恢复青绿松色
       searchSelection.delete(terminal);
+      // 先收一次再挂：幂等。防上一次漏摘的 mouseup 把旧 dragStart
+      // 留着被本层 handleMouseMove 继续用
+      stopDirectDraw();
       dragStart = locateMouse(event);
       if (!dragStart) return;
       dragging = true;
@@ -274,8 +295,13 @@ export function renderTextOnlySelection(
       );
       document.addEventListener(
         "mouseup",
-        handleMouseUp,
+        stopDirectDraw,
         true
+      );
+      // 失焦（切窗口 / 松手在窗外）也收摊，见 stopDirectDraw 注释
+      window.addEventListener(
+        "blur",
+        stopDirectDraw
       );
     },
     true
