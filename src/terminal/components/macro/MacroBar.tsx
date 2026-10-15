@@ -25,6 +25,10 @@ type MacroBarProps = {
   disabled: boolean;
   /** 点击某个宏：把它的命令写进当前会话。 */
   onRun: (macro: TerminalMacro) => void;
+  /** 右键菜单 → 发送到所有已打开的会话标签。 */
+  onBroadcast: (macro: TerminalMacro) => void;
+  /** 「发送到所有标签」会落到的会话数；0 时菜单里该项置灰。 */
+  broadcastCount: number;
   /** 点击 + ：弹出新增宏的窗口。 */
   onAdd: () => void;
   /** 右键菜单里的编辑。 */
@@ -48,6 +52,8 @@ export default function MacroBar({
   macros,
   disabled,
   onRun,
+  onBroadcast,
+  broadcastCount,
   onAdd,
   onEdit,
   onDelete,
@@ -217,11 +223,25 @@ export default function MacroBar({
     );
   }
 
-  /** 右键菜单选中的动作；菜单自己会在选完后关闭。 */
+  /**
+   * 右键菜单选中的动作；菜单自己会在选完后关闭。
+   *
+   * ⚠️ **必须用 switch 而不是 if/else**：原先只有两个动作写成
+   * `if (edit) ... else delete`，新增第三动作时 else 会把它当成 delete
+   * 吞掉 —— 点「发送到所有标签」结果是删掉这条宏。
+   */
   function handleAction(action: MacroAction) {
     if (!menu) return;
-    if (action === "edit") onEdit(menu.macro);
-    else onDelete(menu.macro);
+    switch (action) {
+      case "edit":
+        onEdit(menu.macro);
+        return;
+      case "broadcast":
+        onBroadcast(menu.macro);
+        return;
+      case "delete":
+        onDelete(menu.macro);
+    }
   }
 
   return (
@@ -288,6 +308,7 @@ export default function MacroBar({
         <MacroContextMenu
           x={menu.x}
           y={menu.y}
+          broadcastCount={broadcastCount}
           onAction={handleAction}
           onClose={() => setMenu(null)}
         />

@@ -407,6 +407,16 @@ const zhCN = {
     "还没有快捷宏，点右侧 + 添加常用命令",
   "macro.editAction": "编辑",
   "macro.deleteAction": "删除",
+  "macro.broadcastAction": "发送到全部",
+  "macro.broadcastActionHint":
+    "发送到当前全部 {count} 个会话标签",
+  "macro.broadcastEmpty":
+    "只有当前标签，无处可发送",
+  "macro.broadcastDone":
+    "已发送到 {count} 个会话标签",
+  "macro.broadcastNone": "没有可发送的会话标签",
+  "macro.broadcastSkipped":
+    "已发送到 {count} 个会话，{skipped} 个因断线或本地会话已跳过",
   "macro.name": "名称",
   "macro.command": "命令",
   "macro.namePlaceholder": "名称（可留空）",
@@ -958,6 +968,17 @@ const enUS: Record<MessageKey, string> = {
     "No macros yet — click + on the right to add a command",
   "macro.editAction": "Edit",
   "macro.deleteAction": "Delete",
+  "macro.broadcastAction": "Send to all",
+  "macro.broadcastActionHint":
+    "Send to all {count} open session tabs",
+  "macro.broadcastEmpty":
+    "Only this tab — nowhere to send",
+  "macro.broadcastDone":
+    "Sent to {count} session tabs",
+  "macro.broadcastNone":
+    "No session tab available",
+  "macro.broadcastSkipped":
+    "Sent to {count} sessions; skipped {skipped} that are disconnected or local",
   "macro.name": "Name",
   "macro.command": "Command",
   "macro.namePlaceholder": "Name (optional)",

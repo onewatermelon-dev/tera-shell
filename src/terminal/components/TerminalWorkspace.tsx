@@ -33,6 +33,7 @@ import { useTerminalRefocus } from "@/terminal/lib/session/useTerminalRefocus";
 import { useT } from "@/settings/lib/i18n";
 import type { StatusMode } from "@/settings/lib/settings";
 import type { TerminalMacro } from "@/terminal/lib/macro/terminalMacros";
+import { broadcastTargets } from "@/terminal/lib/macro/macroBroadcast";
 import { LeftOutlined } from "@ant-design/icons";
 
 type Props = {
@@ -111,6 +112,10 @@ type Props = {
     macro: TerminalMacro,
     targetId: string
   ) => void;
+  /** 右键菜单 → 发送到所有已打开的会话标签。 */
+  onBroadcastMacro: (
+    macro: TerminalMacro
+  ) => void;
   /** 点击 + ：弹出新增快捷宏的窗口。 */
   onAddMacro: () => void;
   /** AI 执行卡片「存为宏」：名称用卡片说明文字，留空由宏层兜底用命令。 */
@@ -178,6 +183,7 @@ export default function TerminalWorkspace({
   onReorderTab,
   macros,
   onRunMacro,
+  onBroadcastMacro,
   onAddMacro,
   onAddMacroCommand,
   onEditMacro,
@@ -228,6 +234,20 @@ export default function TerminalWorkspace({
   // 快捷宏的目标会话 = 活动窗格正在显示的那只（由 useTerminals 派生
   // 成 terminals.active），宏执行落在用户正对着的那一格
   const macroTargetId = active?.id;
+
+  // 「发送到所有标签」的落点：全部已打开会话，断线的先滤掉。
+  // 与标签右键菜单的「关闭所有会话」同口径（用 opened 而非每窗格
+  // 可见的那只）—— 后者只覆盖各窗格当前显示的标签，会漏掉所有
+  // 非活动标签，那就不是「所有」了
+  const broadcastCount = useMemo(
+    () =>
+      broadcastTargets(
+        opened,
+        disconnected,
+        active?.id
+      ).ids.length,
+    [opened, disconnected, active?.id]
+  );
 
   // 窗口抢回焦点 / 点终端空白处：焦点回还给正对着的终端
   useTerminalRefocus(
@@ -505,6 +525,8 @@ export default function TerminalWorkspace({
           disconnected={disconnected}
           macroTargetId={macroTargetId}
           onRunMacro={onRunMacro}
+          onBroadcastMacro={onBroadcastMacro}
+          broadcastCount={broadcastCount}
           onAddMacro={onAddMacro}
           onEditMacro={onEditMacro}
           onDeleteMacro={onDeleteMacro}

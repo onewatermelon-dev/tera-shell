@@ -20,6 +20,7 @@ import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import SettingsPage from "@/settings/components/SettingsPage";
 import { useMacros } from "@/terminal/lib/macro/useMacros";
 import type { TerminalMacro } from "@/terminal/lib/macro/terminalMacros";
+import { broadcastTargets } from "@/terminal/lib/macro/macroBroadcast";
 import AppDialogs from "@/app/components/AppDialogs";
 import { useAppToast } from "@/app/lib/useAppToast";
 import { useAppDialogs } from "@/app/lib/useAppDialogs";
@@ -200,6 +201,77 @@ export default function App() {
     );
   }
 
+  /**
+   * 把一条快捷宏发送到**所有**已打开的会话标签。
+   *
+   * ## 为什么不能直接 forEach 调 runMacro
+   *
+   * `runMacro` 末尾有 `focusTerminal(id)`（执行完把焦点交回目标窗格，
+   * 方便用户接着敲）。批量调用会让焦点在最后一跳结束，且每个 id 都触发
+   * 一次 `focus()` —— 多标签下表现为**焦点在屏幕上连番跳窜**。
+   * 广播的语义是「往每只会话都发一份」，用户并没有要切到哪一只。
+   *
+   * 所以这里只下发、最后把焦点**还给原来那只**（用户正对着的那只），
+   * 位置与点菜单前一致。
+   *
+   * ## 为什么逐个 invoke 而不是合并成一次
+   *
+   * `terminal_write` 的入参是单个会话 id，没有批量形式。多行宏也是
+   * 逐行补回车拼成一个 data 串（与 runMacro 同规则），所以「N 个会话」
+   * 就是 N 次 invoke —— 命令是 fire-and-forget，不等返回。
+   */
+  function broadcastMacro(macro: TerminalMacro) {
+    const lines = macro.command
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line !== "");
+    if (lines.length === 0) return;
+    const data = lines
+      .map(line => `${line}\r`)
+      .join("");
+    const { ids, skipped } = broadcastTargets(
+      terminals.opened,
+      terminals.disconnected,
+      terminals.activeId
+    );
+    if (ids.length === 0) {
+      console.warn(
+        "[macro] 没有可发送的会话标签，已放弃广播"
+      );
+      setError(t("macro.broadcastNone"));
+      return;
+    }
+    for (const id of ids) {
+      invoke("terminal_write", {
+        id,
+        data,
+        command: macro.command
+      }).catch(fail);
+    }
+    // 关键日志：排查「发了没反应」时看实际落到了哪几个会话
+    console.info(
+      `[macro] 已广播到 ${ids.length} 个会话标签（跳过 ${skipped}）`
+    );
+    if (skipped > 0) {
+      // 跳过的要说出来：用户以为「发到所有」就是全发了，
+      // 少了几个却不说，他会以为是服务器没响应
+      setError(
+        t("macro.broadcastSkipped", {
+          count: ids.length,
+          skipped
+        })
+      );
+    } else {
+      console.info(
+        t("macro.broadcastDone", {
+          count: ids.length
+        })
+      );
+    }
+    // 焦点交回用户原本正看着的那只，而不是最后被写的那只
+    requestAnimationFrame(refocusActive);
+  }
+
   /** 开场后载入第一个会话：原 useAppLoading effect 的策略，
    * 「开哪个」是业务决策留在门面，hook 只管时机。 */
   const openFirstSession = () => {
@@ -340,6 +412,7 @@ export default function App() {
           onToggleRegex={terminals.toggleRegex}
           macros={macroStore.macros}
           onRunMacro={runMacro}
+          onBroadcastMacro={broadcastMacro}
           onAddMacro={() => {
             setEditingMacro(null);
             setMacroOpen(true);

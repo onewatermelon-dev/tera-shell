@@ -53,12 +53,14 @@
   font-size: 11px;
 }
 
-// 宏的右键菜单：比文件菜单更窄（只有编辑 / 删除两项）。
+// 宏的右键菜单：编辑 / 全部发送 / 删除，三项都是四字以内。
 // 菜单项本身复用 .context-menu-item（见 _context-menu.scss）。
+// ⚠️ 别再加长文案：会话数已挪到 title（悬停可见）。正文一长菜单就得
+// 跟着加宽，整排项会一起变形 —— 三项短文案下 128px 够用。
 .macro-context-menu {
   position: fixed;
   z-index: 40;
-  min-width: 96px;
+  min-width: 128px;
   padding: 4px;
   background: var(--overlay);
   border: 1px solid var(--border);

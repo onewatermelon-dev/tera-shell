@@ -19,6 +19,8 @@ export function TerminalStatus({
   disconnected,
   macroTargetId,
   onRunMacro,
+  onBroadcastMacro,
+  broadcastCount,
   onAddMacro,
   onEditMacro,
   onDeleteMacro,
@@ -40,6 +42,12 @@ export function TerminalStatus({
     macro: TerminalMacro,
     targetId: string
   ) => void;
+  /** 右键菜单 → 发送到所有已打开的会话标签。 */
+  onBroadcastMacro: (
+    macro: TerminalMacro
+  ) => void;
+  /** 「发送到所有标签」会落到的会话数；0 时菜单里该项置灰。 */
+  broadcastCount: number;
   onAddMacro: () => void;
   onEditMacro: (macro: TerminalMacro) => void;
   onDeleteMacro: (macro: TerminalMacro) => void;
@@ -92,6 +100,8 @@ export function TerminalStatus({
               if (macroTargetId)
                 onRunMacro(macro, macroTargetId);
             }}
+            onBroadcast={onBroadcastMacro}
+            broadcastCount={broadcastCount}
             onAdd={onAddMacro}
             onEdit={onEditMacro}
             onDelete={onDeleteMacro}
