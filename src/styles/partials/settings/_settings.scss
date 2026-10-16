@@ -99,6 +99,29 @@
   }
 }
 
+// 配色方案分区专用：整页占满屏幕高，外层不滚动，滚动只发生在
+// 方案列表内部（2026-10-15 用户要求「高度占满屏幕高，不要滚动，
+// 滚动只需要在选择方案中滚动就行」）。
+// 关键在于整条收缩链每一层都得放开：外层 overflow 关掉 → 配置卡
+// flex:1 → 卡体 flex 列 → 选择区 flex 列 → 列表 flex:1。少任何一层的
+// min-height:0，列表都会被内容顶高，外层又冒出滚动条。
+// 只修饰配色方案分区：其他分区内容短，仍走上面的整页滚动。
+.settings-content--fill {
+  overflow-y: hidden;
+
+  .settings-row {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .settings-row-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
 .settings-title {
   margin: 0;
   font-size: 22px;
@@ -511,6 +534,24 @@
 
 // ---- 配色方案 ----
 
+// 选择区整体：撑满配置卡的剩余高度，把滚动收敛到列表内部。
+// flex 列 + min-height:0 —— 少了 min-height:0，flex 子项的最小尺寸
+// 默认是内容高度，列表会被卡片顶高、外层又冒出滚动条。
+.scheme-picker {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+// 大预览 / 分组 tab / 搜索框是固定 chrome，不参与高度分配；
+// 剩余空间全给方案列表。
+.scheme-preview,
+.scheme-tabs,
+.scheme-search {
+  flex: none;
+}
+
 // 当前方案的大预览 + 卡片内的小预览：模拟 ls 输出，纯 HTML 着色
 .scheme-preview {
   display: flex;
@@ -581,9 +622,14 @@
 
 .scheme-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 12px;
-  max-height: 520px;
+
+  // 吃满选择区剩余高度、内部滚动；原来写死 520px，占不满屏、
+  // 下方留一片空白，外层还要再滚一次
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
 
   // 滚动功能保留，滚动条藏掉（卡片本身够宽，滚动条太碍眼）

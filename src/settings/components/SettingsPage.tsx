@@ -313,7 +313,16 @@ export default function SettingsPage({
         </button>
       </aside>
 
-      <section className="settings-content">
+      <section
+        className={
+          // 配色方案分区整页占满、只有方案列表内部滚动 —— 见
+          // _settings.scss 的 .settings-content--fill（2026-10-15 用户要求）。
+          // 其余分区内容短，照旧走整页滚动。
+          section === "colorScheme"
+            ? "settings-content settings-content--fill"
+            : "settings-content"
+        }
+      >
         <h1 className="settings-title">
           {
             {
