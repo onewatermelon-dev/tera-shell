@@ -25,6 +25,7 @@ import {
   repairToolMessages,
   type AiChatEntry,
   type AiFileCall,
+  type AiFileEditCall,
   type AiPlanCall,
   type AiPlanStep,
   type AiQuestionCall,
@@ -35,6 +36,7 @@ import {
 import {
   isBlacklisted,
   parseAskToolArguments,
+  parseEditToolArguments,
   parseFileToolArguments,
   parsePlanToolArguments,
   parseToolArguments,
@@ -49,8 +51,19 @@ import { executeToolCard } from "./cardExec";
 import { cancelAiExec } from "./aiExec";
 import { executeFileCall } from "./fileTransfer";
 import {
+  readRemoteFileText,
+  writeRemoteFileText
+} from "./fileEditExec";
+import {
+  applyEdits,
+  buildHunks,
+  computeLineDiff,
+  FILE_DIFF_LIMIT
+} from "./fileDiff";
+import {
   TOOL_ASK_QUESTIONS,
   TOOL_DOWNLOAD_FILE,
+  TOOL_EDIT_FILE,
   TOOL_PROPOSE_PLAN,
   TOOL_RUN_COMMAND,
   TOOL_UPLOAD_FILE
@@ -96,7 +109,11 @@ export {
   trimToolOutput,
   parseWrappedOutput,
   type AiChatEntry,
+  type AiDiffHunk,
+  type AiDiffLine,
   type AiFileCall,
+  type AiFileEdit,
+  type AiFileEditCall,
   type AiPlanCall,
   type AiPlanStep,
   type AiQuestion,
@@ -115,10 +132,12 @@ export {
   isAbsoluteRemotePath,
   listOpenAiModels,
   parseAskToolArguments,
+  parseEditToolArguments,
   parseFileToolArguments,
   parsePlanToolArguments,
   parseToolArguments,
   planStepAutoRuns,
+  shellQuote,
   type AiModelOption,
   type PlanToolStep
 } from "./tools";
@@ -127,6 +146,7 @@ export {
   responsesAdapter,
   TOOL_ASK_QUESTIONS,
   TOOL_DOWNLOAD_FILE,
+  TOOL_EDIT_FILE,
   TOOL_PROPOSE_PLAN,
   TOOL_RUN_COMMAND,
   TOOL_UPLOAD_FILE
@@ -256,6 +276,11 @@ export function useAiChat(
       | {
           kind: "question";
           call: AiQuestionCall;
+          toolCallId: string;
+        }
+      | {
+          kind: "edit";
+          call: AiFileEditCall;
           toolCallId: string;
         }
     >
@@ -628,6 +653,54 @@ export function useAiChat(
             yielded = true;
             break;
           }
+          // ---- 文件改动：先出 diff 卡，批准后才写回 ----
+          // 与计划 / 反问同级：整次改动是一次用户决策，没有自动应用
+          // （开了「自动应用」也不放行 —— 无审查的写文件违背本卡片的
+          // 存在意义）
+          if (toolName === TOOL_EDIT_FILE) {
+            const editArgs =
+              parseEditToolArguments(
+                call.function.arguments
+              );
+            if (!editArgs) {
+              // 参数不合法也要回填 tool 消息，否则协议流断裂
+              messagesRef.current.push({
+                role: "tool",
+                content:
+                  "[参数不完整：需要绝对路径、说明，以及至少一处带原文与新文本的替换块。请重新给出]",
+                tool_call_id: toolCallId
+              });
+              continue;
+            }
+            const editCall: AiFileEditCall = {
+              id: toolCallId,
+              path: editArgs.path,
+              summary: editArgs.summary,
+              edits: editArgs.edits.map(edit => ({
+                old_string: edit.oldString,
+                new_string: edit.newString
+              })),
+              state: "loading"
+            };
+            console.info(
+              "[ai-edit] 待审查文件改动：",
+              editCall.path,
+              "替换块",
+              editCall.edits.length
+            );
+            setEntries(list => [
+              ...list,
+              { kind: "edit", call: editCall }
+            ]);
+            pendingRef.current.set(toolCallId, {
+              kind: "edit",
+              call: editCall,
+              toolCallId
+            });
+            setPendingCardId(toolCallId);
+            yielded = true;
+            break;
+          }
           const parsed = parseToolArguments(
             call.function.arguments
           );
@@ -979,6 +1052,32 @@ export function useAiChat(
           setPendingCardId(null);
           return;
         }
+        // 待批准的文件改动：作废挂起 + 标记取消 + 回填后放走，
+        // 文件不被改动。⚠️ 若改动正在写回中（applying），走的是上面的
+        // 流式分支：busy 为真、pendingCardId 为空 —— 那时的停止**不
+        // 取消写回**，`cat >` 先截断再写，掐断只会留下半个文件，比
+        // 让它写完更坏；写完卡片照常翻「已应用」。
+        if (held.kind === "edit") {
+          roundRef.current += 1;
+          stoppedRef.current = true;
+          pendingRef.current.delete(
+            pendingCardId
+          );
+          held.call.state = "cancelled";
+          setEntries(list => [...list]);
+          messagesRef.current.push({
+            role: "tool",
+            tool_call_id: held.call.id,
+            content:
+              "[用户停止了本轮，文件未被改动]"
+          });
+          resumeRef.current?.();
+          console.info(
+            `[ai] 停止：放弃待批准文件改动 ${pendingCardId}`
+          );
+          setPendingCardId(null);
+          return;
+        }
         pendingRef.current.delete(pendingCardId);
         // 判别联合：传输卡片走自己的执行器（skip 分支同样不弹框）
         const skipped =
@@ -1150,12 +1249,12 @@ export function useAiChat(
     ) => {
       const held = pendingRef.current.get(cardId);
       if (!held) return;
-      // 计划卡 / 反问卡不走 confirm：批准 / 取消 / 作答有专属入口
-      // （approvePlan / rejectPlan / answerQuestions / cancelQuestions），
-      // 这里挡掉误调并收窄联合类型
+      // 计划卡 / 反问卡 / 文件改动卡不走 confirm：批准 / 取消 / 作答 /
+      // 应用都有专属入口，这里挡掉误调并收窄联合类型
       if (
         held.kind === "plan" ||
-        held.kind === "question"
+        held.kind === "question" ||
+        held.kind === "edit"
       )
         return;
       // 计划里的单步：执行后只唤醒计划循环（approvePlan 正等在 settle
@@ -1241,10 +1340,11 @@ export function useAiChat(
     ) => {
       const held = pendingRef.current.get(cardId);
       if (!held) return;
-      // 同 confirm：计划卡 / 反问卡不走 skip
+      // 同 confirm：计划卡 / 反问卡 / 文件改动卡不走 skip
       if (
         held.kind === "plan" ||
-        held.kind === "question"
+        held.kind === "question" ||
+        held.kind === "edit"
       )
         return;
       // 计划里的单步：同 confirm 的 planStep 分支 —— 只唤醒计划循环，
@@ -1667,6 +1767,182 @@ export function useAiChat(
     [runLoop, beginRound]
   );
 
+  /**
+   * 加载一张文件改动卡的 diff：读服务端真实文件 → 本地应用替换块 →
+   * 算 diff。卡片挂载时经 onLoad 触发；幂等（只在 loading 态干活）。
+   *
+   * ⚠️ diff 一定基于**服务端刚读到的内容**算，不信模型上下文里的旧
+   * 版本：匹配不上就报错让人重来，不静默写坏文件。
+   */
+  const loadFileEdit = useCallback(
+    async (callId: string) => {
+      const held = pendingRef.current.get(callId);
+      if (!held || held.kind !== "edit") return;
+      const call = held.call;
+      if (call.state !== "loading") return;
+      try {
+        const content = await readRemoteFileText(
+          session,
+          call.path
+        );
+        // 二进制（含 NUL）不碰：diff 没有意义，写回更是灾难
+        if (content.includes("\0"))
+          throw new Error(
+            "二进制文件，无法生成 diff 预览"
+          );
+        if (content.length > FILE_DIFF_LIMIT)
+          throw new Error(
+            `文件过大（${content.length} 字符，上限 ${FILE_DIFF_LIMIT}），无法生成 diff 预览，请缩小改动范围或自行编辑`
+          );
+        const applied = applyEdits(
+          content,
+          call.edits.map(edit => ({
+            oldString: edit.old_string,
+            newString: edit.new_string
+          }))
+        );
+        if (!applied.ok)
+          throw new Error(applied.reason);
+        const diff = computeLineDiff(
+          content,
+          applied.newContent
+        );
+        call.oldContent = content;
+        call.newContent = applied.newContent;
+        call.hunks = buildHunks(diff.lines);
+        call.addedLines = diff.added;
+        call.removedLines = diff.removed;
+        call.state = "ready";
+      } catch (reason) {
+        call.state = "error";
+        call.error = String(reason);
+      }
+      setEntries(list => [...list]);
+    },
+    [session]
+  );
+
+  /**
+   * 批准一次文件改动：把算好的新内容写回服务器，然后续一轮模型总结。
+   *
+   * 写回走 exec 通道的 stdin 数据流（fileEditExec），与读文件串行在
+   * 同一把会话锁上，不会出现半成品。
+   */
+  const approveFileEdit = useCallback(
+    async (
+      callId: string,
+      option: AiModelOption | null
+    ) => {
+      const held = pendingRef.current.get(callId);
+      if (
+        !held ||
+        held.kind !== "edit" ||
+        // 只在 diff 就绪时可批准；error / 已应用的一律不接
+        held.call.state !== "ready"
+      )
+        return;
+      if (option) optionRef.current = option;
+      beginRound();
+      const round = (roundRef.current += 1);
+      setBusy(true);
+      pendingRef.current.delete(callId);
+      resumeRef.current?.();
+      const call = held.call;
+      call.state = "applying";
+      setEntries(list => [...list]);
+      try {
+        await writeRemoteFileText(
+          session,
+          call.path,
+          call.newContent ?? ""
+        );
+        call.state = "applied";
+        messagesRef.current.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: `[文件已按批准的 diff 修改：${call.path}（+${call.addedLines ?? 0} -${call.removedLines ?? 0} 行）]`
+        });
+        console.info(
+          "[ai-edit] 文件已写回：",
+          call.path
+        );
+      } catch (reason) {
+        call.state = "error";
+        call.error = String(reason);
+        // 写失败也要回填 tool 结果，否则协议流断裂
+        messagesRef.current.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: `[写入失败，文件未被改动：${String(reason)}]`
+        });
+      }
+      setEntries(list => [...list]);
+      try {
+        if (option) await runLoop(option);
+      } catch (reason) {
+        setError(String(reason));
+      } finally {
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        } else {
+          console.info(
+            `[ai-edit] 收尾跳过（第 ${round} 轮已被第 ${roundRef.current} 轮接管）`
+          );
+        }
+      }
+    },
+    [session, runLoop, beginRound]
+  );
+
+  /**
+   * 取消一次文件改动：文件不被改动，回填 tool 结果让模型回应用户。
+   */
+  const cancelFileEdit = useCallback(
+    async (
+      callId: string,
+      option: AiModelOption | null
+    ) => {
+      const held = pendingRef.current.get(callId);
+      if (!held || held.kind !== "edit") return;
+      if (option) optionRef.current = option;
+      beginRound();
+      const round = (roundRef.current += 1);
+      setBusy(true);
+      pendingRef.current.delete(callId);
+      resumeRef.current?.();
+      held.call.state = "cancelled";
+      setEntries(list => [...list]);
+      messagesRef.current.push({
+        role: "tool",
+        tool_call_id: held.call.id,
+        content:
+          "[用户取消了该文件修改，文件未被改动。可以询问原因或给出调整后的方案]"
+      });
+      console.info(
+        "[ai-edit] 用户取消文件改动：",
+        held.call.path
+      );
+      try {
+        if (option) await runLoop(option);
+      } catch (reason) {
+        setError(String(reason));
+      } finally {
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        } else {
+          console.info(
+            `[ai-edit] 取消收尾跳过（第 ${round} 轮已被第 ${roundRef.current} 轮接管）`
+          );
+        }
+      }
+    },
+    [runLoop, beginRound]
+  );
+
   return {
     entries,
     busy,
@@ -1689,6 +1965,12 @@ export function useAiChat(
     answerQuestions,
     /** 跳过一组反问（模型按默认方案继续） */
     cancelQuestions,
+    /** 加载文件改动卡的 diff（读真实文件 + 本地应用 + 算 diff） */
+    loadFileEdit,
+    /** 批准一次文件改动（写回服务器后续一轮总结） */
+    approveFileEdit,
+    /** 取消一次文件改动（文件不被改动） */
+    cancelFileEdit,
     clear: history.clear,
     restore: history.restore,
     renameCurrent: history.renameCurrent,

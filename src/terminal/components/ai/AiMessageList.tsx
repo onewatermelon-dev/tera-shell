@@ -18,6 +18,7 @@ import { ToolCard } from "./ToolCard";
 import { FileCard } from "./FileCard";
 import { AiPlanCard } from "./AiPlanCard";
 import { AiQuestionCard } from "./AiQuestionCard";
+import { AiFileDiffCard } from "./AiFileDiffCard";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import type {
   AiChatEntry,
@@ -56,6 +57,9 @@ export function AiMessageList({
   onRejectPlan,
   onAnswerQuestions,
   onCancelQuestions,
+  onLoadFileEdit,
+  onApproveFileEdit,
+  onCancelFileEdit,
   onAddMacroCommand
 }: {
   entries: AiChatEntry[];
@@ -85,6 +89,12 @@ export function AiMessageList({
   ) => void;
   /** 跳过一组反问 */
   onCancelQuestions: (callId: string) => void;
+  /** 加载文件改动卡的 diff（读真实文件 + 算 diff） */
+  onLoadFileEdit: (callId: string) => void;
+  /** 批准一次文件改动（写回服务器） */
+  onApproveFileEdit: (callId: string) => void;
+  /** 取消一次文件改动（文件不被改动） */
+  onCancelFileEdit: (callId: string) => void;
   /** 把卡片命令存为快捷宏 */
   onAddMacroCommand: (
     name: string,
@@ -227,6 +237,24 @@ export function AiMessageList({
               }
               onSkip={() =>
                 onCancelQuestions(entry.call.id)
+              }
+            />
+          );
+        }
+        if (entry.kind === "edit") {
+          return (
+            <AiFileDiffCard
+              key={entry.call.id}
+              call={entry.call}
+              busy={busy}
+              onLoad={() =>
+                onLoadFileEdit(entry.call.id)
+              }
+              onApprove={() =>
+                onApproveFileEdit(entry.call.id)
+              }
+              onCancel={() =>
+                onCancelFileEdit(entry.call.id)
               }
             />
           );

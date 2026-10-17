@@ -93,6 +93,9 @@ export default function AiPanel({
     rejectPlan,
     answerQuestions,
     cancelQuestions,
+    loadFileEdit,
+    approveFileEdit,
+    cancelFileEdit,
     clear,
     restore,
     renameCurrent,
@@ -263,6 +266,18 @@ export default function AiPanel({
               callId,
               selected
             );
+          }}
+          onLoadFileEdit={callId => {
+            void loadFileEdit(callId);
+          }}
+          onApproveFileEdit={callId => {
+            void approveFileEdit(
+              callId,
+              selected
+            );
+          }}
+          onCancelFileEdit={callId => {
+            void cancelFileEdit(callId, selected);
           }}
           onAddMacroCommand={onAddMacroCommand}
         />

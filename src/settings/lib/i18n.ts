@@ -299,6 +299,15 @@ const zhCN = {
   "ai.question.next": "下一题",
   "ai.question.progress":
     "第 {current}/{total} 题",
+  "ai.edit.title": "修改文件",
+  "ai.edit.loading":
+    "正在读取文件并生成改动对比…",
+  "ai.edit.applying": "正在写回文件…",
+  "ai.edit.apply": "应用改动",
+  "ai.edit.cancel": "取消",
+  "ai.edit.applied": "已应用",
+  "ai.edit.cancelled": "已取消",
+  "ai.edit.failed": "未应用",
 
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
@@ -885,6 +894,15 @@ const enUS: Record<MessageKey, string> = {
   "ai.question.next": "Next question",
   "ai.question.progress":
     "Question {current} of {total}",
+  "ai.edit.title": "File change",
+  "ai.edit.loading":
+    "Reading the file and building the diff…",
+  "ai.edit.applying": "Writing the file back…",
+  "ai.edit.apply": "Apply changes",
+  "ai.edit.cancel": "Cancel",
+  "ai.edit.applied": "Applied",
+  "ai.edit.cancelled": "Cancelled",
+  "ai.edit.failed": "Not applied",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",

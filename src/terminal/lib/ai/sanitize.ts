@@ -35,7 +35,8 @@ const TOOL_LABELS: Record<string, string> = {
   upload_local_file: "上传文件",
   download_remote_file: "下载文件",
   propose_plan: "执行计划",
-  ask_questions: "反问确认"
+  ask_questions: "反问确认",
+  edit_remote_file: "修改文件"
 };
 
 /** 依次要抹掉的标识符。 */

@@ -33,7 +33,8 @@ export type AiChatEntry =
   | { kind: "tool"; call: AiToolCall }
   | { kind: "file"; call: AiFileCall }
   | { kind: "plan"; call: AiPlanCall }
-  | { kind: "question"; call: AiQuestionCall };
+  | { kind: "question"; call: AiQuestionCall }
+  | { kind: "edit"; call: AiFileEditCall };
 
 /** 文件传输方向。 */
 export type FileTransferDirection =
@@ -155,6 +156,74 @@ export type AiQuestionCall = {
   /** 用户的作答（题目 id → 答案文本） */
   answers: Record<string, string>;
   state: "pending" | "answered" | "cancelled";
+};
+
+/** 一次文件改动里的一处查找/替换。 */
+export type AiFileEdit = {
+  /** 要被替换掉的原文（必须在文件里唯一匹配） */
+  old_string: string;
+  /** 替换成的新文本 */
+  new_string: string;
+};
+
+/** diff 里的一行：上下文 / 删除 / 新增。 */
+export type AiDiffLine = {
+  kind: "context" | "remove" | "add";
+  /** 行文本（不含换行） */
+  text: string;
+  /** 旧文件行号（1 起；新增行为 undefined） */
+  oldLine?: number;
+  /** 新文件行号（1 起；删除行为 undefined） */
+  newLine?: number;
+};
+
+/** 一个变更块（含上下文行），渲染成一个 hunk。 */
+export type AiDiffHunk = {
+  lines: AiDiffLine[];
+  /** 旧文件里的起始行号（展示用） */
+  oldStart: number;
+  /** 新文件里的起始行号（展示用） */
+  newStart: number;
+};
+
+/**
+ * 一次文件改动卡片（先出 diff、用户批准后才写回）。
+ *
+ * 与命令卡片的本质区别：写动作发生在**用户批准之后**，卡片先把
+ * 「服务端真实内容 + 模型提议的替换」算成 diff 给人看。客户端读真实
+ * 文件本地应用 edits，不信模型给的旧文本 —— 模型上下文里的文件版本
+ * 可能已经过期，匹配不上就明说，不静默写坏文件。
+ *
+ * loading=读文件中，ready=diff 待批准，applying=写回中，
+ * error=读文件/匹配/写回失败，applied=已写回，cancelled=用户取消。
+ */
+export type AiFileEditCall = {
+  id: string;
+  /** 目标文件（服务器上的绝对路径） */
+  path: string;
+  /** 模型给的改动说明（展示在 diff 上方） */
+  summary: string;
+  edits: AiFileEdit[];
+  state:
+    | "loading"
+    | "ready"
+    | "applying"
+    | "error"
+    | "applied"
+    | "cancelled";
+  /** 服务端读到的真实原文（ready 后有值） */
+  oldContent?: string;
+  /** 应用 edits 后的新内容（ready 后有值） */
+  newContent?: string;
+  /** diff 分块（ready 后有值；超大改动只给统计不给 hunk） */
+  hunks?: AiDiffHunk[];
+  /** 改动统计（ready 后有值） */
+  addedLines?: number;
+  removedLines?: number;
+  /** 读文件 / 匹配 / 写回失败的原因 */
+  error?: string;
+  /** 文件是否过大（超过预览上限）—— 仍允许应用，但 diff 只给统计 */
+  tooLarge?: boolean;
 };
 
 /** OpenAI Chat Completions 协议消息（引擎内部流转用）。 */

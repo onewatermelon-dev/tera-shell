@@ -175,19 +175,24 @@ export function directoryFromPrompt(
   );
 }
 
+/** 单引号安全包裹：路径/文本进 shell 前必用（内嵌单引号按 '\'' 转义）。 */
+export function shellQuote(
+  value: string
+): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /** 安全地把提示符目录拼进独立 SSH 命令。 */
 export function commandInDirectory(
   directory: string,
   command: string
 ): string {
-  const quote = (value: string) =>
-    `'${value.replace(/'/g, `'\\''`)}'`;
   const path =
     directory === "~"
       ? '"$HOME"'
       : directory.startsWith("~/")
-        ? `"$HOME"/${quote(directory.slice(2))}`
-        : quote(directory);
+        ? `"$HOME"/${shellQuote(directory.slice(2))}`
+        : shellQuote(directory);
   return `cd -- ${path} || exit 1\n${command}`;
 }
 
@@ -196,6 +201,9 @@ export const PLAN_STEP_LIMIT = 12;
 
 /** 反问题数上限：一题一屏，题多了用户会烦；默认放 5 题以内。 */
 export const ASK_QUESTION_LIMIT = 5;
+
+/** 单次文件改动的查找/替换块上限：一次卡里堆太多处人就懒得审了。 */
+export const EDIT_BLOCK_LIMIT = 20;
 
 /** 单题候选项上限：加上客户端的「其他」项，一屏放 7 个以内。 */
 export const ASK_OPTION_LIMIT = 6;
@@ -347,6 +355,69 @@ export function parseAskToolArguments(
     }
     if (questions.length === 0) return null;
     return { title, questions };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 解析 edit_remote_file 工具的参数：绝对路径 + 说明 + 至少一处替换块。
+ *
+ * ⚠️ 任何一处缺 old_string / new_string → 整份作废（返回 null）：半套
+ * 替换应用到文件里就是改坏。路径必须是绝对路径（同文件传输的规矩）。
+ */
+export function parseEditToolArguments(
+  raw: string
+): {
+  path: string;
+  summary: string;
+  edits: {
+    oldString: string;
+    newString: string;
+  }[];
+} | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      unknown
+    >;
+    const path =
+      typeof parsed.path === "string"
+        ? parsed.path.trim()
+        : "";
+    if (!path) return null;
+    if (!isAbsoluteRemotePath(path)) return null;
+    const summary =
+      typeof parsed.summary === "string"
+        ? parsed.summary.trim()
+        : "";
+    if (!Array.isArray(parsed.edits)) return null;
+    const edits: {
+      oldString: string;
+      newString: string;
+    }[] = [];
+    for (const item of parsed.edits) {
+      if (!item || typeof item !== "object")
+        return null;
+      const edit = item as Record<
+        string,
+        unknown
+      >;
+      const oldString =
+        typeof edit.old_string === "string"
+          ? edit.old_string
+          : "";
+      const newString =
+        typeof edit.new_string === "string"
+          ? edit.new_string
+          : "";
+      // 空 old_string 会匹配到文件任意位置（indexOf("")=0），必须挡掉
+      if (!oldString || !newString) return null;
+      edits.push({ oldString, newString });
+      if (edits.length >= EDIT_BLOCK_LIMIT) break;
+    }
+    if (edits.length === 0) return null;
+    return { path, summary, edits };
   } catch {
     return null;
   }

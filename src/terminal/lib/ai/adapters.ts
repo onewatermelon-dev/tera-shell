@@ -177,6 +177,50 @@ const ASK_QUESTIONS_PARAMETERS = {
   required: ["title", "questions"]
 };
 
+/**
+ * edit_remote_file 工具的 JSON Schema。
+ *
+ * 改服务器上的文件：模型给出路径与若干「查找/替换」块，客户端读真实
+ * 文件、本地应用、算出 diff 给用户看，批准后才写回。模型**不需要**
+ * （也不允许）给出整份新文件内容 —— 那既是 token 浪费，也容易在
+ * 长文件上编造。
+ */
+const EDIT_FILE_PARAMETERS = {
+  type: "object",
+  properties: {
+    path: {
+      type: "string",
+      description:
+        "要修改的文件（服务器上的绝对路径）"
+    },
+    summary: {
+      type: "string",
+      description: "一句话说明这次改什么"
+    },
+    edits: {
+      type: "array",
+      description:
+        "查找/替换块（1-20 处）；每个 old_string 必须在文件里唯一匹配",
+      items: {
+        type: "object",
+        properties: {
+          old_string: {
+            type: "string",
+            description:
+              "要被替换的原文（原样拷贝，含缩进）"
+          },
+          new_string: {
+            type: "string",
+            description: "替换成的新文本"
+          }
+        },
+        required: ["old_string", "new_string"]
+      }
+    }
+  },
+  required: ["path", "summary", "edits"]
+};
+
 /** 四个工具的名字：前端按 `function.name` 分派，三处注入必须一致。 */
 export const TOOL_RUN_COMMAND = "run_command";
 export const TOOL_UPLOAD_FILE =
@@ -185,6 +229,7 @@ export const TOOL_DOWNLOAD_FILE =
   "download_remote_file";
 export const TOOL_PROPOSE_PLAN = "propose_plan";
 export const TOOL_ASK_QUESTIONS = "ask_questions";
+export const TOOL_EDIT_FILE = "edit_remote_file";
 
 /** 模型的最大输出 Token：取模型配置，没填给 4096 兜底。 */
 function maxTokensOf(
@@ -291,6 +336,15 @@ const openAiAdapter: FormatAdapter = {
           description:
             "信息不足以继续时向用户反问（逐题给出候选项，用户点选或填「其他」）。只在缺了信息就没法正确执行时才用；能合理默认的就不要问",
           parameters: ASK_QUESTIONS_PARAMETERS
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: TOOL_EDIT_FILE,
+          description:
+            "修改服务器上的文件：给出路径与「查找/替换」块，用户会在 diff 卡上审查并批准后才写回。不要给出整份文件内容",
+          parameters: EDIT_FILE_PARAMETERS
         }
       }
     ],
@@ -459,6 +513,12 @@ export const anthropicAdapter: FormatAdapter = {
           description:
             "信息不足以继续时向用户反问（逐题给出候选项，用户点选或填「其他」）。只在缺了信息就没法正确执行时才用；能合理默认的就不要问",
           input_schema: ASK_QUESTIONS_PARAMETERS
+        },
+        {
+          name: TOOL_EDIT_FILE,
+          description:
+            "修改服务器上的文件：给出路径与「查找/替换」块，用户会在 diff 卡上审查并批准后才写回。不要给出整份文件内容",
+          input_schema: EDIT_FILE_PARAMETERS
         }
       ],
       tool_choice: { type: "auto" }
@@ -614,6 +674,13 @@ export const responsesAdapter: FormatAdapter = {
           description:
             "信息不足以继续时向用户反问（逐题给出候选项，用户点选或填「其他」）。只在缺了信息就没法正确执行时才用；能合理默认的就不要问",
           parameters: ASK_QUESTIONS_PARAMETERS
+        },
+        {
+          type: "function",
+          name: TOOL_EDIT_FILE,
+          description:
+            "修改服务器上的文件：给出路径与「查找/替换」块，用户会在 diff 卡上审查并批准后才写回。不要给出整份文件内容",
+          parameters: EDIT_FILE_PARAMETERS
         }
       ],
       tool_choice: "auto"
