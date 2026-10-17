@@ -9,7 +9,8 @@
  * queue / protocol / tools / adapters / stream / cardExec，React 状态
  * 按簇拆到 useAiQueue（排队队列）与 useAiHistory（历史与标题），这里只留
  * useAiChat 这个 hook 的核心：工具循环（runLoop）与发送 / 停止 / 确认 /
- * 跳过，并原样再导出此前的公开 API —— 调用方（AiPanel、aiExplain、测试等）
+ * 跳过，以及多步计划的批准 / 取消 / 逐步执行（approvePlan / rejectPlan），
+ * 并原样再导出此前的公开 API —— 调用方（AiPanel、aiExplain、测试等）
  * 的导入路径无需改动。
  */
 import {
@@ -24,6 +25,8 @@ import {
   repairToolMessages,
   type AiChatEntry,
   type AiFileCall,
+  type AiPlanCall,
+  type AiPlanStep,
   type AiToolCall,
   type ExecCardMode,
   type ProtocolMessage
@@ -31,7 +34,9 @@ import {
 import {
   isBlacklisted,
   parseFileToolArguments,
+  parsePlanToolArguments,
   parseToolArguments,
+  planStepAutoRuns,
   type AiModelOption
 } from "./tools";
 import {
@@ -39,9 +44,12 @@ import {
   cancelChatStream
 } from "./stream";
 import { executeToolCard } from "./cardExec";
+import { cancelAiExec } from "./aiExec";
 import { executeFileCall } from "./fileTransfer";
 import {
   TOOL_DOWNLOAD_FILE,
+  TOOL_PROPOSE_PLAN,
+  TOOL_RUN_COMMAND,
   TOOL_UPLOAD_FILE
 } from "./adapters";
 import {
@@ -86,6 +94,8 @@ export {
   parseWrappedOutput,
   type AiChatEntry,
   type AiFileCall,
+  type AiPlanCall,
+  type AiPlanStep,
   type AiToolCall,
   type ExecCardMode,
   type FileTransferDirection,
@@ -100,15 +110,19 @@ export {
   isAbsoluteRemotePath,
   listOpenAiModels,
   parseFileToolArguments,
+  parsePlanToolArguments,
   parseToolArguments,
-  type AiModelOption
+  planStepAutoRuns,
+  type AiModelOption,
+  type PlanToolStep
 } from "./tools";
 export {
   anthropicAdapter,
   responsesAdapter,
   TOOL_DOWNLOAD_FILE,
-  TOOL_UPLOAD_FILE,
-  TOOL_RUN_COMMAND
+  TOOL_PROPOSE_PLAN,
+  TOOL_RUN_COMMAND,
+  TOOL_UPLOAD_FILE
 } from "./adapters";
 export {
   cancelChatStream,
@@ -203,6 +217,10 @@ export function useAiChat(
    *
    * 用判别联合而不是两个 Map：一次只挂起一张卡，两个 Map 意味着 confirm /
    * skip 里要「先查命令表、没有再查传输表」，漏一处就是点按钮没反应。
+   *
+   * `plan` 是多步计划卡（批准/取消整份计划）；工具条目上的 `planStep` +
+   * `settle` 是计划里的单步命令 —— 执行完不续跑 runLoop，只唤醒计划循环
+   * （见 approvePlan 的注释）。
    */
   const pendingRef = useRef<
     Map<
@@ -211,14 +229,53 @@ export function useAiChat(
           kind: "tool";
           call: AiToolCall;
           toolCallId: string;
+          /** 计划里的单步：确认/跳过后只唤醒计划循环，不收尾整轮 */
+          planStep?: boolean;
+          /** 计划里这条步骤的展示对象（确认后先置 running 再执行） */
+          step?: AiPlanStep;
+          /** 唤醒计划循环；入参 true = 该步骤被跳过/中止 */
+          settle?: (skipped: boolean) => void;
         }
       | {
           kind: "file";
           call: AiFileCall;
           toolCallId: string;
         }
+      | {
+          kind: "plan";
+          call: AiPlanCall;
+          toolCallId: string;
+        }
     >
   >(new Map());
+  /**
+   * 计划执行中止标记（用户点停止 / 切历史 / 关面板）。
+   *
+   * 计划循环每步之间查它；单步确认挂起时由 stop 置位，executeCard 的
+   * skip 分支跑完后循环自然收摊。
+   */
+  const planAbortRef = useRef(false);
+  /** 是否有计划正在执行（stop 据此区分「掐流」与「停计划」）。 */
+  const planRunningRef = useRef(false);
+  /**
+   * 计划里正在执行的那一步。
+   *
+   * 自动执行的步骤没有挂起卡片，stop 时靠它找到该把哪一行标成
+   * 「已停止」—— 不标的话，后端命令取消前（最长 1 秒）界面毫无
+   * 反馈，用户以为停止没生效。
+   */
+  const planCurrentStepRef =
+    useRef<AiPlanStep | null>(null);
+  /**
+   * 正在后台执行的那条命令的 exec id。
+   *
+   * 停止时交给后端 `ai_exec_cancel` 置取消标志 —— 否则前端停了，
+   * 后端还在 read 上堵到命令结束或超时（用户看到「点了暂停，
+   * 命令还在执行中」）。
+   */
+  const runningExecIdRef = useRef<string | null>(
+    null
+  );
   const [error, setError] = useState("");
   /** 正在流式生成的助手消息（null = 没有进行中的流） */
   const [stream, setStream] = useState<{
@@ -238,10 +295,18 @@ export function useAiChat(
     setStream(null);
     roundRef.current += 1;
     clearQueued();
+    // 在跑的计划循环收摊：否则它会继续往已切走的话题里写结果
+    planAbortRef.current = true;
   }, [clearQueued]);
 
   /** 清空对话还要释放挂起的卡片与循环句柄（恢复不清，见 useAiHistory）。 */
   const releasePending = useCallback(() => {
+    // 计划里挂起的单步：先唤醒再清表，否则计划循环永远等在 settle 上
+    for (const held of pendingRef.current.values())
+      if (held.kind === "tool" && held.planStep) {
+        planAbortRef.current = true;
+        held.settle?.(true);
+      }
     pendingRef.current.clear();
     resumeRef.current = null;
   }, []);
@@ -265,19 +330,33 @@ export function useAiChat(
       mode: ExecCardMode = "background",
       skip = false
     ) => {
-      const content = await executeToolCard(
-        call,
-        toolCallId,
-        mode,
-        skip,
-        session,
-        () => setEntries(list => [...list])
-      );
-      messagesRef.current.push({
-        role: "tool",
-        content,
-        tool_call_id: toolCallId
-      });
+      // 后台执行登记 exec id：停止时靠它让后端掐掉这条命令
+      // （终端模式写进 PTY，后端没有可取消的通道，不登记）
+      const execId =
+        mode === "background" && !skip
+          ? crypto.randomUUID()
+          : null;
+      if (execId)
+        runningExecIdRef.current = execId;
+      try {
+        const content = await executeToolCard(
+          call,
+          toolCallId,
+          mode,
+          skip,
+          session,
+          () => setEntries(list => [...list]),
+          execId ?? undefined
+        );
+        messagesRef.current.push({
+          role: "tool",
+          content,
+          tool_call_id: toolCallId
+        });
+      } finally {
+        if (runningExecIdRef.current === execId)
+          runningExecIdRef.current = null;
+      }
     },
     [session]
   );
@@ -437,6 +516,61 @@ export function useAiChat(
             yielded = true;
             break;
           }
+          // ---- 多步计划：只登记不执行，等用户在计划卡上批准 ----
+          // 与文件传输卡片同等级别：整份计划是一次用户决策，不参与
+          // 自动执行 / 自动应用开关（那两只管单条命令）
+          if (toolName === TOOL_PROPOSE_PLAN) {
+            const planArgs =
+              parsePlanToolArguments(
+                call.function.arguments
+              );
+            if (!planArgs) {
+              // 参数不合法也要回填 tool 消息，否则协议流断裂
+              messagesRef.current.push({
+                role: "tool",
+                content:
+                  "[计划参数不完整：需要标题、摘要，以及至少一步带标题和命令的步骤（最多 12 步）。请重新给出完整计划]",
+                tool_call_id: toolCallId
+              });
+              continue;
+            }
+            const plan: AiPlanCall = {
+              id: toolCallId,
+              title: planArgs.title,
+              summary: planArgs.summary,
+              steps: planArgs.steps.map(
+                (step, index) => ({
+                  id: `${toolCallId}#${index}`,
+                  title: step.title,
+                  ...(step.detail
+                    ? { detail: step.detail }
+                    : {}),
+                  command: step.command,
+                  isReadOnly: step.isReadOnly,
+                  state: "pending" as const
+                })
+              ),
+              state: "pending"
+            };
+            console.info(
+              "[ai-plan] 待批准计划：",
+              plan.title,
+              "步骤数",
+              plan.steps.length
+            );
+            setEntries(list => [
+              ...list,
+              { kind: "plan", call: plan }
+            ]);
+            pendingRef.current.set(toolCallId, {
+              kind: "plan",
+              call: plan,
+              toolCallId
+            });
+            setPendingCardId(toolCallId);
+            yielded = true;
+            break;
+          }
           const parsed = parseToolArguments(
             call.function.arguments
           );
@@ -514,6 +648,15 @@ export function useAiChat(
             call =>
               pendingRef.current.has(call.id)
           );
+          // 记住是谁把循环挂起的。唤醒后**只在 pendingCardId 仍指着
+          // 它时才清**：approvePlan 接手计划后会把 pendingCardId 改指
+          // 成计划里的某一步（同步set 完才 await），而本续跑是微任务、
+          // 排在那之后 —— 无条件清会把那个标记擦掉，症状是步骤一直
+          // 「待执行」、执行按钮根本不渲染（2026-10-17 用户报）。
+          // confirm / stop 的路径不受影响：那两条里 pendingCardId
+          // 未被改指，条件成立照旧清。
+          const yieldedCallId =
+            calls[yieldedIndex]?.id;
           for (const call of calls.slice(
             yieldedIndex + 1
           )) {
@@ -532,7 +675,12 @@ export function useAiChat(
           await new Promise<void>(resolve => {
             resumeRef.current = resolve;
           });
-          setPendingCardId(null);
+          // 条件清（理由见上面的 yieldedCallId 注释）
+          setPendingCardId(current =>
+            current === yieldedCallId
+              ? null
+              : current
+          );
           return;
         }
       }
@@ -657,6 +805,68 @@ export function useAiChat(
    * 那几条不该被丢掉。空闲后队列 effect 会把它们接着发出去。
    */
   const stop = useCallback(() => {
+    // 计划执行中：没有 HTTP 流可掐（步骤走 exec 通道或在等单步确认），
+    // 要停的是计划本身 —— 置中止标记，当前步骤落听后循环自然收摊
+    if (planRunningRef.current) {
+      planAbortRef.current = true;
+      stoppedRef.current = true;
+      // 夺取令牌：approvePlan 的 finally 见到非当轮会跳过收尾，
+      // busy 由这里负责置回（计划在跑时 busy 归它持有）
+      roundRef.current += 1;
+      setBusy(false);
+      // 正在后台跑的那条命令：让后端置取消标志、关 exec 通道。
+      // 少了它，前端停了界面，命令还在服务器上跑（2026-10-17 用户报
+      // 「点击了暂停，命令还在执行中」）
+      const execId = runningExecIdRef.current;
+      if (execId) {
+        runningExecIdRef.current = null;
+        console.info(
+          "[ai] 停止：取消后台命令",
+          execId
+        );
+        void cancelAiExec(execId);
+      }
+      const heldId = pendingCardId;
+      setPendingCardId(null);
+      // 在跑的步骤（自动执行路径没有挂起卡片）立刻标成已停止：
+      // 后端取消也要一点时间，这期间界面必须先反映用户意图
+      const running = planCurrentStepRef.current;
+      if (running) {
+        running.state = "skipped";
+        running.error = "用户停止了计划";
+        planCurrentStepRef.current = null;
+      }
+      if (heldId) {
+        const stepHeld =
+          pendingRef.current.get(heldId);
+        if (
+          stepHeld?.kind === "tool" &&
+          stepHeld.planStep
+        ) {
+          pendingRef.current.delete(heldId);
+          // 等确认中的步骤同样当场标停
+          if (stepHeld.step) {
+            stepHeld.step.state = "skipped";
+            stepHeld.step.error =
+              "用户停止了计划";
+          }
+          void executeCard(
+            stepHeld.call,
+            stepHeld.toolCallId,
+            "background",
+            true
+          ).then(() => {
+            stepHeld.call.error =
+              "用户停止了计划";
+            setEntries(list => [...list]);
+            stepHeld.settle?.(true);
+          });
+        }
+      }
+      setEntries(list => [...list]);
+      console.info("[ai] 停止：中止计划执行");
+      return;
+    }
     // B. 等确认：没有流可掐，改为收掉挂起本身
     if (!busy && pendingCardId) {
       const held = pendingRef.current.get(
@@ -667,6 +877,29 @@ export function useAiChat(
       roundRef.current += 1;
       stoppedRef.current = true;
       if (held) {
+        // 等批准的计划：没有循环在跑（busy 是 false），作废挂起、
+        // 标记取消、回填 tool 结果后放走 runLoop 即可，不执行任何步骤
+        if (held.kind === "plan") {
+          roundRef.current += 1;
+          stoppedRef.current = true;
+          pendingRef.current.delete(
+            pendingCardId
+          );
+          held.call.state = "cancelled";
+          setEntries(list => [...list]);
+          messagesRef.current.push({
+            role: "tool",
+            tool_call_id: held.call.id,
+            content:
+              "[用户停止了本轮，该计划未执行]"
+          });
+          resumeRef.current?.();
+          console.info(
+            `[ai] 停止：放弃待批准计划 ${pendingCardId}`
+          );
+          setPendingCardId(null);
+          return;
+        }
         pendingRef.current.delete(pendingCardId);
         // 判别联合：传输卡片走自己的执行器（skip 分支同样不弹框）
         const skipped =
@@ -706,6 +939,17 @@ export function useAiChat(
     roundRef.current += 1;
     setBusy(false);
     setStream(null);
+    // 工具循环可能正卡在后台命令上（自动执行的命令卡）：没有流可掐，
+    // 但要取消那条命令 —— 否则前端停了，服务器上还在跑
+    const execId = runningExecIdRef.current;
+    if (execId) {
+      runningExecIdRef.current = null;
+      console.info(
+        "[ai] 停止：取消后台命令",
+        execId
+      );
+      void cancelAiExec(execId);
+    }
     const streamId = streamIdRef.current;
     streamIdRef.current = null;
     if (streamId) void cancelChatStream(streamId);
@@ -826,7 +1070,37 @@ export function useAiChat(
       mode: ExecCardMode = "background"
     ) => {
       const held = pendingRef.current.get(cardId);
-      if (!held || !option) return;
+      if (!held) return;
+      // 计划卡不走 confirm：批准 / 取消有专属入口（approvePlan /
+      // rejectPlan），这里挡掉误调并收窄联合类型
+      if (held.kind === "plan") return;
+      // 计划里的单步：执行后只唤醒计划循环（approvePlan 正等在 settle
+      // 上），不认领轮次、不碰 busy、不另起 runLoop —— 计划还没跑完，
+      // 收尾归 approvePlan 统一做。少了这个分支，下面的 setBusy(false)
+      // 会让计划执行到一半底部发送键就恢复可点，新消息趁虚而入。
+      // ⚠️ 必须在 option 守卫**之前**：步骤执行走 exec 通道，不需要
+      // 模型选项；selected 为 null（存的模型 id 对不上任何供应商）时
+      // 被守卫挡掉，settle 永远不来 —— 症状就是步骤一直「执行中」。
+      if (held.kind === "tool" && held.planStep) {
+        if (option) optionRef.current = option;
+        beginRound();
+        pendingRef.current.delete(cardId);
+        // 先置 running 再执行：后台命令最长要跑 60s，这期间步骤行
+        // 得显示「执行中…」而不是「等待确认」—— 否则用户以为点了
+        // 没反应（2026-10-17 用户报「无法执行步骤」的观感之一）
+        if (held.step) {
+          held.step.state = "running";
+          setEntries(list => [...list]);
+        }
+        await executeCard(
+          held.call,
+          held.toolCallId,
+          mode
+        );
+        held.settle?.(false);
+        return;
+      }
+      if (!option) return;
       // 确认也算一轮"正在跑"，队列续发接力同一个模型
       optionRef.current = option;
       // 用户主动确认 = 想让这轮继续，清掉停止标记
@@ -882,7 +1156,27 @@ export function useAiChat(
       option: AiModelOption | null
     ) => {
       const held = pendingRef.current.get(cardId);
-      if (!held || !option) return;
+      if (!held) return;
+      // 同 confirm：计划卡不走 skip
+      if (held.kind === "plan") return;
+      // 计划里的单步：同 confirm 的 planStep 分支 —— 只唤醒计划循环，
+      // 跳过的步骤由计划循环标记后继续下一步。⚠️ 同样要在 option
+      // 守卫之前（跳过一步不需要模型），否则 selected 为 null 时
+      // 点「跳过」没反应，计划卡死在这步
+      if (held.kind === "tool" && held.planStep) {
+        if (option) optionRef.current = option;
+        beginRound();
+        pendingRef.current.delete(cardId);
+        await executeCard(
+          held.call,
+          held.toolCallId,
+          "background",
+          true
+        );
+        held.settle?.(true);
+        return;
+      }
+      if (!option) return;
       optionRef.current = option;
       // 同 confirm：用户主动跳过 = 想让这轮继续
       beginRound();
@@ -928,6 +1222,251 @@ export function useAiChat(
     ]
   );
 
+  /**
+   * 批准执行一个多步计划。
+   *
+   * 与 confirm 的关键差别：confirm 收尾后自己续跑 runLoop，而计划的每一步
+   * 可能还要单独等用户确认（读写步骤未开「自动应用」、或命中黑名单时），
+   * 所以收尾必须留在计划全部跑完之后统一做 —— 否则中间某步 confirm 的
+   * `setBusy(false)` 会把 busy 冲掉，计划执行到一半底部发送键就恢复可点。
+   *
+   * 协议流两手准备：
+   * ① 立刻回填计划自己的 tool 结果（批准即答复，模型不用干等）；
+   * ② 把步骤落成一条 assistant `tool_calls` 消息（每步一条 run_command，
+   *   id 与步骤卡片一致）—— 否则 executeCard 回填的单步 tool 消息是
+   *   孤儿，会被 repairToolMessages 丢掉，模型看不到单步结果。
+   */
+  const approvePlan = useCallback(
+    async (
+      callId: string,
+      option: AiModelOption | null
+    ) => {
+      const held = pendingRef.current.get(callId);
+      if (!held || held.kind !== "plan") return;
+      // ⚠️ 不因 option 为 null 就 return：步骤走 exec 通道，不需要
+      // 模型；selected 为 null（存的模型 id 对不上任何供应商）时静默
+      // return 会让用户点了「开始执行」毫无反应。没有模型只是跑完
+      // 没人总结，执行本身照常
+      if (option) optionRef.current = option;
+      // 用户主动批准 = 想让这轮继续，清掉停止标记
+      beginRound();
+      // 认领本轮：被唤醒的旧 runLoop 会立刻 return 并跑它自己的
+      // finally，没有令牌的话那里的 setBusy(false) 会把下面冲掉
+      const round = (roundRef.current += 1);
+      setBusy(true);
+      pendingRef.current.delete(callId);
+      // 放走挂起的 runLoop（同 confirm 的 resumeRef 用法）
+      resumeRef.current?.();
+      planAbortRef.current = false;
+      planRunningRef.current = true;
+      const plan = held.call;
+      plan.state = "running";
+      setEntries(list => [...list]);
+      try {
+        messagesRef.current.push({
+          role: "tool",
+          tool_call_id: plan.id,
+          content:
+            "[用户已批准该计划，开始按步骤执行]"
+        });
+        messagesRef.current.push({
+          role: "assistant",
+          content: null,
+          tool_calls: plan.steps.map(step => ({
+            id: step.id,
+            type: "function" as const,
+            function: {
+              name: TOOL_RUN_COMMAND,
+              arguments: JSON.stringify({
+                command: step.command,
+                question: step.title,
+                is_read_only: step.isReadOnly
+              })
+            }
+          }))
+        });
+        const {
+          autoExecute,
+          autoApply,
+          blacklist
+        } = runOptionsRef.current;
+        for (
+          let index = 0;
+          index < plan.steps.length;
+          index += 1
+        ) {
+          const step = plan.steps[index];
+          // 下标访问在 strict 下可能 undefined：越界即止（防御，
+          // 正常流程走不到）
+          if (!step) break;
+          if (planAbortRef.current) break;
+          // 记下当前步骤：停止时（自动执行中没有挂起卡片）靠它把
+          // 这一行立刻标成已停止
+          planCurrentStepRef.current = step;
+          // 临时包成 AiToolCall 走既有执行通道（cardExec 管状态、
+          // 输出截断与协议回填），计划卡自己渲染步骤，不另发条目
+          const card: AiToolCall = {
+            id: step.id,
+            command: step.command,
+            question: step.title,
+            isReadOnly: step.isReadOnly,
+            state: "pending"
+          };
+          console.info(
+            "[ai-plan] 执行步骤",
+            index + 1,
+            step.command,
+            "isReadOnly:",
+            step.isReadOnly
+          );
+          let skipped = false;
+          if (
+            planStepAutoRuns(step, {
+              autoExecute,
+              autoApply,
+              blacklist
+            })
+          ) {
+            // 只有**真的开始跑**才置 running —— 等确认期间保持
+            // pending（卡片显示「等待确认」）。提前置 running 会让
+            // 用户以为已在执行，干等着不动（2026-10-17 用户报
+            // 「一直显示执行中」）。
+            step.state = "running";
+            setEntries(list => [...list]);
+            await executeCard(card, step.id);
+          } else {
+            // 未开自动执行 / 应用（或命中黑名单）：这一步单独等确认，
+            // 复用 pendingRef + settle —— confirm / skip 的 planStep
+            // 分支执行完只唤醒这里，不碰 busy 与 runLoop
+            let settleStep: (
+              skipped: boolean
+            ) => void = () => {};
+            const settled = new Promise<boolean>(
+              resolve => {
+                settleStep = resolve;
+              }
+            );
+            pendingRef.current.set(step.id, {
+              kind: "tool",
+              call: card,
+              toolCallId: step.id,
+              planStep: true,
+              step,
+              settle: settleStep
+            });
+            setPendingCardId(step.id);
+            skipped = await settled;
+          }
+          // 摘掉这一步的挂起标记：不清的话 pendingCardId 一直指着
+          // 已完成的步骤 —— 发送键永远禁用，步骤行还挂着「执行 / 跳过」
+          setPendingCardId(current =>
+            current === step.id ? null : current
+          );
+          if (planAbortRef.current) {
+            // 已停止：step 状态被 stop 当场标好了（skipped + 原因），
+            // 不用迟到的执行结果覆盖 —— 后端命令取消也要一点时间，
+            // 其结果与「用户已停止」无关
+            planCurrentStepRef.current = null;
+            setEntries(list => [...list]);
+            break;
+          }
+          planCurrentStepRef.current = null;
+          // 卡片执行结果搬回步骤（供计划卡渲染）
+          step.state = skipped
+            ? "skipped"
+            : card.state === "done"
+              ? "done"
+              : "failed";
+          step.exitCode = card.exitCode;
+          step.error = card.error;
+          step.stdout = card.stdout;
+          step.stderr = card.stderr;
+          setEntries(list => [...list]);
+        }
+        const aborted = planAbortRef.current;
+        plan.state = aborted ? "aborted" : "done";
+        setEntries(list => [...list]);
+        console.info(
+          "[ai-plan] 计划结束：",
+          plan.title,
+          plan.state
+        );
+        // 中止（用户点了停止）不续跑：stoppedRef 会挡住工具循环，
+        // 剩下的步骤由 repairToolMessages 补占位。
+        // 没有可用模型时同样不续跑（executeCard 已把结果写进协议流，
+        // 下次有模型的会话接着问即可）
+        if (!aborted && option)
+          await runLoop(option);
+      } catch (reason) {
+        setError(String(reason));
+      } finally {
+        planRunningRef.current = false;
+        planCurrentStepRef.current = null;
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        } else {
+          console.info(
+            `[ai-plan] 收尾跳过（第 ${round} 轮已被第 ${roundRef.current} 轮接管）`
+          );
+        }
+      }
+    },
+    [executeCard, runLoop, beginRound]
+  );
+
+  /**
+   * 取消一个待批准的计划：回填 tool 结果后让模型回应用户。
+   *
+   * 不执行任何命令；模型收到取消反馈后会询问原因或给出调整后的方案。
+   */
+  const rejectPlan = useCallback(
+    async (
+      callId: string,
+      option: AiModelOption | null
+    ) => {
+      const held = pendingRef.current.get(callId);
+      if (!held || held.kind !== "plan") return;
+      // 同 approvePlan：没有模型也允许取消（标记 + 回填即可，
+      // 问「为什么取消」留给下次有模型的会话）
+      if (option) optionRef.current = option;
+      beginRound();
+      const round = (roundRef.current += 1);
+      setBusy(true);
+      pendingRef.current.delete(callId);
+      resumeRef.current?.();
+      held.call.state = "cancelled";
+      setEntries(list => [...list]);
+      messagesRef.current.push({
+        role: "tool",
+        tool_call_id: held.call.id,
+        content:
+          "[用户取消了该计划，未执行任何命令。请询问原因，或给出调整后的方案]"
+      });
+      console.info(
+        "[ai-plan] 用户取消计划：",
+        held.call.title
+      );
+      try {
+        if (option) await runLoop(option);
+      } catch (reason) {
+        setError(String(reason));
+      } finally {
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        } else {
+          console.info(
+            `[ai-plan] 取消收尾跳过（第 ${round} 轮已被第 ${roundRef.current} 轮接管）`
+          );
+        }
+      }
+    },
+    [runLoop, beginRound]
+  );
+
   return {
     entries,
     busy,
@@ -942,6 +1481,10 @@ export function useAiChat(
     stop,
     confirm,
     skip,
+    /** 批准执行一个多步计划（逐步执行，跑完续一轮模型总结） */
+    approvePlan,
+    /** 取消一个待批准的计划（不执行任何命令） */
+    rejectPlan,
     clear: history.clear,
     restore: history.restore,
     renameCurrent: history.renameCurrent,

@@ -85,6 +85,8 @@ export default function AiPanel({
     stop,
     confirm,
     skip,
+    approvePlan,
+    rejectPlan,
     clear,
     restore,
     renameCurrent,
@@ -215,6 +217,12 @@ export default function AiPanel({
           }}
           onSkip={callId => {
             void skip(callId, selected);
+          }}
+          onApprovePlan={callId => {
+            void approvePlan(callId, selected);
+          }}
+          onRejectPlan={callId => {
+            void rejectPlan(callId, selected);
           }}
           onAddMacroCommand={onAddMacroCommand}
         />

@@ -31,7 +31,8 @@ export type AiChatEntry =
       elapsedSeconds?: number;
     }
   | { kind: "tool"; call: AiToolCall }
-  | { kind: "file"; call: AiFileCall };
+  | { kind: "file"; call: AiFileCall }
+  | { kind: "plan"; call: AiPlanCall };
 
 /** 文件传输方向。 */
 export type FileTransferDirection =
@@ -80,6 +81,56 @@ export type AiToolCall = {
   exitCode?: number;
   /** 执行失败 / 被跳过的原因（仅 UI 展示） */
   error?: string;
+};
+
+/**
+ * 一次多步执行计划里的一步。
+ *
+ * 与 `AiToolCall` 分开存而不是直接复用：步骤住在计划卡内部（卡片自己
+ * 渲染步骤列表与进度），执行时临时包成 AiToolCall 走既有执行通道。
+ * `id` 形如 `${计划id}#${序号}`，同时也是该步骤待确认时挂起卡片的 id。
+ */
+export type AiPlanStep = {
+  id: string;
+  title: string;
+  /** 可选补充说明（计划卡里显示在标题下方） */
+  detail?: string;
+  command: string;
+  /** 只读步骤受「自动执行」开关控制，读写步骤受「自动应用」控制 */
+  isReadOnly: boolean;
+  /** pending=待执行，running=执行中，done/failed=已结束，skipped=用户跳过 */
+  state:
+    | "pending"
+    | "running"
+    | "done"
+    | "failed"
+    | "skipped";
+  exitCode?: number;
+  /** 执行失败 / 被跳过的原因（仅 UI 展示） */
+  error?: string;
+  /** 已执行步骤的输出（折叠展示，回填协议流的内容由 cardExec 生成） */
+  stdout?: string;
+  stderr?: string;
+};
+
+/**
+ * 一次多步执行计划（对应 aicss Approval Card 的 plan 变体）。
+ *
+ * 模型通过 propose_plan 工具提出，用户在计划卡上批准后才按步骤执行；
+ * pending=等批准，running=执行中，done=全部完成，cancelled=用户取消，
+ * aborted=执行中被停止（切窗口 / 用户点停止）。
+ */
+export type AiPlanCall = {
+  id: string;
+  title: string;
+  summary: string;
+  steps: AiPlanStep[];
+  state:
+    | "pending"
+    | "running"
+    | "done"
+    | "cancelled"
+    | "aborted";
 };
 
 /** OpenAI Chat Completions 协议消息（引擎内部流转用）。 */

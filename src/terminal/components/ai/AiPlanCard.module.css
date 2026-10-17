@@ -1,0 +1,349 @@
+/* 多步计划卡（aicss Approval Card plan 变体的本项目适配版）。
+   配色全部走项目主题变量，不写死十六进制 —— 与 _ai-chat.scss 的
+   .ai-card / .ai-card-command 同一套视觉语言。 */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: stretch;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  background: var(--surface-secondary);
+  border-radius: 6px;
+}
+
+.iconSvg {
+  width: 13px;
+  height: 13px;
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* 已完成 / 总步骤数：等宽数字，跳动时不抖 */
+.count {
+  margin-left: auto;
+  font:
+    11px Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.headline {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+.summary {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-line;
+}
+
+/* 步骤清单的浅底槽（同 .ai-file-paths 的 surface-secondary） */
+.well {
+  padding: 8px 10px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+}
+
+.wellHead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.wellTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.wellCount {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.stepIconWrap {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.stepIcon {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.stepIconRunning {
+  color: var(--accent);
+}
+
+.stepIconDone {
+  color: var(--success);
+}
+
+.stepIconFailed {
+  color: var(--danger);
+}
+
+.stepIconSkipped {
+  color: var(--muted);
+}
+
+/* 等确认的实心圆点：与「待执行」的虚线圈区分 */
+.stepIconAwait {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.stepBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stepTitle {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+.stepDetail {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.stepCommand {
+  padding: 4px 6px;
+  overflow-x: auto;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--surface);
+  border-radius: 5px;
+}
+
+.stepMeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stepBadge {
+  flex: none;
+  padding: 0 4px;
+  font:
+    9px Consolas,
+    monospace;
+  font-weight: 700;
+  border-radius: 3px;
+
+  &.stepBadgeRo {
+    color: var(--success);
+    background: rgb(0 0 0 / 12%);
+  }
+
+  &.stepBadgeRw {
+    color: #f59e0b;
+    background: rgb(245 158 11 / 18%);
+  }
+}
+
+.stepState {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* 单步确认按钮：跟在状态文字后面，不占整行 */
+.stepActions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.stepBtn {
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+.stepBtnPrimary {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.stepError {
+  font-size: 10px;
+  color: var(--danger);
+}
+
+.stepResult {
+  font-size: 10px;
+
+  summary {
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  pre {
+    max-height: 160px;
+    padding: 4px 6px;
+    margin: 4px 0 0;
+    overflow: auto;
+    font:
+      10px Consolas,
+      monospace;
+    white-space: pre-wrap;
+    background: var(--surface);
+    border-radius: 5px;
+  }
+}
+
+.stepResultError {
+  color: var(--danger);
+}
+
+/* 展开 / 收起按钮：图标 + 文案一行，图标随状态变（三点 ⇄ 一横） */
+.moreBtn {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 6px 0 0;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.moreBtn:hover {
+  color: var(--foreground);
+}
+
+.moreIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.moreGlyph {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---- 底部操作区（aicss 的 .actions） ---- */
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.planState {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.btnGhost,
+.btnPrimary {
+  padding: 4px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+.btnGhost {
+  color: var(--foreground);
+  background: var(--surface-secondary);
+}
+
+.btnPrimary {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border-color: var(--accent);
+}

@@ -190,3 +190,108 @@ export function commandInDirectory(
         : quote(directory);
   return `cd -- ${path} || exit 1\n${command}`;
 }
+
+/** 计划步骤数上限：计划卡要全量展示，几十步的「计划」实际是模型没拆干净。 */
+export const PLAN_STEP_LIMIT = 12;
+
+/** propose_plan 工具解析出的步骤（is_read_only 缺省按读写算，见下）。 */
+export type PlanToolStep = {
+  title: string;
+  detail?: string;
+  command: string;
+  isReadOnly: boolean;
+};
+
+/**
+ * 解析 propose_plan 工具的参数：标题 + 摘要 + 至少一步。
+ *
+ * ⚠️ 任何一步缺 title / command 都**整份作废**（返回 null）而不是静默
+ * 跳过：少一步的计划照样跑会改坏服务器，让模型重给一份完整的更安全。
+ * ⚠️ `is_read_only` 缺省按 **false（读写）** 算：标错的只读只是白等
+ * 一次确认，标错的读写会自动改服务器状态，宁可前者。
+ */
+export function parsePlanToolArguments(
+  raw: string
+): {
+  title: string;
+  summary: string;
+  steps: PlanToolStep[];
+} | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      unknown
+    >;
+    const title =
+      typeof parsed.title === "string"
+        ? parsed.title.trim()
+        : "";
+    if (!title) return null;
+    const summary =
+      typeof parsed.summary === "string"
+        ? parsed.summary.trim()
+        : "";
+    if (!Array.isArray(parsed.steps)) return null;
+    const steps: PlanToolStep[] = [];
+    for (const item of parsed.steps) {
+      if (!item || typeof item !== "object")
+        return null;
+      const step = item as Record<
+        string,
+        unknown
+      >;
+      const stepTitle =
+        typeof step.title === "string"
+          ? step.title.trim()
+          : "";
+      const command =
+        typeof step.command === "string"
+          ? step.command.trim()
+          : "";
+      if (!stepTitle || !command) return null;
+      const detail =
+        typeof step.detail === "string"
+          ? step.detail.trim()
+          : "";
+      steps.push({
+        title: stepTitle,
+        ...(detail ? { detail } : {}),
+        command,
+        isReadOnly: step.is_read_only === true
+      });
+      if (steps.length >= PLAN_STEP_LIMIT)
+        return null;
+    }
+    if (steps.length === 0) return null;
+    return { title, summary, steps };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 计划步骤是否按现有开关自动执行。
+ *
+ * 与 runLoop 里单条命令**同一套规则**（抽成纯函数供两边共用）：
+ * 只读步骤看「自动执行」，读写步骤看「自动应用」，黑名单永不自动执行
+ * —— 即使开关全开，命中黑名单的步骤也回落为单独确认。
+ */
+export function planStepAutoRuns(
+  step: {
+    command: string;
+    isReadOnly: boolean;
+  },
+  options: {
+    autoExecute: boolean;
+    autoApply: boolean;
+    blacklist: string[];
+  }
+): boolean {
+  if (
+    isBlacklisted(step.command, options.blacklist)
+  )
+    return false;
+  return step.isReadOnly
+    ? options.autoExecute
+    : options.autoApply;
+}

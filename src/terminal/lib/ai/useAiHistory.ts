@@ -14,8 +14,42 @@ import {
 import type { OpenSession } from "../session/terminalTypes";
 import type {
   AiChatEntry,
+  AiPlanCall,
   ProtocolMessage
 } from "./protocol";
+
+/**
+ * 恢复历史时把计划卡归一成终态。
+ *
+ * 落盘时的计划可能还是 pending / running（应用在执行中被关掉），恢复后
+ * 没有任何循环驱动它，原样渲染就是一张永远「等待批准」或永远转圈的死卡。
+ * 统一改成「已中止」，未结束的步骤标「已跳过」—— 与用户主动停止计划
+ * 的呈现一致。已是终态（done / cancelled / aborted）的原样返回。
+ */
+export function normalizeRestoredPlan(
+  call: AiPlanCall
+): AiPlanCall {
+  if (
+    call.state !== "pending" &&
+    call.state !== "running"
+  )
+    return call;
+  return {
+    ...call,
+    state: "aborted",
+    steps: call.steps.map(step =>
+      step.state === "done" ||
+      step.state === "failed"
+        ? step
+        : {
+            ...step,
+            state: "skipped" as const,
+            error:
+              step.error ?? "会话中断，未执行"
+          }
+    )
+  };
+}
 
 /**
  * AI 对话的历史持久化与标题。
@@ -131,7 +165,17 @@ export function useAiHistory(options: {
                     entry.sentAt ??
                     history.updatedAt
                 }
-              : entry
+              : entry.kind === "plan"
+                ? // 计划卡恢复时可能停在「待批准 / 执行中」——
+                  // 那是上一段会话的活，恢复后没有循环驱动它，
+                  // 不归一化就是一张永远转圈或按钮永灰的死卡
+                  {
+                    kind: "plan",
+                    call: normalizeRestoredPlan(
+                      entry.call
+                    )
+                  }
+                : entry
         )
       );
       // 作废在跑的那轮：切历史后旧循环不该再往新话题里写东西，

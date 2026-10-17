@@ -78,12 +78,68 @@ const DOWNLOAD_FILE_PARAMETERS = {
   required: ["remote_path", "question"]
 };
 
-/** 三个工具的名字：前端按 `function.name` 分派，三处注入必须一致。 */
+/**
+ * propose_plan 工具的 JSON Schema。
+ *
+ * 多步计划专用：模型先提出步骤清单，用户在计划卡上批准后才逐步执行。
+ * 每步是一条完整的非交互命令 —— 执行通道 stdin 是关闭的（见
+ * SYSTEM_PROMPT），交互命令会挂起。
+ */
+const PROPOSE_PLAN_PARAMETERS = {
+  type: "object",
+  properties: {
+    title: {
+      type: "string",
+      description: "计划标题，一句话概括"
+    },
+    summary: {
+      type: "string",
+      description: "计划目标与范围的简要说明"
+    },
+    steps: {
+      type: "array",
+      description:
+        "按顺序执行的步骤（2-12 步，每步一条命令）",
+      items: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "步骤标题，一句话"
+          },
+          detail: {
+            type: "string",
+            description: "可选：步骤的补充说明"
+          },
+          command: {
+            type: "string",
+            description:
+              "这一步要执行的 shell 命令（必须是非交互命令）"
+          },
+          is_read_only: {
+            type: "boolean",
+            description:
+              "纯读取类命令为 true，会修改服务器状态必须为 false"
+          }
+        },
+        required: [
+          "title",
+          "command",
+          "is_read_only"
+        ]
+      }
+    }
+  },
+  required: ["title", "summary", "steps"]
+};
+
+/** 四个工具的名字：前端按 `function.name` 分派，三处注入必须一致。 */
 export const TOOL_RUN_COMMAND = "run_command";
 export const TOOL_UPLOAD_FILE =
   "upload_local_file";
 export const TOOL_DOWNLOAD_FILE =
   "download_remote_file";
+export const TOOL_PROPOSE_PLAN = "propose_plan";
 
 /** 模型的最大输出 Token：取模型配置，没填给 4096 兜底。 */
 function maxTokensOf(
@@ -172,6 +228,15 @@ const openAiAdapter: FormatAdapter = {
           description:
             "把服务器上的一个文件下载到本地（用户会在系统弹窗里亲自选择保存位置）",
           parameters: DOWNLOAD_FILE_PARAMETERS
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: TOOL_PROPOSE_PLAN,
+          description:
+            "向用户提出一个多步执行计划（步骤清单），等用户在计划卡上批准后才按步骤执行。用于 2 步以上、会改变服务器状态的复杂任务（部署、配置变更、批量操作）；单条命令不要用",
+          parameters: PROPOSE_PLAN_PARAMETERS
         }
       }
     ],
@@ -328,6 +393,12 @@ export const anthropicAdapter: FormatAdapter = {
           description:
             "把服务器上的一个文件下载到本地（用户会在系统弹窗里亲自选择保存位置）",
           input_schema: DOWNLOAD_FILE_PARAMETERS
+        },
+        {
+          name: TOOL_PROPOSE_PLAN,
+          description:
+            "向用户提出一个多步执行计划（步骤清单），等用户在计划卡上批准后才按步骤执行。用于 2 步以上、会改变服务器状态的复杂任务（部署、配置变更、批量操作）；单条命令不要用",
+          input_schema: PROPOSE_PLAN_PARAMETERS
         }
       ],
       tool_choice: { type: "auto" }
@@ -469,6 +540,13 @@ export const responsesAdapter: FormatAdapter = {
           description:
             "把服务器上的一个文件下载到本地（用户会在系统弹窗里亲自选择保存位置）",
           parameters: DOWNLOAD_FILE_PARAMETERS
+        },
+        {
+          type: "function",
+          name: TOOL_PROPOSE_PLAN,
+          description:
+            "向用户提出一个多步执行计划（步骤清单），等用户在计划卡上批准后才按步骤执行。用于 2 步以上、会改变服务器状态的复杂任务（部署、配置变更、批量操作）；单条命令不要用",
+          parameters: PROPOSE_PLAN_PARAMETERS
         }
       ],
       tool_choice: "auto"

@@ -16,6 +16,7 @@ import { ReasoningBlock } from "./ReasoningBlock";
 import { ChatMessageActions } from "./ChatMessageActions";
 import { ToolCard } from "./ToolCard";
 import { FileCard } from "./FileCard";
+import { AiPlanCard } from "./AiPlanCard";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import type {
   AiChatEntry,
@@ -50,6 +51,8 @@ export function AiMessageList({
   onConfirm,
   onConfirmFile,
   onSkip,
+  onApprovePlan,
+  onRejectPlan,
   onAddMacroCommand
 }: {
   entries: AiChatEntry[];
@@ -68,6 +71,10 @@ export function AiMessageList({
   /** 文件传输卡片没有 terminal/background 之分，落点唯一 */
   onConfirmFile: (callId: string) => void;
   onSkip: (callId: string) => void;
+  /** 批准执行一个多步计划 */
+  onApprovePlan: (callId: string) => void;
+  /** 取消一个待批准的多步计划 */
+  onRejectPlan: (callId: string) => void;
   /** 把卡片命令存为快捷宏 */
   onAddMacroCommand: (
     name: string,
@@ -168,6 +175,31 @@ export function AiMessageList({
                 onConfirmFile(entry.call.id)
               }
               onSkip={() => onSkip(entry.call.id)}
+            />
+          );
+        }
+        if (entry.kind === "plan") {
+          return (
+            <AiPlanCard
+              key={entry.call.id}
+              call={entry.call}
+              awaitingConfirm={
+                pendingCardId === entry.call.id
+              }
+              pendingStepId={pendingCardId}
+              busy={busy}
+              onApprove={() =>
+                onApprovePlan(entry.call.id)
+              }
+              onReject={() =>
+                onRejectPlan(entry.call.id)
+              }
+              onConfirmStep={stepId =>
+                onConfirm(stepId, "background")
+              }
+              onSkipStep={stepId =>
+                onSkip(stepId)
+              }
             />
           );
         }

@@ -61,6 +61,8 @@ function terminalTail(
  * @param skip true = 用户跳过，不执行直接回填占位结果
  * @param session 当前会话（background 模式取连接信息与提示符目录）
  * @param refresh 卡片状态变化后的重渲染回调（hook 里是 setEntries 刷新）
+ * @param execId 后台执行的 id：带上它，停止时才能从后端掐掉这条命令
+ *   （见 aiExec.cancelAiExec）
  */
 export async function executeToolCard(
   call: AiToolCall,
@@ -68,7 +70,8 @@ export async function executeToolCard(
   mode: ExecCardMode,
   skip: boolean,
   session: OpenSession | undefined,
-  refresh: () => void
+  refresh: () => void,
+  execId?: string
 ): Promise<string> {
   let content: string;
   if (skip) {
@@ -128,7 +131,9 @@ export async function executeToolCard(
         commandInDirectory(
           directory,
           `hostname; pwd; echo ---; ${call.command}`
-        )
+        ),
+        undefined,
+        execId
       );
       // 通道执行完成即为 done：退出码非 0 是命令的正常输出
       // （如验证文件已删除的 ls、无匹配的 grep），由模型自行解读

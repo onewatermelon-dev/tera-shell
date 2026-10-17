@@ -93,6 +93,7 @@ pub fn run() {
             sftp::transfer::resume_transfer,
             sftp::transfer::cancel_transfer,
             ai::run_command,
+            ai::exec_cancel,
             ai::chat_stream,
             ai::chat_cancel,
             infra::secret::encrypt,
