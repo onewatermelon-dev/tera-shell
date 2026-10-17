@@ -10,6 +10,10 @@ import {
 } from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
 import { useAiChat } from "@/terminal/lib/ai/aiChat";
+import {
+  AI_ASK_PRESETS,
+  onAiAsk
+} from "@/terminal/lib/ai/askFromTerminal";
 import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 import { attachStreamdownExport } from "@/terminal/lib/streamdownExport";
 import { AiMessageList } from "./AiMessageList";
@@ -133,6 +137,24 @@ export default function AiPanel({
       node.scrollTop = node.scrollHeight;
     }
   }, [entries, error, pendingCardId, stream]);
+  // 终端右键「解释这条 / 让 AI 看看」：菜单经 askFromTerminal 桥把终端
+  // 内容送进来，这里直接作为一轮提问发出。面板收起时由
+  // TerminalWorkspace 订阅同一事件展开 —— 那边只负责展开，不管发送，
+  // 模型选项在面板里取（selected），发送语义不外溢。
+  useEffect(
+    () =>
+      onAiAsk(({ preset, text }) => {
+        console.info(
+          "[ai] 终端右键提问：",
+          preset
+        );
+        void send(
+          AI_ASK_PRESETS[preset].prompt(text),
+          selected
+        );
+      }),
+    [send, selected]
+  );
   // 用户主动滚动（滚轮 / 滚动条）：离开底部 80px 以外算「翻历史」，
   // 停止自动跟随；重新贴回底部则恢复跟随
   const onBodyScroll = () => {

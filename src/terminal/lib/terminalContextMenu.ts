@@ -4,6 +4,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { shortcutOf } from "@/shared/lib/appShortcuts";
 import {
+  AI_ASK_PRESETS,
+  askAiFromTerminal,
+  hasAiAskListener,
+  resolveAskText
+} from "@/terminal/lib/ai/askFromTerminal";
+import {
+  BugOutlined,
   ClearOutlined,
   CodeOutlined,
   CopyOutlined,
@@ -12,6 +19,7 @@ import {
   FullscreenOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
+  QuestionCircleOutlined,
   ReloadOutlined,
   SearchOutlined,
   SnippetsOutlined,
@@ -49,6 +57,10 @@ export function createTerminalMenu({
   let menu: HTMLDivElement | undefined;
   let copyItem: HTMLDivElement | undefined;
   let fullscreenItem: HTMLDivElement | undefined;
+  /** 「解释这条 / 让 AI 看看」两项：show 时按有无可选内容置灰 */
+  const askItems: HTMLDivElement[] = [];
+  /** 本次右键要问 AI 的文本（选区优先，否则指针所在行） */
+  let askText = "";
   let target: Terminal | undefined;
   let targetId = "";
   let logStatus: LogStatus = {
@@ -346,6 +358,38 @@ export function createTerminalMenu({
       target?.focus();
     });
 
+    // 「解释这条 / 让 AI 看看」：把选中的终端内容（或指针所在行）
+    // 作为一轮提问送进 AI 面板，经 askFromTerminal 桥触达
+    const askSeparator =
+      document.createElement("div");
+    askSeparator.className = "menu-separator";
+    const makeAskItem = (
+      preset: keyof typeof AI_ASK_PRESETS,
+      icon: typeof QuestionCircleOutlined
+    ) => {
+      const item = makeItem(
+        AI_ASK_PRESETS[preset].label,
+        "",
+        icon
+      );
+      item.addEventListener("click", () => {
+        hide();
+        // 内容或面板不可用时菜单项已置灰，这里双保险
+        askAiFromTerminal(preset, askText);
+        target?.focus();
+      });
+      askItems.push(item);
+      return item;
+    };
+    const explain = makeAskItem(
+      "explain",
+      QuestionCircleOutlined
+    );
+    const diagnose = makeAskItem(
+      "diagnose",
+      BugOutlined
+    );
+
     const find = makeItem(
       "查找",
       "find",
@@ -398,6 +442,9 @@ export function createTerminalMenu({
       separator,
       copy,
       paste,
+      askSeparator,
+      explain,
+      diagnose,
       separator.cloneNode(),
       find,
       separator.cloneNode(),
@@ -495,6 +542,17 @@ export function createTerminalMenu({
       !terminal.hasSelection() ||
         !terminal.getSelection().trim()
     );
+    // 「解释这条 / 让 AI 看看」：解析本次要问的文本（选区优先，否则
+    // 指针所在行），并按「有内容 + 有面板在听」置灰 —— 本地会话不挂
+    // AiPanel，置灰好过点了没反应
+    askText = resolveAskText(terminal, event);
+    const askEnabled =
+      askText.trim() !== "" && hasAiAskListener();
+    for (const item of askItems)
+      item.classList.toggle(
+        "disabled",
+        !askEnabled
+      );
     element.style.visibility = "hidden";
     element.style.display = "block";
     const rect = element.getBoundingClientRect();

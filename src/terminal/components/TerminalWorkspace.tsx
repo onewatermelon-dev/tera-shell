@@ -14,6 +14,7 @@ import type {
 } from "@/terminal/lib/pane/paneLayout";
 import { Card } from "@heroui/react";
 import AiPanel from "@/terminal/components/ai/AiPanel";
+import { onAiAsk } from "@/terminal/lib/ai/askFromTerminal";
 import { useAiPanelLayout } from "@/terminal/components/ai/useAiPanelLayout";
 import PaneGrid from "@/terminal/components/pane/PaneGrid";
 import PaneTabBar from "@/terminal/components/pane/PaneTabBar";
@@ -302,6 +303,17 @@ export default function TerminalWorkspace({
     endReopenDrag,
     reopenDraggedRef
   } = useAiPanelLayout(onResize, onPausePtySync);
+
+  // 终端右键「解释这条 / 让 AI 看看」：面板收起时先展开，否则用户在
+  // 终端里问了话，回答却藏在收起的面板里。发送由 AiPanel 自己订阅
+  // 同一事件完成（模型选项在面板内），这里只管可见性。
+  useEffect(
+    () =>
+      onAiAsk(() => {
+        setAiCollapsed(false);
+      }),
+    [setAiCollapsed]
+  );
 
   return (
     // SSH 会话激活时右侧并排 AI 聊天面板（占位态），本地会话只有终端卡片
