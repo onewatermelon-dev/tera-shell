@@ -27,12 +27,14 @@ import {
   type AiFileCall,
   type AiPlanCall,
   type AiPlanStep,
+  type AiQuestionCall,
   type AiToolCall,
   type ExecCardMode,
   type ProtocolMessage
 } from "./protocol";
 import {
   isBlacklisted,
+  parseAskToolArguments,
   parseFileToolArguments,
   parsePlanToolArguments,
   parseToolArguments,
@@ -47,6 +49,7 @@ import { executeToolCard } from "./cardExec";
 import { cancelAiExec } from "./aiExec";
 import { executeFileCall } from "./fileTransfer";
 import {
+  TOOL_ASK_QUESTIONS,
   TOOL_DOWNLOAD_FILE,
   TOOL_PROPOSE_PLAN,
   TOOL_RUN_COMMAND,
@@ -96,6 +99,8 @@ export {
   type AiFileCall,
   type AiPlanCall,
   type AiPlanStep,
+  type AiQuestion,
+  type AiQuestionCall,
   type AiToolCall,
   type ExecCardMode,
   type FileTransferDirection,
@@ -109,6 +114,7 @@ export {
   isBlacklisted,
   isAbsoluteRemotePath,
   listOpenAiModels,
+  parseAskToolArguments,
   parseFileToolArguments,
   parsePlanToolArguments,
   parseToolArguments,
@@ -119,6 +125,7 @@ export {
 export {
   anthropicAdapter,
   responsesAdapter,
+  TOOL_ASK_QUESTIONS,
   TOOL_DOWNLOAD_FILE,
   TOOL_PROPOSE_PLAN,
   TOOL_RUN_COMMAND,
@@ -244,6 +251,11 @@ export function useAiChat(
       | {
           kind: "plan";
           call: AiPlanCall;
+          toolCallId: string;
+        }
+      | {
+          kind: "question";
+          call: AiQuestionCall;
           toolCallId: string;
         }
     >
@@ -565,6 +577,51 @@ export function useAiChat(
             pendingRef.current.set(toolCallId, {
               kind: "plan",
               call: plan,
+              toolCallId
+            });
+            setPendingCardId(toolCallId);
+            yielded = true;
+            break;
+          }
+          // ---- 反问：信息不足时向用户提问，答完才继续 ----
+          // 与计划同等级别：整组问题是一次用户交互，不参与自动执行开关
+          if (toolName === TOOL_ASK_QUESTIONS) {
+            const askArgs = parseAskToolArguments(
+              call.function.arguments
+            );
+            if (!askArgs) {
+              // 参数不合法也要回填 tool 消息，否则协议流断裂
+              messagesRef.current.push({
+                role: "tool",
+                content:
+                  "[提问参数不完整：至少一题，每题需要 id、问题文字与至少一个候选项，且 id 不可重复。请重新提问]",
+                tool_call_id: toolCallId
+              });
+              continue;
+            }
+            const questions: AiQuestionCall = {
+              id: toolCallId,
+              title: askArgs.title,
+              questions: askArgs.questions,
+              answers: {},
+              state: "pending"
+            };
+            console.info(
+              "[ai-ask] 待回答提问：",
+              questions.title,
+              "题数",
+              questions.questions.length
+            );
+            setEntries(list => [
+              ...list,
+              {
+                kind: "question",
+                call: questions
+              }
+            ]);
+            pendingRef.current.set(toolCallId, {
+              kind: "question",
+              call: questions,
               toolCallId
             });
             setPendingCardId(toolCallId);
@@ -900,6 +957,28 @@ export function useAiChat(
           setPendingCardId(null);
           return;
         }
+        // 等作答的反问：同理，作废挂起 + 标记跳过 + 回填后放走
+        if (held.kind === "question") {
+          roundRef.current += 1;
+          stoppedRef.current = true;
+          pendingRef.current.delete(
+            pendingCardId
+          );
+          held.call.state = "cancelled";
+          setEntries(list => [...list]);
+          messagesRef.current.push({
+            role: "tool",
+            tool_call_id: held.call.id,
+            content:
+              "[用户停止了本轮，提问未回答]"
+          });
+          resumeRef.current?.();
+          console.info(
+            `[ai] 停止：放弃待回答提问 ${pendingCardId}`
+          );
+          setPendingCardId(null);
+          return;
+        }
         pendingRef.current.delete(pendingCardId);
         // 判别联合：传输卡片走自己的执行器（skip 分支同样不弹框）
         const skipped =
@@ -1071,9 +1150,14 @@ export function useAiChat(
     ) => {
       const held = pendingRef.current.get(cardId);
       if (!held) return;
-      // 计划卡不走 confirm：批准 / 取消有专属入口（approvePlan /
-      // rejectPlan），这里挡掉误调并收窄联合类型
-      if (held.kind === "plan") return;
+      // 计划卡 / 反问卡不走 confirm：批准 / 取消 / 作答有专属入口
+      // （approvePlan / rejectPlan / answerQuestions / cancelQuestions），
+      // 这里挡掉误调并收窄联合类型
+      if (
+        held.kind === "plan" ||
+        held.kind === "question"
+      )
+        return;
       // 计划里的单步：执行后只唤醒计划循环（approvePlan 正等在 settle
       // 上），不认领轮次、不碰 busy、不另起 runLoop —— 计划还没跑完，
       // 收尾归 approvePlan 统一做。少了这个分支，下面的 setBusy(false)
@@ -1157,8 +1241,12 @@ export function useAiChat(
     ) => {
       const held = pendingRef.current.get(cardId);
       if (!held) return;
-      // 同 confirm：计划卡不走 skip
-      if (held.kind === "plan") return;
+      // 同 confirm：计划卡 / 反问卡不走 skip
+      if (
+        held.kind === "plan" ||
+        held.kind === "question"
+      )
+        return;
       // 计划里的单步：同 confirm 的 planStep 分支 —— 只唤醒计划循环，
       // 跳过的步骤由计划循环标记后继续下一步。⚠️ 同样要在 option
       // 守卫之前（跳过一步不需要模型），否则 selected 为 null 时
@@ -1467,6 +1555,118 @@ export function useAiChat(
     [runLoop, beginRound]
   );
 
+  /**
+   * 提交一组反问的作答：答案回填成 tool 结果，模型据此继续。
+   *
+   * 与 confirm 的差别同 approvePlan：收尾（续跑 runLoop）由本函数统一
+   * 做，不借道 confirm —— 那张卡没有「执行 / 跳过」语义。
+   */
+  const answerQuestions = useCallback(
+    async (
+      callId: string,
+      option: AiModelOption | null,
+      answers: Record<string, string>
+    ) => {
+      const held = pendingRef.current.get(callId);
+      if (!held || held.kind !== "question")
+        return;
+      if (option) optionRef.current = option;
+      beginRound();
+      const round = (roundRef.current += 1);
+      setBusy(true);
+      pendingRef.current.delete(callId);
+      // 放走挂起的 runLoop（同 approvePlan 的 resumeRef 用法）
+      resumeRef.current?.();
+      const call = held.call;
+      call.answers = { ...answers };
+      call.state = "answered";
+      setEntries(list => [...list]);
+      // 答案格式化成模型可读的文本：题号 + 问题 + 作答
+      const lines = call.questions.map(
+        (question, index) =>
+          `${index + 1}. ${question.prompt}\n答：${
+            answers[question.id]?.trim() ||
+            "（未答）"
+          }`
+      );
+      messagesRef.current.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: `[用户的回答]\n${lines.join("\n")}`
+      });
+      console.info(
+        "[ai-ask] 用户已作答：",
+        call.title
+      );
+      try {
+        if (option) await runLoop(option);
+      } catch (reason) {
+        setError(String(reason));
+      } finally {
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        } else {
+          console.info(
+            `[ai-ask] 收尾跳过（第 ${round} 轮已被第 ${roundRef.current} 轮接管）`
+          );
+        }
+      }
+    },
+    [runLoop, beginRound]
+  );
+
+  /**
+   * 跳过一组反问：回填 tool 结果让模型按默认方案继续。
+   *
+   * 不执行任何命令；提示词已要求模型在这种情况下说明自己的假设。
+   */
+  const cancelQuestions = useCallback(
+    async (
+      callId: string,
+      option: AiModelOption | null
+    ) => {
+      const held = pendingRef.current.get(callId);
+      if (!held || held.kind !== "question")
+        return;
+      if (option) optionRef.current = option;
+      beginRound();
+      const round = (roundRef.current += 1);
+      setBusy(true);
+      pendingRef.current.delete(callId);
+      resumeRef.current?.();
+      held.call.state = "cancelled";
+      setEntries(list => [...list]);
+      messagesRef.current.push({
+        role: "tool",
+        tool_call_id: held.call.id,
+        content:
+          "[用户跳过了提问，未作回答。请按最安全的默认方案处理，并在回复里说明你的假设]"
+      });
+      console.info(
+        "[ai-ask] 用户跳过提问：",
+        held.call.title
+      );
+      try {
+        if (option) await runLoop(option);
+      } catch (reason) {
+        setError(String(reason));
+      } finally {
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        } else {
+          console.info(
+            `[ai-ask] 跳过收尾跳过（第 ${round} 轮已被第 ${roundRef.current} 轮接管）`
+          );
+        }
+      }
+    },
+    [runLoop, beginRound]
+  );
+
   return {
     entries,
     busy,
@@ -1485,6 +1685,10 @@ export function useAiChat(
     approvePlan,
     /** 取消一个待批准的计划（不执行任何命令） */
     rejectPlan,
+    /** 提交一组反问的作答（答案回填后模型继续） */
+    answerQuestions,
+    /** 跳过一组反问（模型按默认方案继续） */
+    cancelQuestions,
     clear: history.clear,
     restore: history.restore,
     renameCurrent: history.renameCurrent,

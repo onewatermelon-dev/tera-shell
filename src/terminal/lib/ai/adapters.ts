@@ -133,6 +133,50 @@ const PROPOSE_PLAN_PARAMETERS = {
   required: ["title", "summary", "steps"]
 };
 
+/**
+ * ask_questions 工具的 JSON Schema。
+ *
+ * 信息不足以继续时向用户反问：逐题展示候选项，用户点选作答（客户端
+ * 会自动追加一个自由输入的「其他」项，模型不用给）。答完才继续，
+ * 不答按最安全默认方案处理。
+ */
+const ASK_QUESTIONS_PARAMETERS = {
+  type: "object",
+  properties: {
+    title: {
+      type: "string",
+      description: "这组提问的标题，一句话"
+    },
+    questions: {
+      type: "array",
+      description:
+        "要问的问题（1-5 题，按顺序逐题展示）",
+      items: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description:
+              "题目标识，如 q1（组内不可重复）"
+          },
+          prompt: {
+            type: "string",
+            description: "问题正文"
+          },
+          options: {
+            type: "array",
+            description:
+              "候选项（1-6 个，客户端会再加一个自由输入项）",
+            items: { type: "string" }
+          }
+        },
+        required: ["id", "prompt", "options"]
+      }
+    }
+  },
+  required: ["title", "questions"]
+};
+
 /** 四个工具的名字：前端按 `function.name` 分派，三处注入必须一致。 */
 export const TOOL_RUN_COMMAND = "run_command";
 export const TOOL_UPLOAD_FILE =
@@ -140,6 +184,7 @@ export const TOOL_UPLOAD_FILE =
 export const TOOL_DOWNLOAD_FILE =
   "download_remote_file";
 export const TOOL_PROPOSE_PLAN = "propose_plan";
+export const TOOL_ASK_QUESTIONS = "ask_questions";
 
 /** 模型的最大输出 Token：取模型配置，没填给 4096 兜底。 */
 function maxTokensOf(
@@ -237,6 +282,15 @@ const openAiAdapter: FormatAdapter = {
           description:
             "向用户提出一个多步执行计划（步骤清单），等用户在计划卡上批准后才按步骤执行。用于 2 步以上、会改变服务器状态的复杂任务（部署、配置变更、批量操作）；单条命令不要用",
           parameters: PROPOSE_PLAN_PARAMETERS
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: TOOL_ASK_QUESTIONS,
+          description:
+            "信息不足以继续时向用户反问（逐题给出候选项，用户点选或填「其他」）。只在缺了信息就没法正确执行时才用；能合理默认的就不要问",
+          parameters: ASK_QUESTIONS_PARAMETERS
         }
       }
     ],
@@ -399,6 +453,12 @@ export const anthropicAdapter: FormatAdapter = {
           description:
             "向用户提出一个多步执行计划（步骤清单），等用户在计划卡上批准后才按步骤执行。用于 2 步以上、会改变服务器状态的复杂任务（部署、配置变更、批量操作）；单条命令不要用",
           input_schema: PROPOSE_PLAN_PARAMETERS
+        },
+        {
+          name: TOOL_ASK_QUESTIONS,
+          description:
+            "信息不足以继续时向用户反问（逐题给出候选项，用户点选或填「其他」）。只在缺了信息就没法正确执行时才用；能合理默认的就不要问",
+          input_schema: ASK_QUESTIONS_PARAMETERS
         }
       ],
       tool_choice: { type: "auto" }
@@ -547,6 +607,13 @@ export const responsesAdapter: FormatAdapter = {
           description:
             "向用户提出一个多步执行计划（步骤清单），等用户在计划卡上批准后才按步骤执行。用于 2 步以上、会改变服务器状态的复杂任务（部署、配置变更、批量操作）；单条命令不要用",
           parameters: PROPOSE_PLAN_PARAMETERS
+        },
+        {
+          type: "function",
+          name: TOOL_ASK_QUESTIONS,
+          description:
+            "信息不足以继续时向用户反问（逐题给出候选项，用户点选或填「其他」）。只在缺了信息就没法正确执行时才用；能合理默认的就不要问",
+          parameters: ASK_QUESTIONS_PARAMETERS
         }
       ],
       tool_choice: "auto"

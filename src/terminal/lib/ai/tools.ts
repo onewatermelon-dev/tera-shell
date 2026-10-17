@@ -194,6 +194,12 @@ export function commandInDirectory(
 /** 计划步骤数上限：计划卡要全量展示，几十步的「计划」实际是模型没拆干净。 */
 export const PLAN_STEP_LIMIT = 12;
 
+/** 反问题数上限：一题一屏，题多了用户会烦；默认放 5 题以内。 */
+export const ASK_QUESTION_LIMIT = 5;
+
+/** 单题候选项上限：加上客户端的「其他」项，一屏放 7 个以内。 */
+export const ASK_OPTION_LIMIT = 6;
+
 /** propose_plan 工具解析出的步骤（is_read_only 缺省按读写算，见下）。 */
 export type PlanToolStep = {
   title: string;
@@ -264,6 +270,83 @@ export function parsePlanToolArguments(
     }
     if (steps.length === 0) return null;
     return { title, summary, steps };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 解析 ask_questions 工具的参数：标题 + 至少一题。
+ *
+ * ⚠️ 任何一题缺 id / prompt / options 都**整份作废**（返回 null）——
+ * 少一题的反问会让模型基于不完整的信息继续，比让它重问更糟。
+ * ⚠️ 题目 id 必须互不重复：作答按 id 归键，重复会串答案。
+ * 「其他」自由输入项由客户端渲染，不进参数 —— 模型只给候选项。
+ */
+export function parseAskToolArguments(
+  raw: string
+): {
+  title: string;
+  questions: {
+    id: string;
+    prompt: string;
+    options: string[];
+  }[];
+} | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      unknown
+    >;
+    const title =
+      typeof parsed.title === "string"
+        ? parsed.title.trim()
+        : "";
+    if (!Array.isArray(parsed.questions))
+      return null;
+    const questions: {
+      id: string;
+      prompt: string;
+      options: string[];
+    }[] = [];
+    const seenIds = new Set<string>();
+    for (const item of parsed.questions) {
+      if (!item || typeof item !== "object")
+        return null;
+      const question = item as Record<
+        string,
+        unknown
+      >;
+      const id =
+        typeof question.id === "string"
+          ? question.id.trim()
+          : "";
+      const prompt =
+        typeof question.prompt === "string"
+          ? question.prompt.trim()
+          : "";
+      if (!id || !prompt) return null;
+      if (seenIds.has(id)) return null;
+      if (!Array.isArray(question.options))
+        return null;
+      const options: string[] = [];
+      for (const option of question.options) {
+        if (typeof option !== "string")
+          return null;
+        const text = option.trim();
+        if (!text) return null;
+        options.push(text);
+        if (options.length >= ASK_OPTION_LIMIT)
+          break;
+      }
+      if (options.length === 0) return null;
+      seenIds.add(id);
+      questions.push({ id, prompt, options });
+      if (questions.length >= ASK_QUESTION_LIMIT)
+        break;
+    }
+    if (questions.length === 0) return null;
+    return { title, questions };
   } catch {
     return null;
   }

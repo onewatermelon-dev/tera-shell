@@ -32,7 +32,8 @@ export type AiChatEntry =
     }
   | { kind: "tool"; call: AiToolCall }
   | { kind: "file"; call: AiFileCall }
-  | { kind: "plan"; call: AiPlanCall };
+  | { kind: "plan"; call: AiPlanCall }
+  | { kind: "question"; call: AiQuestionCall };
 
 /** 文件传输方向。 */
 export type FileTransferDirection =
@@ -131,6 +132,29 @@ export type AiPlanCall = {
     | "done"
     | "cancelled"
     | "aborted";
+};
+
+/** 一组反问里的一题：问题文字 + 候选项（客户端会再追加一个自由输入的「其他」项）。 */
+export type AiQuestion = {
+  id: string;
+  prompt: string;
+  options: string[];
+};
+
+/**
+ * 一次反问（对应 aicss Approval Card 的 questions 变体）。
+ *
+ * 模型信息不足时提出，用户逐题点选（或填「其他」）作答；answers 以
+ * 题目 id 为键，提交后整体回填成一条 tool 结果，模型据此继续。
+ * pending=等作答，answered=已作答，cancelled=用户跳过。
+ */
+export type AiQuestionCall = {
+  id: string;
+  title: string;
+  questions: AiQuestion[];
+  /** 用户的作答（题目 id → 答案文本） */
+  answers: Record<string, string>;
+  state: "pending" | "answered" | "cancelled";
 };
 
 /** OpenAI Chat Completions 协议消息（引擎内部流转用）。 */

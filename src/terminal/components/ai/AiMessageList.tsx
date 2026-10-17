@@ -17,6 +17,7 @@ import { ChatMessageActions } from "./ChatMessageActions";
 import { ToolCard } from "./ToolCard";
 import { FileCard } from "./FileCard";
 import { AiPlanCard } from "./AiPlanCard";
+import { AiQuestionCard } from "./AiQuestionCard";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import type {
   AiChatEntry,
@@ -53,6 +54,8 @@ export function AiMessageList({
   onSkip,
   onApprovePlan,
   onRejectPlan,
+  onAnswerQuestions,
+  onCancelQuestions,
   onAddMacroCommand
 }: {
   entries: AiChatEntry[];
@@ -75,6 +78,13 @@ export function AiMessageList({
   onApprovePlan: (callId: string) => void;
   /** 取消一个待批准的多步计划 */
   onRejectPlan: (callId: string) => void;
+  /** 提交一组反问的作答 */
+  onAnswerQuestions: (
+    callId: string,
+    answers: Record<string, string>
+  ) => void;
+  /** 跳过一组反问 */
+  onCancelQuestions: (callId: string) => void;
   /** 把卡片命令存为快捷宏 */
   onAddMacroCommand: (
     name: string,
@@ -199,6 +209,24 @@ export function AiMessageList({
               }
               onSkipStep={stepId =>
                 onSkip(stepId)
+              }
+            />
+          );
+        }
+        if (entry.kind === "question") {
+          return (
+            <AiQuestionCard
+              key={entry.call.id}
+              call={entry.call}
+              busy={busy}
+              onAnswer={answers =>
+                onAnswerQuestions(
+                  entry.call.id,
+                  answers
+                )
+              }
+              onSkip={() =>
+                onCancelQuestions(entry.call.id)
               }
             />
           );
