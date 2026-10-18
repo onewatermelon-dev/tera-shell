@@ -65,12 +65,21 @@ export function attachTerminalInput(
     onError: (reason: unknown) => void;
     commandCompletion: boolean;
     isDisconnected: () => boolean;
+    /**
+     * 命令真正提交给远端时回调（长命令通知的计时起点）。
+     *
+     * 只在「放行给 PTY」的那条路径上触发 —— 见调用处的注释。
+     */
+    onCommandSubmitted?: (
+      command: string
+    ) => void;
   }
 ) {
   const {
     onError,
     commandCompletion,
-    isDisconnected
+    isDisconnected,
+    onCommandSubmitted
   } = options;
   // 解释流程进行中吞掉键盘输入：期间终端坐标由流程接管，
   // 敲字会被远端回显进正在画的解释块里造成叠加
@@ -114,11 +123,13 @@ export function attachTerminalInput(
       return;
     }
     let command: string | null = null;
-    if (
+    // 「本次按键是否提交了一条命令」——长命令计时的触发条件。
+    // 独立于 command 是否取到文本（见文件末尾的注释）
+    const isSubmit =
       data === "\r" ||
       data === "\n" ||
-      data === "\r\n"
-    ) {
+      data === "\r\n";
+    if (isSubmit) {
       const buffer = terminal.buffer.active;
       const line = buffer.getLine(
         buffer.baseY + buffer.cursorY
@@ -375,6 +386,20 @@ export function attachTerminalInput(
         }
       }
     }
+    // 真正交给远端执行的命令在此写出，此时开始计时长命令。
+    //
+    // ⚠️ 触发条件是「**按了回车**」，而不是「取到了命令文本」——这两件事
+    // 必须分开：
+    // 1) 按键先经 PTY 发给远端，远端回显之后命令才出现在 xterm 缓冲区。
+    //    所以 onData 的这一瞬间 `buffer.getLine()` 很可能还是空的
+    //    （stripPrompt 返回空 → command 为 null）。若拿 command 当条件，
+    //    计时压根不会启动，长命令永远等不到通知。
+    // 2) 也不能写成 `command ?? data` —— 普通按键时 command 恒为 null，
+    //    兜底会把单个字符喂进来，变成**每敲一键就启动一次计时器**。
+    //
+    // 命令文本只用于通知正文，取不到就留空（正文退化成只显示耗时）。
+    if (isSubmit && onCommandSubmitted)
+      onCommandSubmitted(command ?? "");
     invoke("terminal_write", {
       id: session.id,
       data,

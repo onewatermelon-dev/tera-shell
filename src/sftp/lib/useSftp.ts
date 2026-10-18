@@ -7,6 +7,8 @@ import { useSftpTransfers } from "@/sftp/lib/useSftpTransfers";
 import { useSftpEntryOps } from "@/sftp/lib/useSftpEntryOps";
 import { useSftpServerOps } from "@/sftp/lib/useSftpServerOps";
 import { useSftpClipboard } from "@/sftp/lib/useSftpClipboard";
+import { useSettings } from "@/settings/lib/useSettings";
+import { useNotifications } from "@/lib/useNotifications";
 
 // 类型定义集中在 sftpUtils，这里重新导出，外部仍从 useSftp 引入
 export type {
@@ -44,8 +46,17 @@ export function useSftp(
     toggleBookmark,
     removeBookmark
   } = useSftpBookmarks();
+  // 传输结束通知：SFTP 是**独立窗口**（label 为 sftp-*），拿不到主窗口
+  // App 层的东西，所以这里自己取设置、自己接线 —— 顺带保证通知跟着
+  // 这个窗口的焦点状态判定（用户正看着这个窗口时不该弹）
+  const sftpSettings = useSettings();
+  const notifications = useNotifications(
+    sftpSettings.settings
+  );
   // tasks 的 effect 要早于首屏加载的 effect（保持原 hook 内的顺序）
-  const tasks = useTransferTasks();
+  const tasks = useTransferTasks(
+    notifications.notifyTransferDone
+  );
   const {
     local,
     localError,

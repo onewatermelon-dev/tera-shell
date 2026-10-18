@@ -36,7 +36,17 @@ export async function streamChatCompletion(
    * 「停止生成」要知道往哪条流发取消指令，而 streamId 是在这个函数内部
    * 生成的，调用方拿不到，所以开这个口子把它透出去。
    */
-  onStreamId?: (streamId: string) => void
+  onStreamId?: (streamId: string) => void,
+  /**
+   * 流正常结束时的回调（系统通知用）。
+   *
+   * 只在**成功结束**时触发：抛异常那条路（网络断了、用户点了停止）
+   * 不算「回答完成」，通知说「AI 回答完成」会误导。
+   */
+  onDone?: (info: {
+    elapsedMs: number;
+    preview: string;
+  }) => void
 ): Promise<{
   message: ProtocolMessage;
   usage: AiUsage | undefined;
@@ -50,6 +60,9 @@ export async function streamChatCompletion(
   const streamId = `ai-stream-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+  // 计时起点放在 streamId 之后：用户等模型「正在思考」的那段时间
+  // 也算在耗时里，通知里报的时长才与用户体感一致
+  const startedAt = Date.now();
   const accumulator = accumulatorOf(
     option.provider.apiFormat
   );
@@ -141,13 +154,36 @@ export async function streamChatCompletion(
       ]);
     }
     if (streamError) throw new Error(streamError);
+    const message = accumulator.finalize();
+    // 长回答结束通知：开关、窗口焦点由 useNotifications 统一判，
+    // 这里只负责「回答好了、这句有多长、花了多久」
+    onDone?.({
+      elapsedMs: Date.now() - startedAt,
+      preview: extractPreview(message)
+    });
     return {
-      message: accumulator.finalize(),
+      message,
       usage: accumulator.usage()
     };
   } finally {
     unlisten();
   }
+}
+
+/** 取回答开头的一小段，供通知里认出「问的是什么」。 */
+function extractPreview(
+  message: ProtocolMessage
+): string {
+  const text =
+    message.role === "assistant"
+      ? message.content
+      : "";
+  const plain = String(text ?? "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[#*`>[\]()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.slice(0, 60);
 }
 
 /**

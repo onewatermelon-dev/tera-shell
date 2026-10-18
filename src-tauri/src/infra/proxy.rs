@@ -316,74 +316,8 @@ pub async fn proxy_test(
 	}
 }
 
+// 单元测试集中在 src-tauri/tests/unit/：#[path] 把模块编回本处，私有项仍可
+// 访问；tests/ 下的直接子文件才是 cargo 的集成测试目标，子目录不自动发现。
 #[cfg(test)]
-mod tests {
-	use super::{describe, ProxySettings};
-
-	#[test]
-	fn 日志描述剔除凭据() {
-		// 带用户名密码是最需要防的一类
-		assert_eq!(
-			describe("http://user:pass@1.2.3.4:7890"),
-			"http://1.2.3.4:7890"
-		);
-		// 只有用户名（部分代理允许无密码）
-		assert_eq!(
-			describe("http://user@1.2.3.4:7890"),
-			"http://1.2.3.4:7890"
-		);
-		// 无凭据时原样保留：排查时得能看到用户实际填了什么
-		assert_eq!(
-			describe("http://127.0.0.1:7890"),
-			"http://127.0.0.1:7890"
-		);
-		assert_eq!(
-			describe("socks5://127.0.0.1:1080"),
-			"socks5://127.0.0.1:1080"
-		);
-	}
-
-	#[test]
-	fn 未启用时不给代理() {
-		let settings = ProxySettings {
-			enabled: false,
-			url: "http://127.0.0.1:7890".into(),
-		};
-		assert!(settings.to_proxy().is_none());
-	}
-
-	#[test]
-	fn 空地址不给代理() {
-		let settings = ProxySettings {
-			enabled: true,
-			url: "   ".into(),
-		};
-		assert!(settings.to_proxy().is_none());
-	}
-
-	#[test]
-	fn 垃圾输入不会让构建失败() {
-		// ⚠️ 这里刻意**不断言**「垃圾输入一定被拒绝」：reqwest 对代理
-		// 地址的解析比想象中宽松（实测 `这不是地址` 会被当作主机名接受，
-		// 真正报错要等到发请求时连不上）。因此本模块的兜底策略不是
-		// 「校验地址」，而是**任何情况下都不 panic、不阻断请求**：
-		// 能构造出 Proxy 就用，构造失败才退回直连。
-		//
-		// 用户侧真正拦垃圾输入的是前端 settings/lib/proxyUrl.ts 的
-		// checkProxyUrl，那里有明确的协议白名单。
-		for url in [
-			"这不是地址",
-			"://x",
-			"%%%",
-			"http://",
-			"ftp://1.2.3.4:21",
-		] {
-			let settings = ProxySettings {
-				enabled: true,
-				url: url.into(),
-			};
-			// 不 panic 即达标：返回 None 或 Some 都可接受
-			let _ = settings.to_proxy();
-		}
-	}
-}
+#[path = "../../tests/unit/proxy.rs"]
+mod tests;

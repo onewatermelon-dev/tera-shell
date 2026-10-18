@@ -19,6 +19,7 @@ import { renderTextOnlySelection } from "@/terminal/lib/terminalSelection";
 import { setWebglEnabled } from "@/terminal/lib/webglRenderer";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { attachFontZoom } from "@/terminal/lib/fontZoom";
+import { CommandTimer } from "@/lib/notify";
 import {
   resolveColorScheme,
   toXtermTheme
@@ -64,6 +65,16 @@ export interface CreateTerminalOptions {
   >;
   /** 字号提示文案（i18n） */
   formatFontSizeHint: (size: number) => string;
+  /**
+   * 长命令跑完时回调（系统通知用）。
+   *
+   * 真正的「能不能发」判定在 lib/notifySend 的 notify 里 —— 那里才知道
+   * 窗口焦点与设置开关。这里只报「有命令结束了，耗时这么多」。
+   */
+  onLongCommand?: (
+    command: string,
+    elapsedMs: number
+  ) => void;
 }
 
 /**
@@ -85,8 +96,12 @@ export function createTerminalInstance(
     reportSearchResults,
     openSearch,
     ensureTerminalMenu,
-    formatFontSizeHint
+    formatFontSizeHint,
+    onLongCommand
   } = options;
+  // 最近一次提交的命令文本：计时结束时才知道用了多久，那时已经
+  // 拿不到 onData 的入参了，用 ref 兜住
+  const lastCommand = { current: "" };
   const terminal = new Terminal({
     cursorBlink: appearance.cursorBlink,
     cursorStyle: appearance.cursorStyle,
@@ -118,6 +133,19 @@ export function createTerminalInstance(
   );
   registerTerminalLinks(terminal, onError);
   renderTextOnlySelection(terminal, element);
+  // 长命令计时器：命令提交时开始，终端静默 SILENCE_WINDOW_MS 视为
+  // 结束。挂 onWriteParsed 而不是改三处 terminal.write —— 它覆盖
+  // 所有写入路径（后端输出、重连补写、pts 注入），漏一条就会误判
+  const commandTimer = new CommandTimer(
+    elapsedMs =>
+      onLongCommand?.(
+        lastCommand.current,
+        elapsedMs
+      )
+  );
+  terminal.onWriteParsed(() =>
+    commandTimer.poke()
+  );
   // 输入管线：补全 + /? 解释 + vim 配色 + cat 高亮（见 terminalInput）
   const { completion } = attachTerminalInput(
     terminal,
@@ -126,7 +154,11 @@ export function createTerminalInstance(
       onError,
       commandCompletion:
         appearance.commandCompletion,
-      isDisconnected
+      isDisconnected,
+      onCommandSubmitted: command => {
+        lastCommand.current = command;
+        commandTimer.start();
+      }
     }
   );
   terminal.attachCustomKeyEventHandler(event => {

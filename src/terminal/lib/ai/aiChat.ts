@@ -81,6 +81,7 @@ import {
 } from "./terminalRefs";
 import { useAiQueue } from "./useAiQueue";
 import { useAiHistory } from "./useAiHistory";
+import { emitAiDone } from "@/lib/notifyBridge";
 
 // 提示词与 workspace 上下文块住在 promptContext（纯函数，可单测），
 // 这里原样再导出保持调用方导入路径不变
@@ -546,6 +547,20 @@ export function useAiChat(
             true,
             id => {
               streamIdRef.current = id;
+            },
+            info => {
+              // 通知只在「本轮真正产出可见回复」时发：下面若因用户点了
+              // 停止而提前收工，那不是「回答完成」，不该弹通知
+              // 通知走桥接而非 props：handler 由 App 层的 useNotifications
+              // 注册，这里只需 emit（见 lib/notifyBridge 的说明）
+              if (!stoppedRef.current)
+                emitAiDone(
+                  // label 形如「供应商 / 模型」，正是通知里
+                  // 让用户认得出是哪个会话所需的信息
+                  option.label,
+                  info.elapsedMs,
+                  info.preview
+                );
             }
           );
         if (usage)

@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessions } from "@/sessions/lib/useSessions";
 import { useSessionGroups } from "@/sessions/lib/useSessionGroups";
 import { useTerminals } from "@/terminal/lib/session/useTerminals";
+import { useNotifications } from "@/lib/useNotifications";
 import {
   resolveColorScheme,
   toSelectionCss
@@ -111,6 +112,11 @@ export default function App() {
     appSettings.update({ fontSize });
   }
 
+  // 系统通知：开关与窗口焦点由 hook 统一判，这里只提供接线
+  const notifications = useNotifications(
+    appSettings.settings
+  );
+
   const terminals = useTerminals(
     // 已关闭/已断开的会话上迟到的 write/resize 只会得到这个错误，
     // 对用户毫无价值 —— 静默丢弃，其它错误照常展示
@@ -130,7 +136,8 @@ export default function App() {
         });
     },
     appSettings.settings,
-    setTerminalFontSize
+    setTerminalFontSize,
+    notifications.notifyCommand
   );
 
   /** 把键盘焦点还给活动终端（竖条按钮动作 / 菜单关闭后的焦点回还）。 */

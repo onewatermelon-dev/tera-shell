@@ -4,6 +4,8 @@ type Props = {
   isSelected: boolean;
   onChange: (next: boolean) => void;
   ariaLabel: string;
+  /** 禁用态：保留开关及其标签的可见性（隐藏会让人以为选项不存在） */
+  isDisabled?: boolean;
 };
 
 /**
@@ -15,12 +17,14 @@ type Props = {
 export default function Toggle({
   isSelected,
   onChange,
-  ariaLabel
+  ariaLabel,
+  isDisabled
 }: Props) {
   return (
     <Switch
       aria-label={ariaLabel}
       isSelected={isSelected}
+      isDisabled={isDisabled}
       onChange={onChange}
     >
       <Switch.Content>

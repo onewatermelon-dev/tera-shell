@@ -39,6 +39,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 设置页选择“数据存储路径”时弹出系统文件夹选择框。
         .plugin(tauri_plugin_dialog::init())
+        // 系统通知：长命令跑完 / AI 回答完成 / 传输结束时弹。
+        // 必须用它而非前端 Notification API —— WebView2 的
+        // AreHostNotificationsAllowed 默认关闭且 wry 未暴露该开关。
+        // 「仅窗口未聚焦时通知」的判定在前端（src/lib/notify.ts）
+        .plugin(tauri_plugin_notification::init())
         // 所有终端共享同一份后端 PTY 会话表，命令通过 session id 定位具体会话。
         .manage(terminal::Terminals::default())
         // SFTP 连接按目标缓存，避免每次进目录都重新握手认证。

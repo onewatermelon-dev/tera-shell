@@ -19,11 +19,24 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # ── Tauri 核心 ──
-tauri = { version = "2", features = ["devtools"] }
+# ⚠️ tauri 与 tauri-plugin-notification 都**精确钉死**版本，勿随手改成 "2"。
+#
+# 原因：notification 插件 ≥2.7 硬要求 tauri 2.12+，而 tauri 2.12 会把
+# tao 抬到 0.37、windows-core 抬到 0.62 —— 项目里 `lib.rs` 禁用浏览器
+# 快捷键那段 WebView2 代码（`settings.cast::<ICoreWebView2Settings3>()`）
+# 直接编译失败。钉在 2.11 就不会有这个连锁升级。
+# 将来要整体升级时，四个包（tauri / tauri-runtime / tauri-runtime-wry /
+# tao）必须**一起**放到新的大版本，只动其一会出 trait 不匹配 +
+# 两套 webview2-com-sys 互相类型不兼容。
+tauri = { version = "=2.11.5", features = ["devtools"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 # 使用操作系统默认浏览器打开经过 capability 授权的 HTTP/HTTPS 链接。
 tauri-plugin-opener = "2"
+# 长命令 / AI 完成 / 传输结束的系统通知。⚠️ Web Notification API 走不通：
+# WebView2 的 AreHostNotificationsAllowed 默认关闭，且 wry/Tauri 未暴露
+# 该开关，只能由这个原生插件托底。版本需与上面的 tauri 2.11 匹配。
+tauri-plugin-notification = "=2.4.0"
 
 # ── SSH ──
 russh = "0.49"

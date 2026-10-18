@@ -23,12 +23,19 @@ import {
  * 负责任务的登记、后端进度事件订阅与暂停 / 恢复 / 取消；真正的传输由调用方
  * 发起，这里只跟踪它们的生命周期。
  */
-export function useTransferTasks() {
+export function useTransferTasks(
+  onFinished?: (
+    summary: string,
+    succeeded: boolean
+  ) => void
+) {
   const [transfers, setTransfers] = useState<
     TransferTask[]
   >([]);
   // 用户主动取消的任务 id：后端抛出的"已取消"不该算失败
   const cancelledRef = useRef(new Set<string>());
+  // 已发过结束通知的任务 id：避免同一个任务重复弹通知
+  const notifiedRef = useRef(new Set<string>());
 
   // 订阅后端进度事件；卸载时取消订阅
   useEffect(() => {
@@ -53,6 +60,43 @@ export function useTransferTasks() {
     });
     return () => dispose?.();
   }, []);
+
+  /**
+   * 传输结束通知：监视任务状态跃迁到终态的那一刻。
+   *
+   * ## 为什么用 effect 监视，而不是在事件回调里埋点
+   *
+   * 任务结束有**两条路径**：后端 `sftp-transfer` 事件（主）与
+   * `finishTask` 兜底（后端没发事件的异常情况）。埋在任一处都会漏掉
+   * 另一条 —— 症状是「传输完了但没通知」，而用户无从判断这是功能坏了
+   * 还是本来就这样，排查成本极高。监视状态跃迁天然覆盖全部路径。
+   *
+   * `notifiedRef` 保证同一条任务只通知一次：状态会被反复写入
+   * （进度事件持续到达），没有它会弹出一长串相同通知。
+   */
+  useEffect(() => {
+    for (const task of transfers) {
+      const ended =
+        task.status === "done" ||
+        task.status === "failed";
+      if (!ended) continue;
+      if (notifiedRef.current.has(task.id))
+        continue;
+      notifiedRef.current.add(task.id);
+      onFinished?.(
+        summarizeTransfer(task),
+        task.status === "done"
+      );
+    }
+    // 裁掉已不在列表里的 id（被清空/挤出 TRANSFER_LIMIT），
+    // 否则这个 Set 会随会话增长到几百个 id
+    const alive = new Set(
+      transfers.map(task => task.id)
+    );
+    for (const id of notifiedRef.current)
+      if (!alive.has(id))
+        notifiedRef.current.delete(id);
+  }, [transfers, onFinished]);
 
   /** 登记一条新任务，返回它的 id（需要一并带给后端）。 */
   const registerTask = useCallback(
@@ -214,4 +258,26 @@ export function useTransferTasks() {
       controlTransfer
     ]
   );
+}
+
+/**
+ * 传输任务的摘要文本，供系统通知用。
+ *
+ * 「上传/下载 3 个文件（12.4 MB）」这种带数量与体积的说法，比干巴巴
+ * 一个文件名有用 —— 批量传输时要靠它确认是哪一批跑完了。
+ */
+function summarizeTransfer(
+  task: TransferTask
+): string {
+  const verb =
+    task.direction === "upload"
+      ? "上传"
+      : task.direction === "download"
+        ? "下载"
+        : "删除";
+  // total 是字节数里的「文件总数」还是字节数？由 sftpUtils 约定，
+  // 这里只用方向与名字，稳妥起见不臆测 total 的语义
+  return task.name
+    ? `${verb}：${task.name}`
+    : verb;
 }

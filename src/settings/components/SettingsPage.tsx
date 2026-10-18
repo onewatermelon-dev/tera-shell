@@ -22,6 +22,7 @@ import SettingsRow from "@/settings/components/SettingsRow";
 import Toggle from "@/shared/components/Toggle";
 import DataDirRow from "@/settings/components/DataDirRow";
 import ProxyRow from "@/settings/components/ProxyRow";
+import NotifyRow from "@/settings/components/NotifyRow";
 import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
 import { resolveColorScheme } from "@/terminal/lib/pane/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
@@ -403,9 +404,12 @@ export default function SettingsPage({
               }
             />
             <DataDirRow />
-            {/* 代理排在数据路径之后：两者都是「环境类」配置，
-                放一起符合用户来这个分区的预期 */}
+            {/* 代理与通知都排在数据路径之后 */}
             <ProxyRow
+              settings={settings}
+              onChange={onChange}
+            />
+            <NotifyRow
               settings={settings}
               onChange={onChange}
             />

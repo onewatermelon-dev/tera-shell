@@ -67,7 +67,12 @@ export function useTerminals(
    * 写回设置是「带记忆」的关键 —— 字号存在设置文件里，重启后照旧；
    * 同时外观 effect 会把新字号推给所有已打开的终端。
    */
-  onFontSizeChange: (fontSize: number) => void
+  onFontSizeChange: (fontSize: number) => void,
+  /** 长命令跑完时上报（系统通知用）；见 useNotifications */
+  onLongCommand?: (
+    command: string,
+    elapsedMs: number
+  ) => void
 ) {
   const t = useT();
   const [opened, setOpened] = useState<
@@ -276,7 +281,8 @@ export function useTerminals(
           openSearch: search.openSearch,
           ensureTerminalMenu,
           formatFontSizeHint: size =>
-            t("terminal.fontSizeHint", { size })
+            t("terminal.fontSizeHint", { size }),
+          onLongCommand
         }
       ),
     [
@@ -286,7 +292,8 @@ export function useTerminals(
       search.reportResults,
       search.openSearch,
       ensureTerminalMenu,
-      t
+      t,
+      onLongCommand
     ]
   );
 

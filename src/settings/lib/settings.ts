@@ -96,6 +96,14 @@ export type AppSettings = {
    * 公开仓库、也不要打进安装包。
    */
   proxyUrl: string;
+  /** 系统通知总开关；关掉时下面三项都不生效 */
+  notifyEnabled: boolean;
+  /** 长命令跑完时通知 */
+  notifyCommand: boolean;
+  /** AI 回答完成时通知 */
+  notifyAi: boolean;
+  /** 传输结束时通知 */
+  notifyTransfer: boolean;
 };
 
 /** 终端字体的内置默认值：与创建 Terminal 时的取值保持一致。 */
@@ -146,6 +154,12 @@ export const defaultSettings: AppSettings = {
   dataDir: "",
   proxyEnabled: false,
   proxyUrl: "",
+  // 通知默认全关：系统通知会弹到桌面上去，属于「用户明确要求被打扰」
+  // 的行为，不该由安装默认开启
+  notifyEnabled: false,
+  notifyCommand: true,
+  notifyAi: true,
+  notifyTransfer: true,
   shortcutOverrides: {}
 };
 
@@ -242,6 +256,15 @@ export function loadSettings(): AppSettings {
         typeof parsed.proxyUrl === "string"
           ? parsed.proxyUrl.trim()
           : "",
+      // 通知：总开关默认关（弹到桌面上的行为不该由安装默认开启），
+      // 三个分类开关默认开 —— 用户打开总开关时多半是三样都想要
+      notifyEnabled:
+        parsed.notifyEnabled === true,
+      notifyCommand:
+        parsed.notifyCommand !== false,
+      notifyAi: parsed.notifyAi !== false,
+      notifyTransfer:
+        parsed.notifyTransfer !== false,
       // 快捷键覆盖：手改过设置文件的话这里可能有未知 id / 撞车键位，
       // sanitizeOverrides 会剔掉（见 appShortcuts）
       shortcutOverrides: sanitizeOverrides(

@@ -20,6 +20,7 @@
       ]
     },
     "opener:allow-open-path",
-    "dialog:default"
+    "dialog:default",
+    "notification:default"
   ]
 }

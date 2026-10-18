@@ -772,3 +772,55 @@
   color: var(--muted);
   text-align: center;
 }
+
+// ---- 系统通知 ----
+
+// 三个分类开关各占一行：开关 + 名称同行，说明文字缩进对齐名称
+.notify-kinds {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 6px 0;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+}
+
+.notify-kind-label {
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+// 说明文字跨两列：从名称列开始对齐，不顶在开关下面
+.notify-kind-hint {
+  grid-column: 2;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+// 测试按钮行：与上方三个分类开关之间留一道分隔，避免被误认成第四个分类
+.notify-test {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 12px;
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.notify-test-result {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+// 提示文字独占一行：与按钮同行会在窄窗口里挤成两截
+.notify-test .notify-kind-hint {
+  flex-basis: 100%;
+}
