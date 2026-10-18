@@ -1,0 +1,443 @@
+// AI 对话内容：消息流、空面板欢迎卡片、Streamdown 语义色补丁、
+// 用户/助手消息气泡与 run_command 执行卡片。
+// 2026-10-13 从 _sidebar.scss 拆出。
+// 细滚动条 mixin 在 _scrollbar.scss —— 消息流与卡片结果区要用。
+// `as *` 不能省：scss 的 @use 是按文件隔离的命名空间，不加就得写
+// @include scrollbar.thin-scrollbar 这种全名。
+@use "../scrollbar" as *;
+
+// 消息流：纵向滚动，新消息靠 margin-auto 顶到最下
+.ai-panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+// 空面板欢迎卡片：贴底显示在输入框上方（参考 WisdomSSH 截图）
+.ai-welcome {
+  padding: 16px;
+  margin-top: auto;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ai-welcome-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ai-welcome-divider {
+  margin: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.ai-welcome-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ai-welcome-tip {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+// Streamdown（AI 回答的 markdown 渲染器）靠 **shadcn 语义色的 tailwind
+// 原子类**排版：`text-muted-foreground`、`bg-sidebar`、`text-primary`、
+// `bg-popover`、`bg-card`…而这些变量 HeroUI **只定义了一部分** ——
+// 已定义：`--foreground` `--background` `--muted` `--border` `--accent`；
+// 缺失：`--muted-foreground` `--sidebar` `--primary` `--popover` `--card`。
+// 缺的那几个不是「少个颜色」那么轻 —— 它们一缺，元素直接退化成
+// **继承父级的颜色**（通常是前景色），于是：
+// 引用块/表格头/行内代码失去灰调、代码块没有边框底色、链接没有链接色。
+// 用户看到的「样式很怪」就是这些退化叠在一起。
+// 作用域限定在 `.ai-panel`：只补 Streamdown 需要的别名，不污染全局
+// （顺带也让 Streamdown 自带的 dark: 变体在明暗两套主题下都成立）。
+.ai-panel {
+  --muted-foreground: var(--foreground);
+  --sidebar: var(--surface-secondary);
+  --popover: var(--surface-secondary);
+  --card: var(--surface-secondary);
+  --primary: var(--accent);
+}
+
+.ai-entry {
+  padding: 8px 10px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  border-radius: 8px;
+
+  &.is-user {
+    align-self: flex-end;
+    max-width: 90%;
+    background: var(--surface-secondary);
+  }
+
+  // 助手消息是 markdown（Streamdown 渲染），排版交给它本身
+  &.is-assistant {
+    align-self: stretch;
+    padding: 0;
+    white-space: normal;
+
+    // Streamdown 给代码块/宽表格挂了 tailwind 的 overflow-x-auto、
+    // overflow-auto，这些是 AI 面板里真正会滚起来的地方（正文
+    // 一般不溢出，代码块一长就滚）。tailwind 只管 overflow，
+    // 滚动条外观没人写，于是又回到浏览器默认的宽灰条。
+    // ⚠️ 别写成 `.ai-entry pre`：Streamdown 的代码块是 pre>code，
+    // 直接选 pre 也会命中表格内部的 pre 之类，范围太宽。
+    pre,
+    table {
+      @include thin-scrollbar;
+    }
+
+    // ---- markdown 正文排版（对齐 Codex CLI 的观感）----
+    // ⚠️ Streamdown 自带的排版是给「独立 markdown 文档」设计的，
+    // 直接塞进 390px 的侧栏里会显得又挤又乱 —— 段落没间距、列表
+    // 缩进太深、标题一上来就 3xl。这里按侧栏宽度重调一档。
+
+    // 段落间距：Codex 里段落之间有明显的呼吸感，这里靠 margin 而不是
+    // 空行（流式输出时半行会抖）
+    p {
+      margin: 0 0 0.7em;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+
+    // 标题：侧栏窄，2xl/3xl 会折行并撑出面板，按钮级别往下压
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      margin: 1em 0 0.5em;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    h1 {
+      font-size: 1.25em;
+    }
+
+    h2 {
+      font-size: 1.15em;
+    }
+
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-size: 1em;
+    }
+
+    // 列表：Streamdown 默认 `[li_&]:pl-6`（24px）在窄面板里太深
+    ul,
+    ol {
+      padding-inline-start: 1.35em;
+      margin: 0 0 0.7em;
+    }
+
+    li {
+      margin: 0.15em 0;
+    }
+
+    // 列表项里紧跟的段落不要再多一份下边距（会撑出空行）
+    li > p {
+      margin-bottom: 0;
+    }
+
+    // 行内代码：Streamdown 给的是 `rounded bg-muted`，
+    // 但 --muted 在这个底色上几乎同色，看不出是代码
+    code {
+      padding: 0.1em 0.3em;
+      font-size: 0.92em;
+      border-radius: 4px;
+    }
+
+    :not(pre) > code {
+      background: var(--surface-secondary);
+    }
+
+    // 引用块：左侧竖线 + 弱化文字
+    blockquote {
+      padding-left: 0.8em;
+      margin: 0 0 0.7em;
+      font-style: normal;
+      color: var(--muted);
+      border-left: 2px solid var(--border);
+    }
+
+    // ---- 代码块右上角工具栏（复制 / 下载）固定不漂 ----
+    // ⚠️ Streamdown 自带的工具栏是 `sticky top-2 -mt-10`，但 **sticky 的
+    // 移动范围被它的父元素（code-block 容器）框住**：消息流一滚动、
+    // 代码块顶部滚出面板，工具栏就被推出容器边界、跟着内容一起跑
+    // （用户报的「滚动内容的时候按钮会移动」）。而容器内真正的横向
+    // 滚动发生在 code-block-body 上，sticky 也不管那件事。
+    // 改成绝对定位钉在容器右上角：不依赖任何滚动祖先，横竖都不动。
+    // ⚠️ 别退回 sticky —— 一旦代码块比面板还高就会复现。
+    [data-streamdown="code-block"] {
+      position: relative;
+    }
+
+    [data-streamdown="code-block"] > .sticky {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      left: auto;
+      z-index: 10;
+      height: auto;
+      margin-top: 0;
+    }
+
+    // 代码块外框：Streamdown 用 `bg-sidebar`（现已映射到 surface），
+    // 但边框缺失时和正文区分不明显
+    pre {
+      padding: 10px 12px;
+      margin: 0 0 0.7em;
+      overflow-x: auto;
+      font-size: 0.92em;
+      line-height: 1.5;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    // 表格：窄面板里横向滚，字号略降一档免得撑破
+    table {
+      font-size: 0.92em;
+    }
+
+    // 分隔线留白过大
+    hr {
+      margin: 1em 0;
+    }
+
+    // 链接：Streamdown 用 `text-primary`，映射到 accent 了；
+    // 这里补下划线，链接与普通文字才区分得开
+    a {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  &.is-error {
+    color: var(--danger);
+  }
+}
+
+.ai-user-message {
+  align-self: flex-end;
+  max-width: 90%;
+}
+
+.ai-user-message .ai-entry {
+  max-width: 100%;
+}
+
+.ai-assistant-message {
+  align-self: stretch;
+}
+
+// 执行卡片：一条 run_command 的完整生命周期
+.ai-card {
+  align-self: stretch;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ai-card-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+// 卡片标题：对齐参考样式「准备执行命令」
+.ai-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.ai-card-badge {
+  flex: none;
+  padding: 1px 5px;
+  font:
+    9px Consolas,
+    monospace;
+  font-weight: 700;
+  border-radius: 4px;
+
+  &.ro {
+    color: var(--success);
+    background: rgb(0 0 0 / 12%);
+  }
+
+  &.rw {
+    color: #f59e0b;
+    background: rgb(245 158 11 / 18%);
+  }
+
+  // 传输徽章放的是图标不是 RO/RW 文字，所以尺寸对齐改用行高撑开
+  &.is-file {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 5px;
+    font-size: 11px;
+    color: var(--muted);
+    background: rgb(0 0 0 / 12%);
+  }
+}
+
+// 文件传输卡片的两端路径（本地 ⇄ 服务器）
+.ai-file-paths {
+  padding: 6px 8px;
+  background: var(--surface-secondary);
+  border-radius: 6px;
+}
+
+.ai-file-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+
+  & + & {
+    margin-top: 4px;
+  }
+}
+
+.ai-file-side {
+  flex: none;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.ai-file-path {
+  min-width: 0;
+  overflow-x: auto;
+  text-overflow: ellipsis;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--foreground);
+  white-space: nowrap;
+
+  @include thin-scrollbar;
+}
+
+// 命令下方的作用解释行（ⓘ + 一句话说明）
+.ai-card-question {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+
+  svg {
+    flex: none;
+  }
+}
+
+.ai-card-command {
+  padding: 6px 8px;
+  margin: 0 0 6px;
+  overflow-x: auto;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  background: var(--surface-secondary);
+  border-radius: 6px;
+
+  @include thin-scrollbar;
+}
+
+.ai-card-result {
+  font-size: 11px;
+
+  summary {
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  pre {
+    max-height: 180px;
+    padding: 6px 8px;
+    margin: 6px 0 0;
+    overflow: auto;
+    font:
+      11px Consolas,
+      monospace;
+    white-space: pre-wrap;
+    background: var(--surface-secondary);
+    border-radius: 6px;
+
+    @include thin-scrollbar;
+  }
+
+  pre.is-error {
+    color: var(--danger);
+  }
+}
+
+.ai-card-state {
+  font-size: 11px;
+  color: var(--muted);
+
+  &.is-error {
+    color: var(--danger);
+  }
+}
+
+.ai-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.ai-card-btn {
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  // 宽按钮（执行 / 后台执行）：对齐参考样式均分剩余宽度
+  &.is-wide {
+    flex: 1;
+  }
+
+  // 主操作（后台执行）：强调色
+  &.is-primary {
+    color: var(--accent-foreground);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}

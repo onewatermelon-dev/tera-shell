@@ -1,78 +1,77 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore
+  useState
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Alert } from "@heroui/react";
 import { useSessions } from "@/sessions/lib/useSessions";
-import { useTerminals } from "@/terminal/lib/useTerminals";
-import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
+import { useSessionGroups } from "@/sessions/lib/useSessionGroups";
+import { useTerminals } from "@/terminal/lib/session/useTerminals";
+import {
+  resolveColorScheme,
+  toSelectionCss
+} from "@/terminal/lib/pane/colorSchemes";
 import { useT } from "@/settings/lib/i18n";
-import type { SavedSession } from "@/sessions/lib/session";
-import AppHeader, {
-  type HeaderActions
-} from "@/app/components/AppHeader";
+import AppHeader from "@/app/components/AppHeader";
 import SessionSidebar from "@/sessions/components/SessionSidebar";
 import TerminalWorkspace from "@/terminal/components/TerminalWorkspace";
 import { useSettings } from "@/settings/lib/useSettings";
 import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import SettingsPage from "@/settings/components/SettingsPage";
-import { useMacros } from "@/terminal/lib/useMacros";
-import MacroDialog from "@/terminal/components/MacroDialog";
-import type { TerminalMacro } from "@/terminal/lib/terminalMacros";
-import SessionDialog from "@/sessions/components/SessionDialog";
-import PasswordDialog from "@/sessions/components/PasswordDialog";
-import AppLoading, {
-  type AppLoadingHandle
-} from "@/app/components/AppLoading";
+import { useMacros } from "@/terminal/lib/macro/useMacros";
+import type { TerminalMacro } from "@/terminal/lib/macro/terminalMacros";
+import { broadcastTargets } from "@/terminal/lib/macro/macroBroadcast";
+import AppDialogs from "@/app/components/AppDialogs";
+import { useAppToast } from "@/app/lib/useAppToast";
+import { useAppDialogs } from "@/app/lib/useAppDialogs";
+import { useAppLoading } from "@/app/lib/useAppLoading";
+import { useTerminalSelection } from "@/app/lib/useTerminalSelection";
+import { buildHeaderActions } from "@/app/lib/headerActions";
 import "@xterm/xterm/css/xterm.css";
 import "@/styles/app.scss";
 import "@/styles/main.css";
 
+/**
+ * 应用外壳：顶栏 + 会话侧栏 + 终端工作区 + 各类弹窗。
+ *
+ * 本文件只做「组装」—— 状态与业务逻辑按域拆在 lib/ 下：
+ * - `useAppToast`      右下角错误气泡
+ * - `useAppDialogs`    会话/分组弹窗状态与处理（含导入导出）
+ * - `useAppLoading`    开场动效与就绪状态
+ * - `useTerminalSelection` 活动终端选区订阅
+ * - `headerActions`    标题栏菜单动作表
+ * 底部弹窗 JSX 住在 `AppDialogs` 组件里。
+ */
 export default function App() {
-  const [dialogOpen, setDialogOpen] =
-    useState(false);
   const t = useT();
-  const [error, setError] = useState("");
-  // 错误气泡数秒后自动消失：原本只有"点击消失"这一种隐晦交互，
-  // 用户不知道能点，错误会一直挂在角落（如关闭会话后残留的写失败提示）
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(
-      () => setError(""),
-      5000
-    );
-    return () => clearTimeout(timer);
-  }, [error]);
-  const [editingSession, setEditingSession] =
-    useState<SavedSession | null>(null);
-  const [appReady, setAppReady] = useState(false);
-  const [macroOpen, setMacroOpen] =
-    useState(false);
+  const { error, setError, fail } = useAppToast();
+
+  const macroStore = useMacros();
+
+  const sessionStore = useSessions();
+  const groupStore = useSessionGroups();
+  const dialogs = useAppDialogs({
+    sessionStore,
+    groupStore,
+    t,
+    setError
+  });
+  const {
+    query,
+    setQuery,
+    filteredSessions,
+    move
+  } = sessionStore;
+  const { groups, toggle: toggleGroup } =
+    groupStore;
+
   const [settingsOpen, setSettingsOpen] =
+    useState(false);
+  const [macroOpen, setMacroOpen] =
     useState(false);
   // 编辑中的宏；为 null 表示本次弹窗是「新增」
   const [editingMacro, setEditingMacro] =
     useState<TerminalMacro | null>(null);
-  const appLoadingRef =
-    useRef<AppLoadingHandle>(null);
-
-  const macroStore = useMacros();
-
-  const {
-    sessions,
-    query,
-    setQuery,
-    filteredSessions,
-    save,
-    update,
-    remove,
-    reorder
-  } = useSessions();
 
   // 显示偏好：字体、字号、主题。必须早于 useTerminals —— 终端要用它建实例
   const appSettings = useSettings();
@@ -121,11 +120,11 @@ export default function App() {
       setError(text);
     },
     (sourceSessionId, encrypted) => {
-      const session = sessions.find(
+      const session = sessionStore.sessions.find(
         item => item.id === sourceSessionId
       );
       if (session)
-        update({
+        sessionStore.update({
           ...session,
           password: encrypted
         });
@@ -153,7 +152,7 @@ export default function App() {
 
   // 会话编辑 / 宏管理 / 密码弹窗关闭后，同样把焦点还给终端
   const anyDialogOpen =
-    dialogOpen ||
+    dialogs.dialogOpen ||
     macroOpen ||
     !!terminals.passwordRequest;
   useEffect(() => {
@@ -161,9 +160,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 同上
   }, [anyDialogOpen]);
 
-  function openCreate() {
-    setEditingSession(null);
-    setDialogOpen(true);
+  /** 打开本机终端：会话列表里固定的 local 会话，标题栏菜单与空状态共用。 */
+  function openLocal() {
+    const local = sessionStore.sessions.find(
+      session => session.kind === "local"
+    );
+    if (local) terminals.open(local);
+    else setError("未找到本机终端会话");
   }
 
   /**
@@ -198,153 +201,112 @@ export default function App() {
     );
   }
 
-  function openEdit(session: SavedSession) {
-    setEditingSession(session);
-    setDialogOpen(true);
-  }
-
-  function saveSession(session: SavedSession) {
-    if (editingSession) update(session);
-    else save(session);
-    setDialogOpen(false);
-  }
-
-  /** 打开本机终端：会话列表里固定的 local 会话，标题栏菜单与空状态共用。 */
-  function openLocal() {
-    const local = sessions.find(
-      session => session.kind === "local"
+  /**
+   * 把一条快捷宏发送到**所有**已打开的会话标签。
+   *
+   * ## 为什么不能直接 forEach 调 runMacro
+   *
+   * `runMacro` 末尾有 `focusTerminal(id)`（执行完把焦点交回目标窗格，
+   * 方便用户接着敲）。批量调用会让焦点在最后一跳结束，且每个 id 都触发
+   * 一次 `focus()` —— 多标签下表现为**焦点在屏幕上连番跳窜**。
+   * 广播的语义是「往每只会话都发一份」，用户并没有要切到哪一只。
+   *
+   * 所以这里只下发、最后把焦点**还给原来那只**（用户正对着的那只），
+   * 位置与点菜单前一致。
+   *
+   * ## 为什么逐个 invoke 而不是合并成一次
+   *
+   * `terminal_write` 的入参是单个会话 id，没有批量形式。多行宏也是
+   * 逐行补回车拼成一个 data 串（与 runMacro 同规则），所以「N 个会话」
+   * 就是 N 次 invoke —— 命令是 fire-and-forget，不等返回。
+   */
+  function broadcastMacro(macro: TerminalMacro) {
+    const lines = macro.command
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line !== "");
+    if (lines.length === 0) return;
+    const data = lines
+      .map(line => `${line}\r`)
+      .join("");
+    const { ids, skipped } = broadcastTargets(
+      terminals.opened,
+      terminals.disconnected,
+      terminals.activeId
     );
-    if (local) terminals.open(local);
-    else setError("未找到本机终端会话");
+    if (ids.length === 0) {
+      console.warn(
+        "[macro] 没有可发送的会话标签，已放弃广播"
+      );
+      setError(t("macro.broadcastNone"));
+      return;
+    }
+    for (const id of ids) {
+      invoke("terminal_write", {
+        id,
+        data,
+        command: macro.command
+      }).catch(fail);
+    }
+    // 关键日志：排查「发了没反应」时看实际落到了哪几个会话
+    console.info(
+      `[macro] 已广播到 ${ids.length} 个会话标签（跳过 ${skipped}）`
+    );
+    if (skipped > 0) {
+      // 跳过的要说出来：用户以为「发到所有」就是全发了，
+      // 少了几个却不说，他会以为是服务器没响应
+      setError(
+        t("macro.broadcastSkipped", {
+          count: ids.length,
+          skipped
+        })
+      );
+    } else {
+      console.info(
+        t("macro.broadcastDone", {
+          count: ids.length
+        })
+      );
+    }
+    // 焦点交回用户原本正看着的那只，而不是最后被写的那只
+    requestAnimationFrame(refocusActive);
   }
 
-  const loadingTimerRef =
-    useRef<ReturnType<typeof setTimeout>>(
-      undefined
-    );
-
-  useEffect(() => {
-    const first = sessions[0];
+  /** 开场后载入第一个会话：原 useAppLoading effect 的策略，
+   * 「开哪个」是业务决策留在门面，hook 只管时机。 */
+  const openFirstSession = () => {
+    const first = sessionStore.sessions[0];
     if (first) terminals.open(first);
-    // 动效至少播放 5 秒：主界面渲染就绪后等待剩余时间，再淡出进入应用。
-    loadingTimerRef.current = setTimeout(() => {
-      appLoadingRef.current?.finish();
-    }, 5000);
-    return () =>
-      clearTimeout(loadingTimerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
+  const loading = useAppLoading(openFirstSession);
 
-  function handleLoadingFinished() {
-    clearTimeout(loadingTimerRef.current);
-    setAppReady(true);
-  }
-
-  // 菜单"复制"的可用性跟随终端选区：xterm 只发选区事件、没有可轮询的状态，
-  // 用 useSyncExternalStore 订阅活动终端（订阅外部系统的标准做法，
-  // 也避免在 effect 里同步 setState 造成的级联渲染）。
-  const activeTerminal =
-    terminals.active?.terminal;
-  const subscribeSelection = useCallback(
-    (onChange: () => void) => {
-      if (!activeTerminal) return () => {};
-      const disposable =
-        activeTerminal.onSelectionChange(
-          onChange
-        );
-      return () => disposable.dispose();
-    },
-    [activeTerminal]
-  );
-  const readSelection = useCallback(
-    () =>
-      Boolean(
-        activeTerminal?.hasSelection() &&
-        activeTerminal.getSelection().trim()
-      ),
-    [activeTerminal]
-  );
-  const hasSelection = useSyncExternalStore(
-    subscribeSelection,
-    readSelection
+  // 菜单"复制"的可用性跟随终端选区
+  const hasSelection = useTerminalSelection(
+    terminals.active?.terminal
   );
 
   const menuState = useMemo(
     () => ({
       hasActive: Boolean(terminals.active),
-      hasSelection,
-      caseSensitive:
-        terminals.searchCaseSensitive,
-      regex: terminals.searchRegex
+      hasSelection
     }),
-    [
-      terminals.active,
-      hasSelection,
-      terminals.searchCaseSensitive,
-      terminals.searchRegex
-    ]
+    [terminals.active, hasSelection]
   );
 
   // 标题栏菜单动作：读写剪贴板失败统一走右下角错误提示
-  const fail = (reason: unknown) =>
-    setError(String(reason));
-  const headerActions: HeaderActions = {
-    newSession: openCreate,
+  const headerActions = buildHeaderActions({
+    terminals,
+    fail,
+    openCreate: dialogs.openCreate,
     openLocal,
-    closeActive: () => {
-      if (terminals.active)
-        terminals.close(terminals.active.id);
-    },
-    find: terminals.openSearch,
-    toggleCaseSensitive:
-      terminals.toggleCaseSensitive,
-    toggleRegex: terminals.toggleRegex,
-    copy: () => {
-      const terminal = terminals.active?.terminal;
-      if (!terminal?.hasSelection()) return;
-      navigator.clipboard
-        .writeText(terminal.getSelection())
-        .catch(fail);
-    },
-    paste: () => {
-      const terminal = terminals.active?.terminal;
-      if (!terminal) return;
-      navigator.clipboard
-        .readText()
-        .then(text => {
-          if (text) terminal.paste(text);
-        })
-        .catch(fail);
-    },
-    selectAll: () =>
-      terminals.active?.terminal.selectAll(),
-    clear: () =>
-      terminals.active?.terminal.clear(),
-    devtools: () => {
-      invoke("open_devtools").catch(fail);
-    },
-    openSftp: () => {
-      const active = terminals.active;
-      if (!active) {
-        setError("请先打开一个会话");
-        return;
-      }
-      // 传 sourceSessionId 而不是 id：复制出来的会话 id 是临时的
-      // `dup-<原 id>-<时间戳>`，不落库，独立窗口按它取不到会话。
-      // sourceSessionId 始终指向真正保存过的那个会话。
-      // 每个 SFTP 会话开一个真正的系统窗口：会出现在任务栏里，
-      // 可以并排摆放，也不会挡住主窗口里的终端
-      invoke("open_sftp_window", {
-        sessionId: active.sourceSessionId,
-        title: active.name
-      }).catch(fail);
-    },
-    openSettings: () => setSettingsOpen(true),
-    refocusTerminal: refocusActive
-  };
+    exportSessions: dialogs.exportSessions,
+    importSessions: dialogs.importSessions,
+    refocusActive,
+    openSettings: () => setSettingsOpen(true)
+  });
 
-  // 终端配色方案的背景/前景下传给 CSS：.terminal-host 的余数缝隙要跟
-  // xterm 背景融为一体、划词覆盖层要用前景色做高亮 —— CSS 拿不到
+  // 终端配色方案的背景/前景/选区下传给 CSS：.terminal-host 的余数缝隙要跟
+  // xterm 背景融为一体、划词覆盖层要用它做高亮 —— CSS 拿不到
   // xterm 主题，走变量
   const scheme = resolveColorScheme(
     appSettings.settings.colorScheme
@@ -360,7 +322,11 @@ export default function App() {
       style={
         {
           "--terminal-bg": scheme.background,
-          "--terminal-fg": scheme.foreground
+          "--terminal-fg": scheme.foreground,
+          // 选区色：格式是完整的 color-mix() 表达式（见 toSelectionCss），
+          // 混入了终端背景色以保证文字不被压没
+          "--terminal-selection":
+            toSelectionCss(scheme)
         } as Record<string, string>
       }
     >
@@ -385,6 +351,7 @@ export default function App() {
       >
         <SessionSidebar
           sessions={filteredSessions}
+          groups={groups}
           activeId={
             terminals.active?.sourceSessionId ??
             ""
@@ -393,10 +360,17 @@ export default function App() {
           query={query}
           onQueryChange={setQuery}
           onDuplicate={terminals.duplicate}
-          onEdit={openEdit}
-          onRemove={remove}
-          onCreate={openCreate}
-          onReorder={reorder}
+          onEdit={dialogs.openEdit}
+          onRemove={dialogs.setSessionToRemove}
+          onCreate={dialogs.openCreate}
+          onToggleGroup={toggleGroup}
+          onCreateGroup={dialogs.openCreateGroup}
+          onEditGroup={dialogs.openEditGroup}
+          onRemoveGroup={dialogs.setGroupToRemove}
+          onCreateInGroup={
+            dialogs.openCreateInGroup
+          }
+          onMove={move}
         />
         <TerminalWorkspace
           opened={terminals.opened}
@@ -409,24 +383,26 @@ export default function App() {
             terminals.searchCaseSensitive
           }
           searchRegex={terminals.searchRegex}
-          onActivate={terminals.activate}
           onFocusTerminal={
             terminals.focusTerminal
           }
+          onResize={terminals.resize}
+          onPausePtySync={terminals.pausePtySync}
           onClose={terminals.close}
           onCloseTabs={terminals.closeMany}
-          splitIds={terminals.splitIds}
-          splitVisibleId={
-            terminals.splitVisibleId
+          panes={terminals.panes}
+          tree={terminals.tree}
+          activePaneId={terminals.activePaneId}
+          onPaneHost={terminals.setPaneHost}
+          onFocusPane={terminals.setActivePaneId}
+          onActivatePaneTab={
+            terminals.activatePaneTab
           }
-          onActivateSplit={
-            terminals.activateSplit
-          }
-          onSplitHost={terminals.setSplitHost}
-          onSplit={terminals.split}
+          onPaneRatio={terminals.setPaneRatio}
+          onSplitPane={terminals.splitPane}
           onMoveTab={terminals.moveTab}
           onReorderTab={terminals.reorderTab}
-          onCreate={openCreate}
+          onCreate={dialogs.openCreate}
           onOpenLocal={openLocal}
           onSearch={terminals.search}
           onCloseSearch={terminals.closeSearch}
@@ -434,11 +410,9 @@ export default function App() {
             terminals.toggleCaseSensitive
           }
           onToggleRegex={terminals.toggleRegex}
-          onTerminalHost={
-            terminals.setTerminalHost
-          }
           macros={macroStore.macros}
           onRunMacro={runMacro}
+          onBroadcastMacro={broadcastMacro}
           onAddMacro={() => {
             setEditingMacro(null);
             setMacroOpen(true);
@@ -473,73 +447,39 @@ export default function App() {
           />
         )}
       </section>
-      <SessionDialog
-        key={editingSession?.id ?? "new"}
-        open={dialogOpen}
-        session={editingSession}
-        onClose={() => setDialogOpen(false)}
-        onSave={saveSession}
+      <AppDialogs
+        dialogs={dialogs}
+        groups={groups}
+        t={t}
+        passwordRequest={
+          terminals.passwordRequest
+        }
+        onSubmitPassword={
+          terminals.submitPassword
+        }
+        onCancelPassword={
+          terminals.cancelPassword
+        }
+        macroOpen={macroOpen}
+        editingMacro={editingMacro}
+        onSaveMacro={(name, command) => {
+          if (editingMacro)
+            macroStore.update(
+              editingMacro.id,
+              name,
+              command
+            );
+          else macroStore.add(name, command);
+        }}
+        onCloseMacro={() => setMacroOpen(false)}
+        error={error}
+        onDismissError={() => setError("")}
+        appReady={loading.appReady}
+        appLoadingRef={loading.appLoadingRef}
+        onLoadingFinished={
+          loading.handleLoadingFinished
+        }
       />
-      {terminals.passwordRequest && (
-        <PasswordDialog
-          key={
-            terminals.passwordRequest.session.id
-          }
-          session={
-            terminals.passwordRequest.session
-          }
-          onSubmit={terminals.submitPassword}
-          onCancel={terminals.cancelPassword}
-        />
-      )}
-      {macroOpen && (
-        <MacroDialog
-          key={editingMacro?.id ?? "new"}
-          macro={editingMacro}
-          onSave={(name, command) => {
-            if (editingMacro)
-              macroStore.update(
-                editingMacro.id,
-                name,
-                command
-              );
-            else macroStore.add(name, command);
-          }}
-          onClose={() => setMacroOpen(false)}
-        />
-      )}
-      {error && (
-        <Alert
-          status="danger"
-          className="app-toast"
-          onClick={() => setError("")}
-        >
-          <Alert.Content>
-            <Alert.Description>
-              {error}
-            </Alert.Description>
-          </Alert.Content>
-          {/* 真正可点的关闭钮：原来只是 ::after 画了个装饰性 ×，
-              伪元素不接收事件，点了当然没反应 */}
-          <button
-            type="button"
-            className="app-toast-close"
-            aria-label={t("app.action.close")}
-            onClick={event => {
-              event.stopPropagation();
-              setError("");
-            }}
-          >
-            ×
-          </button>
-        </Alert>
-      )}
-      {!appReady && (
-        <AppLoading
-          ref={appLoadingRef}
-          onFinished={handleLoadingFinished}
-        />
-      )}
     </main>
   );
 }

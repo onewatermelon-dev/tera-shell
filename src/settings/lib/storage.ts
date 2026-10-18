@@ -15,12 +15,16 @@ const cache = new Map<string, string>();
 /** 逻辑数据名。与后端 `data.rs` 的白名单一一对应。 */
 export const DataName = {
   sessions: "sessions",
+  /** 会话分组元数据（名称/颜色/折叠态），见 sessions/lib/sessionGroup.ts */
+  groups: "groups",
   settings: "settings",
   macros: "macros",
   models: "models",
   aiHistory: "ai_history",
   commandHistory: "command_history",
-  aiPrefs: "ai_prefs"
+  aiPrefs: "ai_prefs",
+  /** SFTP 目录书签（按栏与主机维度收藏），见 sftp/lib/sftpBookmarks.ts */
+  sftpBookmarks: "sftp_bookmarks"
 } as const;
 
 /**

@@ -1,0 +1,291 @@
+// 细滚动条 mixin 在 _scrollbar.scss —— 与终端区的系统/进程/网络信息抽屉
+// 同一套规格（SFTP 窗口此前漏了，用的是浏览器默认宽灰方角，与别处割裂）。
+// `as *` 不能省：scss 的 @use 按文件隔离命名空间，不加就得写全名。
+@use "../scrollbar" as *;
+
+// 文件列表：表头 + 内容同处一个滚动容器，表头 sticky 吸顶。
+// 放在同一个容器里，列的可用宽度天然一致，不必手动补偿滚动条宽度。
+.sftp-file-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  @include thin-scrollbar;
+}
+
+// 列宽只定义一次，表头与行共用，保证逐列严格对齐
+.file-head,
+.file-row {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  padding: 0 8px;
+}
+
+// 列宽按栏分别定义，表头与行共用同一套，保证逐列严格对齐。
+// 远程：名称 / 大小 / 权限 / 所有者 / 修改时间（修改时间在最后）
+.file-grid--remote {
+  grid-template-columns:
+    minmax(0, 1fr)
+    64px 78px 72px 92px;
+}
+
+// 本地没有 Unix 权限与所有者：名称 / 大小 / 修改时间
+.file-grid--local {
+  grid-template-columns:
+    minmax(0, 1fr)
+    64px 92px;
+}
+
+// 固定表头：背景继承容器色，滚动时下面的行不会透出来
+.file-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 28px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: inherit;
+  border-bottom: 1px solid var(--border);
+}
+
+// 文件行：hover 高亮 + 跳过屏幕外行的渲染（大目录更流畅）
+.file-row {
+  height: 30px;
+  contain-intrinsic-size: auto 30px;
+  content-visibility: auto;
+  cursor: default;
+  border-radius: 6px;
+}
+
+.file-row:hover {
+  background: var(--default);
+}
+
+// 多选选中的行：与 hover 同族但更实，一眼分清"路过"与"选中"
+.file-row.is-selected {
+  background: var(--accent-soft);
+}
+
+// 列表可聚焦（接收 Ctrl+A / Delete / F2），点击行时焦点落进来，
+// 默认的焦点轮廓在这种"点哪都有"的列表里只会是常驻噪音，去掉
+.sftp-file-list:focus {
+  outline: none;
+}
+
+// ===== 跨栏拖拽 =====
+// 行可拖，但**不能给 grab 光标**：整片列表都用默认光标时，
+// "按住就能拖" 与双击进入的直觉一致；到处是 grab 反而像列表不能点
+.file-row[data-entry-path] {
+  touch-action: none;
+}
+
+// 正被拖走的那几行：压暗 + 缩进，让用户看清从哪儿拿走的。
+// 不用 opacity 单独控制 —— 下面 hover 规则会把它顶回来
+.file-row[data-dragging] {
+  opacity: 0.4;
+}
+
+// 当前落点（目录条目）：整行虚线框 + 染色，一眼看出"放这里"。
+// 用虚线而不是加粗边框：加粗会让行突然变高，整列的行位跟着抖。
+// `outline` 画在边框外侧、`offset` 内收，所以不会改变行高 —— 虚线框
+// 与 hover 的实心底色能叠在一起
+.file-row[data-drop-target] {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  background: var(--accent-soft);
+}
+
+// 落点所在的整栏：外描边提示（表头与空状态都能接住）
+.sftp-pane[data-pane-target] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+// 跟手浮标：显示被拖条目名
+// ⚠️ **pointer-events 必须 none** —— 不关的话 document.elementFromPoint
+// 命中的是浮标自己，落点判定全废，症状是「拖到哪都不生效」。
+// 同一个道理见 body.sftp-dragging 的 cursor 覆盖
+.sftp-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 999;
+  max-width: 220px;
+  padding: 5px 10px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--foreground);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--segment);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+  opacity: 0.92;
+}
+
+// 拖拽进行中：全局抓取光标 + 禁选文本。
+// 用 !important 是因为要盖住 .file-row:hover 等处已有的 cursor
+body.sftp-dragging {
+  cursor: grabbing;
+
+  * {
+    cursor: grabbing !important;
+    user-select: none !important;
+  }
+}
+
+// 名称列：图标 + 文件名，宽度自适应并允许截断
+.cell-name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+// 行内图标统一尺寸与弱化配色，让文件名（前景色）成为视觉主体
+.cell-name svg {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+}
+
+// 系统原生图标（后端从 Windows Shell 取到的 BMP），显示尺寸与线性图标对齐
+.file-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 信息列：等宽小字，数字与权限串不会因比例字体而参差
+.cell-size,
+.cell-time,
+.cell-perm,
+.cell-owner {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font:
+    10px Consolas,
+    monospace;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.file-head .cell-end,
+.cell-size {
+  text-align: right;
+}
+
+// 表头之外的整宽提示（错误文案等）
+.pane-message {
+  padding: 12px;
+}
+
+// 栏内空状态：撑满剩余高度并居中
+.pane-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.dialog-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialog-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.dialog-hint {
+  color: var(--muted);
+}
+
+.dialog-error {
+  color: var(--danger);
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row .grow {
+  flex: 1;
+}
+
+.port-field {
+  width: 90px;
+}
+
+// 全局消息条（错误提示）：固定右下角，点击任意处关闭。
+// ⚠️ 用 `inset` 而不是分开写 right/bottom：HeroUI 的 Alert 自带定位属性，
+// 分开写容易被它盖掉，`inset` 一次写全四个方向更稳。
+// z-index 要高于右键菜单（40）与查找框（20），否则会被压住。
+.app-toast {
+  position: fixed;
+  inset: auto 20px 20px auto;
+  z-index: 60;
+  max-width: 380px;
+  padding: 12px 36px 12px 14px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  animation: toast-in 0.2s ease-out;
+}
+
+// 右侧的关闭提示：不额外占用 DOM，用户一看就知道能点掉
+// 右上角关闭钮：原先用 ::after 画了个装饰性 ×，伪元素不接收事件、
+// 点了没反应，误导用户以为能关 —— 换成真按钮
+.app-toast-close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 1;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.app-toast-close:hover {
+  color: var(--foreground);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,20 +1,50 @@
-// 全局样式入口：按功能域拆到 `partials/`，这里只负责按顺序引入。
+// 全局样式入口：按功能域拆到 `partials/` 的子目录，这里只负责按顺序引入。
 // `@use` 的样式按声明顺序输出，所以顺序即层叠顺序 —— 基础与应用外壳在前，
 // 各功能域跟随其后。改动某一域时只碰对应的 partial，避免单文件无限膨胀。
-// 各 partial 职责：shell = 重置与标题栏、sidebar = 会话侧栏、
-// terminal = 标签栏与 xterm、macros = 快捷宏栏与管理面板、
-// settings = 设置页、models = 模型设置、sftp = 窗口骨架与传输面板、
-// files = 文件列表、dialogs = 各对话框、context-menu = 右键菜单与路径选择、
-// loading = 开屏遮罩。
+// 目录职责：shell/ = 全局重置与应用外壳（标题栏/工作区/侧栏/会话条目/
+// 取色器/对话框表单）、terminal/ = 终端域（窗格网格/标签条/终端宿主/
+// 系统信息抽屉/浮层/宏栏）、ai/ = AI 面板各 part、sftp/ = SFTP 窗口
+// （外壳/传输/两栏/路径/文件列表/对话框）、settings/ = 设置页与模型设置、
+// 根目录 = 跨域共用（context-menu 右键菜单、loading 开屏遮罩、
+// scrollbar 细滚动条 mixin，自身不产出样式）。
+// ⚠️ scrollbar 只含 mixin：各域自行 `@use "../scrollbar"` 取用，
+// 这里列出只为让入口文件是全部样式资源的完整清单。
+// ⚠️ 同一次拆分出来的多个 partial 必须保持原文件的先后顺序
+// （reset → titlebar → shell → session-groups → color-picker → dialog-fields
+// 是原 _shell.scss 的顺序；session-list → terminal-pane → ai-* 是原
+// _sidebar.scss 的顺序；terminal-find → pane-grid → pane-tabs → terminal →
+// sys-drawer → terminal-overlay 是原 _terminal.scss 的顺序；sftp →
+// sftp-transfers → sftp-panes → sftp-path 是原 _sftp.scss 的顺序），
+// 否则相等特异性的规则层叠结果会变。
 
-@use "partials/shell";
-@use "partials/sidebar";
-@use "partials/terminal";
-@use "partials/macros";
-@use "partials/settings";
-@use "partials/models";
-@use "partials/sftp";
-@use "partials/files";
-@use "partials/dialogs";
+@use "partials/shell/reset";
+@use "partials/shell/titlebar";
+@use "partials/shell/shell";
+@use "partials/shell/session-groups";
+@use "partials/shell/color-picker";
+@use "partials/shell/dialog-fields";
+@use "partials/shell/session-list";
+@use "partials/terminal/terminal-pane";
+@use "partials/ai/ai-panel";
+@use "partials/ai/ai-chat";
+@use "partials/ai/ai-queue";
+@use "partials/ai/ai-compose";
+@use "partials/ai/ai-overlays";
+@use "partials/terminal/terminal-find";
+@use "partials/terminal/pane-grid";
+@use "partials/terminal/pane-tabs";
+@use "partials/terminal/terminal";
+@use "partials/terminal/sys-drawer";
+@use "partials/terminal/terminal-overlay";
+@use "partials/terminal/macros";
+@use "partials/settings/settings";
+@use "partials/settings/models";
+@use "partials/sftp/sftp";
+@use "partials/sftp/sftp-transfers";
+@use "partials/sftp/sftp-panes";
+@use "partials/sftp/sftp-path";
+@use "partials/sftp/files";
+@use "partials/sftp/dialogs";
 @use "partials/context-menu";
 @use "partials/loading";
+@use "partials/scrollbar";

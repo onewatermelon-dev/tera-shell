@@ -1,0 +1,195 @@
+/* 设置 · 关于：三张卡片（应用信息 / 更新 / 许可）。 */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px 24px;
+}
+
+.card {
+  padding: 14px 16px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* ---- 应用信息 ---- */
+
+.appHead {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.appName {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.version {
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--muted);
+}
+
+.desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- 通用行头 ---- */
+
+.rowHead {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rowTitle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.badge {
+  padding: 0 6px;
+  font:
+    10px Consolas,
+    monospace;
+  line-height: 16px;
+  color: var(--muted);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.action {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  &:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 有新版 / 失败时给点颜色，别让两种结果长得一样 */
+.hint[data-tone="good"] {
+  color: var(--success);
+}
+
+.hint[data-tone="bad"] {
+  color: #d9534f;
+}
+
+.linkRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.link {
+  padding: 0;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+/* ---- 许可清单 ---- */
+
+.search {
+  flex: 0 1 150px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+}
+
+.groups {
+  margin: 8px 0 0;
+  font:
+    10px Consolas,
+    monospace;
+  color: var(--muted);
+}
+
+.licenseList {
+  max-height: 240px;
+  padding: 0;
+  margin: 8px 0 0;
+  overflow: auto;
+  list-style: none;
+  border-top: 1px solid var(--border);
+
+  /* 滚动条藏掉、滚轮照常：与设置页滚动区同一处理（见 _settings.scss）。
+     225 条依赖的原生滚动条叠在圆角卡片上很突兀，而"共 N 项"的角标
+     已经说明还有多少内容 */
+  scrollbar-width: none;
+}
+
+.licenseList::-webkit-scrollbar {
+  display: none;
+}
+
+.licenseItem {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.licenseName {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.licenseMeta {
+  flex-shrink: 0;
+  font:
+    10px Consolas,
+    monospace;
+  color: var(--muted);
+}

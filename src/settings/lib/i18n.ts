@@ -55,14 +55,17 @@ const zhCN = {
   "app.action.minimize": "最小化",
   "app.action.maximize": "最大化",
   "app.action.close": "关闭",
-  "app.action.toggleCaseSensitive": "区分大小写",
-  "app.action.toggleRegex": "正则表达式",
+  // ⚠️ 这里曾有 app.action.toggleCaseSensitive / app.action.toggleRegex：
+  // 查找面板的「区分大小写 / 正则」两个开关原本各有一个全局快捷键，
+  // 用户要求取消（作为面板内的局部开关，本就不该有全局键位）。查找面板
+  // 自己用的是 terminal.find.caseSensitive / terminal.find.regex。
 
   "sidebar.title": "会话",
   "sidebar.newSsh": "新建 SSH 会话",
   "sidebar.mine": "我的会话",
   "sidebar.localTerminal": "本机终端",
   "sidebar.noMatch": "没有匹配的会话",
+  "sidebar.ungrouped": "未分组",
   "sidebar.ready": "就绪",
   "sidebar.connections": "{count} 个连接",
   "sidebar.collapse": "收起会话栏",
@@ -157,10 +160,24 @@ const zhCN = {
   "ai.welcome.title": "欢迎使用运维 AI 助手",
   "ai.welcome.desc":
     "我是一名服务器运维 AI 助手，可以帮助您完成各种服务器运维和管理任务。您可以直接输入需求，我会尽力帮助您解决问题！",
-  "ai.welcome.tip":
-    "磁盘空间不足：可以对我说“帮我清理一下磁盘空间”，我会帮您分析磁盘占用情况，并给出清理建议",
+  "ai.welcome.tip.0":
+    "磁盘空间不足？可以对我说「帮我清理一下磁盘空间」，我会分析占用并给出清理建议",
+  "ai.welcome.tip.1":
+    "服务起不来？可以说「帮我排查 nginx 启动失败」，把报错发给我更好",
+  "ai.welcome.tip.2":
+    "端口被占了？可以说「帮我查一下 8080 端口被谁占用」",
+  "ai.welcome.tip.3":
+    "CPU 飙高？可以说「帮我看看哪个进程最吃 CPU」，我会定位并给出建议",
+  "ai.welcome.tip.4":
+    "想查日志？可以说「帮我检索今天 nginx 日志里的 500 错误」",
+  "ai.welcome.tip.5":
+    "内存吃紧？可以说「帮我分析内存占用最高的 5 个进程」",
+  "ai.welcome.tip.6":
+    "定时任务没跑？可以说「帮我看看 crontab 里有哪些任务」",
+  "ai.welcome.tip.7":
+    "想批量操作？把目标描述清楚，我会拆成命令逐步执行并等你确认",
   "ai.input":
-    "输入消息或粘贴图片…（Shift+Enter换行）",
+    "输入消息或粘贴图片…（Shift+Enter换行，@ 引用终端）",
   "ai.thinking": "思考中…",
   "ai.thoughtFor": "思考了 {s} 秒",
   "ai.selectModel": "选择模型",
@@ -176,6 +193,19 @@ const zhCN = {
   "ai.message.copied": "已复制",
   "ai.message.time": "发送时间",
   "ai.send": "发送",
+  "ai.stop": "停止生成",
+  "ai.stopHint": "中断本轮回答",
+  "ai.queue.hint":
+    "排队中 {count} 条，本轮结束后自动发送",
+  "ai.queue.handle": "拖动排序",
+  "ai.queue.handleHint":
+    "按住拖动可调整顺序，聚焦后按上下方向键也能移动",
+  "ai.queue.dragging": "拖动中",
+  "ai.queue.copy": "复制排队消息",
+  "ai.queue.edit": "编辑",
+  "ai.queue.saveEdit": "保存修改",
+  "ai.queue.cancelEdit": "取消编辑",
+  "ai.queue.remove": "从队列移除",
   "ai.menu.attach": "附件",
   "ai.menu.uploadImage": "上传图片",
   "ai.menu.uploadImageHint":
@@ -191,6 +221,15 @@ const zhCN = {
   "ai.menu.blacklist": "自动执行黑名单",
   "ai.menu.blacklistHint":
     "黑名单中的命令不会被自动执行，一律弹出确认卡片",
+  "ai.ref.title": "引用终端内容",
+  "ai.ref.screen": "当前屏幕",
+  "ai.ref.scrollback": "终端回滚",
+  "ai.ref.selection": "选中内容",
+  "ai.ref.selectionEmpty": "无选区",
+  "ai.code.copy": "复制",
+  "ai.code.copied": "已复制",
+  "ai.code.save": "另存为",
+  "ai.code.saveFailed": "保存失败",
   "ai.blacklist.title": "命令黑名单",
   "ai.blacklist.lead":
     "黑名单中的命令不会被自动执行",
@@ -220,6 +259,64 @@ const zhCN = {
   "ai.card.execute": "执行",
   "ai.card.background": "后台执行",
   "ai.card.skip": "跳过",
+  "ai.file.title": "准备传输文件",
+  "ai.file.upload": "上传到服务器",
+  "ai.file.download": "下载到本地",
+  "ai.file.local": "本地",
+  "ai.file.remote": "服务器",
+  "ai.file.pick": "选择文件并传输",
+  "ai.file.bytes": "大小",
+  "ai.file.hint":
+    "本地文件由你在系统弹窗里亲自挑选，AI 无法指定要读取的本地路径。",
+  "ai.plan.title": "执行计划",
+  "ai.plan.steps": "步骤",
+  "ai.plan.approve": "开始执行",
+  "ai.plan.reject": "取消",
+  "ai.plan.pending": "待批准",
+  "ai.plan.running": "执行中 {done}/{total}",
+  "ai.plan.done": "已完成",
+  "ai.plan.cancelled": "已取消",
+  "ai.plan.aborted": "已中止",
+  "ai.plan.stepPending": "待执行",
+  "ai.plan.stepRunning": "执行中…",
+  "ai.plan.stepDone": "已完成",
+  "ai.plan.stepFailed": "已失败",
+  "ai.plan.stepSkipped": "已跳过",
+  "ai.plan.stepExecute": "执行",
+  "ai.plan.stepSkip": "跳过",
+  "ai.plan.result": "输出",
+  "ai.plan.more": "还有 {count} 步",
+  "ai.plan.expand": "展开全部",
+  "ai.plan.collapse": "收起",
+  "ai.question.title": "需要确认",
+  "ai.question.answered": "已回答",
+  "ai.question.cancelled": "已跳过",
+  "ai.question.unanswered": "未回答",
+  "ai.question.other": "其他",
+  "ai.question.continue": "继续",
+  "ai.question.skip": "跳过",
+  "ai.question.prev": "上一题",
+  "ai.question.next": "下一题",
+  "ai.question.progress":
+    "第 {current}/{total} 题",
+  "ai.edit.title": "修改文件",
+  "ai.edit.loading":
+    "正在读取文件并生成改动对比…",
+  "ai.edit.applying": "正在写回文件…",
+  "ai.edit.apply": "应用改动",
+  "ai.edit.cancel": "取消",
+  "ai.edit.applied": "已应用",
+  "ai.edit.cancelled": "已取消",
+  "ai.edit.failed": "未应用",
+  "ai.usage.input": "输入",
+  "ai.usage.output": "输出",
+  "ai.usage.cached": "缓存",
+  "ai.runbook.export": "导出为 Runbook",
+  "ai.runbook.failed": "导出 Runbook 失败",
+  "ai.table.title": "数据表",
+  "ai.table.filter": "筛选…",
+  "ai.table.empty": "没有匹配的行",
+  "ai.table.rows": "显示",
 
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
@@ -235,7 +332,79 @@ const zhCN = {
   "session.authHint":
     "身份验证由系统 SSH 处理，支持已有密钥和 ssh-agent。",
   "session.save": "保存会话",
+  "session.remove": "删除会话",
+  "session.removeTitle":
+    "确定删除会话「{name}」？",
+  "session.removeDescription":
+    "会话将从列表中移除，保存的连接信息与密码一并清除，此操作不可撤销。",
+  "transfer.export": "导出会话",
+  "transfer.exportDone": "已导出 {count} 个会话",
+  "transfer.exportEmpty": "没有可导出的会话",
+  "transfer.exportFailed": "导出失败：{error}",
+  "transfer.import": "导入会话",
+  "transfer.importTitle":
+    "导入 {sessions} 个会话、{groups} 个分组？",
+  "transfer.importDescription":
+    "导入的会话会分配新的标识；出于安全考虑密码不会被导入，需要重新填写。",
+  "transfer.importMerged":
+    "{count} 个分组与现有分组同名，会并入现有分组。",
+  "transfer.importSkipped":
+    "{count} 个会话已存在（同一台机器与账号），将跳过。",
+  "transfer.importNothingNew":
+    "没有新会话可导入：文件里的 {count} 个会话都已存在。",
+  "transfer.importDone":
+    "已导入 {sessions} 个会话、{groups} 个分组",
+  "transfer.importFailed": "导入失败：{error}",
   "session.hostRequired": "请填写主机地址",
+  "session.group": "分组",
+  "session.groupPlaceholder":
+    "留空为未分组，输入新名字可新建分组",
+  "session.groupPlaceholderNew":
+    "必填。选已有分组，或输入新名字新建分组",
+  "session.groupRequired": "请选择或填写分组",
+
+  "group.title": "会话分组",
+  "group.newTitle": "新建分组",
+  "group.editTitle": "编辑分组",
+  "group.name": "分组名称",
+  "group.namePlaceholder":
+    "如：生产环境 / 测试环境",
+  "group.nameRequired": "请填写分组名称",
+  "group.quickPick": "快速选择已有分组",
+  "group.save": "保存分组",
+  "group.new": "新建分组",
+  "group.rename": "重命名分组",
+  "group.remove": "删除分组",
+  "group.createIn": "在此分组新建会话",
+  "group.empty":
+    "空分组，点标题行右侧的 + 放入会话",
+  "group.removeTitle": "删除这个分组？",
+  "group.removeDescription":
+    "分组「{name}」下的会话会移回「未分组」，会话本身不会被删除。",
+
+  "colorTag.label": "颜色标记",
+  "colorTag.none": "无颜色",
+  "colorTag.red": "红色",
+  "colorTag.orange": "橙色",
+  "colorTag.yellow": "黄色",
+  "colorTag.green": "绿色",
+  "colorTag.cyan": "青色",
+  "colorTag.blue": "蓝色",
+  "colorTag.purple": "紫色",
+  "colorTag.pink": "粉色",
+  "colorTag.gray": "灰色",
+  "colorTag.custom": "自定义颜色",
+  "colorTag.hex": "色值",
+  "colorTag.colorSpace": "色彩空间",
+  // 通道标签用 ch 前缀另起一套：colorTag.red 已被色点占用（"红色"），
+  // 而通道要的是单字（"红"），不能复用同一个键
+  "colorTag.chHue": "色相",
+  "colorTag.chSaturation": "饱和度",
+  "colorTag.chLightness": "明度",
+  "colorTag.chBrightness": "亮度",
+  "colorTag.chRed": "红",
+  "colorTag.chGreen": "绿",
+  "colorTag.chBlue": "蓝",
   "sidebar.searchPlaceholder": "搜索会话",
   "sidebar.empty": "还没有会话",
   "sidebar.connect": "连接",
@@ -252,6 +421,7 @@ const zhCN = {
   "terminal.closeOthers": "关闭其他会话",
   "terminal.closeAll": "关闭所有会话",
   "terminal.splitRight": "向右拆分",
+  "terminal.splitDown": "向下拆分",
   "terminal.moreTabs": "更多标签",
   "terminal.overflowTabs":
     "{count} 个标签超出显示",
@@ -274,6 +444,9 @@ const zhCN = {
     "自动重连已放弃，可在终端右键菜单里手动重新连接",
   "terminal.confirmClose": "确定关闭这个会话吗？",
   "terminal.needSession": "请先打开一个会话",
+  // 快捷键设置页里的动作名（与右键菜单同义，单独成键便于改文案）
+  "terminal.reconnect.action": "重新连接",
+  "terminal.fullscreen.action": "全屏",
 
   "macro.title": "快捷宏",
   "macro.add": "新增快捷宏",
@@ -283,6 +456,16 @@ const zhCN = {
     "还没有快捷宏，点右侧 + 添加常用命令",
   "macro.editAction": "编辑",
   "macro.deleteAction": "删除",
+  "macro.broadcastAction": "发送到全部",
+  "macro.broadcastActionHint":
+    "发送到当前全部 {count} 个会话标签",
+  "macro.broadcastEmpty":
+    "只有当前标签，无处可发送",
+  "macro.broadcastDone":
+    "已发送到 {count} 个会话标签",
+  "macro.broadcastNone": "没有可发送的会话标签",
+  "macro.broadcastSkipped":
+    "已发送到 {count} 个会话，{skipped} 个因断线或本地会话已跳过",
   "macro.name": "名称",
   "macro.command": "命令",
   "macro.namePlaceholder": "名称（可留空）",
@@ -294,6 +477,27 @@ const zhCN = {
   "settings.nav.terminal": "终端",
   "settings.nav.colorScheme": "配色方案",
   "settings.nav.models": "模型设置",
+  "settings.nav.shortcuts": "快捷键",
+  "settings.nav.about": "关于",
+  "about.desc":
+    "SSH 终端 · AI 助手（Tauri + React）",
+  "about.update.title": "版本更新",
+  "about.update.check": "检查更新",
+  "about.update.checking": "检查中…",
+  "about.update.hint":
+    "手动检查；不会自动下载安装。",
+  "about.update.latest": "已是最新版本。",
+  "about.update.newer": "发现新版本",
+  "about.update.failed": "检查失败",
+  "about.update.timeout": "请求超时",
+  "about.update.network": "网络不可达",
+  "about.update.badPayload": "返回格式异常",
+  "about.update.openRelease": "查看更新说明",
+  "about.update.allReleases": "全部版本",
+  "about.repo": "GitHub 仓库",
+  "about.licenses.title": "开源许可",
+  "about.licenses.search": "搜索组件或许可证",
+  "about.licenses.empty": "没有匹配的组件",
   "models.desc":
     "管理自定义模型供应商，配置后可在聊天时选择使用。",
   "models.addProvider": "添加供应商",
@@ -371,6 +575,22 @@ const zhCN = {
   "settings.back": "返回工作区",
   "settings.subtitle":
     "修改后立即写入本地，仅对本机生效",
+  // ---- 快捷键自定义 ----
+  "shortcuts.hint":
+    "点击键位后按下想要的组合键，Esc 取消。建议保留 Ctrl+Shift 前缀 —— 裸 Ctrl+字母 在终端里多为 shell 的行编辑键。",
+  "shortcuts.scope.terminal": "终端窗口",
+  "shortcuts.scope.sftp": "SFTP 窗口",
+  "shortcuts.action.sftpBack": "后退",
+  "shortcuts.action.sftpForward": "前进",
+  "shortcuts.record": "录制快捷键",
+  "shortcuts.listening": "按下组合键…",
+  "shortcuts.custom": "已自定义",
+  "shortcuts.resetOne": "恢复默认键位",
+  "shortcuts.resetAll": "全部恢复默认",
+  "shortcuts.customizedCount":
+    "已自定义 {count} 项",
+  "shortcuts.conflict":
+    "该组合键已被「{name}」占用，请换一个",
   "settings.locale.title": "界面语言",
   "settings.locale.desc":
     "选择应用界面的显示语言；跟随系统时读取操作系统的语言设置。",
@@ -409,6 +629,9 @@ const zhCN = {
   "settings.cursorBlink.title": "光标闪烁",
   "settings.cursorBlink.desc":
     "终端光标是否闪烁。",
+  "settings.webgl.title": "硬件加速渲染",
+  "settings.webgl.desc":
+    "用 GPU 绘制终端文字（WebGL）。大输出时滚动与输入更顺滑；关闭后退回普通渲染，若遇到缺色、字形缺失等显示异常可先关掉它。",
   "settings.dataDir.title": "数据存储路径",
   "settings.dataDir.desc":
     "会话、设置与快捷宏的导出目录（默认为用户主目录）。保存后会把现有数据复制到新位置；路径后缀 .tera-shell 不可更改。",
@@ -459,15 +682,13 @@ const enUS: Record<MessageKey, string> = {
   "app.action.minimize": "Minimize",
   "app.action.maximize": "Maximize",
   "app.action.close": "Close",
-  "app.action.toggleCaseSensitive": "Match case",
-  "app.action.toggleRegex":
-    "Use regular expression",
 
   "sidebar.title": "Sessions",
   "sidebar.newSsh": "New SSH session",
   "sidebar.mine": "My sessions",
   "sidebar.localTerminal": "Local terminal",
   "sidebar.noMatch": "No matching sessions",
+  "sidebar.ungrouped": "Ungrouped",
   "sidebar.ready": "Ready",
   "sidebar.connections": "{count} connections",
   "sidebar.collapse": "Collapse sidebar",
@@ -563,10 +784,24 @@ const enUS: Record<MessageKey, string> = {
     "Welcome to the Ops AI Assistant",
   "ai.welcome.desc":
     "I'm a server operations AI assistant that can help you with all kinds of maintenance and management tasks. Just type your request and I'll do my best to help!",
-  "ai.welcome.tip":
-    'Low disk space? Try saying "clean up my disk" — I\'ll analyze disk usage and suggest what to remove',
+  "ai.welcome.tip.0":
+    'Low disk space? Try "help me clean up disk space" — I\'ll analyze usage and suggest what to remove',
+  "ai.welcome.tip.1":
+    'Service won\'t start? Try "troubleshoot nginx startup failure" — paste the error for better results',
+  "ai.welcome.tip.2":
+    'Port taken? Try "find out what is occupying port 8080"',
+  "ai.welcome.tip.3":
+    'CPU spiking? Try "show me the top process by CPU" and I\'ll track it down',
+  "ai.welcome.tip.4":
+    'Need logs? Try "search today\'s nginx logs for 500 errors"',
+  "ai.welcome.tip.5":
+    'Memory tight? Try "analyze the top 5 processes by memory usage"',
+  "ai.welcome.tip.6":
+    'Cron not firing? Try "list the tasks in my crontab"',
+  "ai.welcome.tip.7":
+    "Batch operations? Describe the goal and I'll break it into commands, running them step by step with your confirmation",
   "ai.input":
-    "Type a message or paste an image… (Shift+Enter for newline)",
+    "Type a message or paste an image… (Shift+Enter for newline, @ to reference the terminal)",
   "ai.thinking": "Thinking",
   "ai.thoughtFor": "Thought for {s}s",
   "ai.selectModel": "Select model",
@@ -582,6 +817,19 @@ const enUS: Record<MessageKey, string> = {
   "ai.message.copied": "Copied",
   "ai.message.time": "Sent at",
   "ai.send": "Send",
+  "ai.stop": "Stop generating",
+  "ai.stopHint": "Interrupt this turn",
+  "ai.queue.hint":
+    "{count} queued — sending automatically when this turn ends",
+  "ai.queue.handle": "Drag to reorder",
+  "ai.queue.handleHint":
+    "Hold and drag to reorder, or focus and use the arrow keys",
+  "ai.queue.dragging": "Dragging",
+  "ai.queue.copy": "Copy queued message",
+  "ai.queue.edit": "Edit",
+  "ai.queue.saveEdit": "Save changes",
+  "ai.queue.cancelEdit": "Cancel edit",
+  "ai.queue.remove": "Remove from queue",
   "ai.menu.attach": "Attachments",
   "ai.menu.uploadImage": "Upload image",
   "ai.menu.uploadImageHint":
@@ -597,6 +845,15 @@ const enUS: Record<MessageKey, string> = {
   "ai.menu.blacklist": "Execution blacklist",
   "ai.menu.blacklistHint":
     "Blacklisted commands are never auto-executed; they always wait for confirmation",
+  "ai.ref.title": "Reference terminal content",
+  "ai.ref.screen": "Current screen",
+  "ai.ref.scrollback": "Scrollback",
+  "ai.ref.selection": "Selected text",
+  "ai.ref.selectionEmpty": "no selection",
+  "ai.code.copy": "Copy",
+  "ai.code.copied": "Copied",
+  "ai.code.save": "Save",
+  "ai.code.saveFailed": "Save failed",
   "ai.blacklist.title": "Command blacklist",
   "ai.blacklist.lead":
     "Blacklisted commands are never auto-executed",
@@ -626,6 +883,64 @@ const enUS: Record<MessageKey, string> = {
   "ai.card.execute": "Execute",
   "ai.card.background": "Run in background",
   "ai.card.skip": "Skip",
+  "ai.file.title": "Ready to transfer a file",
+  "ai.file.upload": "Upload to server",
+  "ai.file.download": "Download to local",
+  "ai.file.local": "Local",
+  "ai.file.remote": "Server",
+  "ai.file.pick": "Choose file & transfer",
+  "ai.file.bytes": "Size",
+  "ai.file.hint":
+    "You pick the local file in a system dialog — the AI cannot choose which local path to read.",
+  "ai.plan.title": "Execution plan",
+  "ai.plan.steps": "Steps",
+  "ai.plan.approve": "Start",
+  "ai.plan.reject": "Cancel",
+  "ai.plan.pending": "Awaiting approval",
+  "ai.plan.running": "Running {done}/{total}",
+  "ai.plan.done": "Completed",
+  "ai.plan.cancelled": "Cancelled",
+  "ai.plan.aborted": "Aborted",
+  "ai.plan.stepPending": "Pending",
+  "ai.plan.stepRunning": "Running…",
+  "ai.plan.stepDone": "Done",
+  "ai.plan.stepFailed": "Failed",
+  "ai.plan.stepSkipped": "Skipped",
+  "ai.plan.stepExecute": "Run",
+  "ai.plan.stepSkip": "Skip",
+  "ai.plan.result": "Output",
+  "ai.plan.more": "{count} more steps",
+  "ai.plan.expand": "Show all",
+  "ai.plan.collapse": "Show less",
+  "ai.question.title": "Needs your input",
+  "ai.question.answered": "Answered",
+  "ai.question.cancelled": "Skipped",
+  "ai.question.unanswered": "Not answered",
+  "ai.question.other": "Other",
+  "ai.question.continue": "Continue",
+  "ai.question.skip": "Skip",
+  "ai.question.prev": "Previous question",
+  "ai.question.next": "Next question",
+  "ai.question.progress":
+    "Question {current} of {total}",
+  "ai.edit.title": "File change",
+  "ai.edit.loading":
+    "Reading the file and building the diff…",
+  "ai.edit.applying": "Writing the file back…",
+  "ai.edit.apply": "Apply changes",
+  "ai.edit.cancel": "Cancel",
+  "ai.edit.applied": "Applied",
+  "ai.edit.cancelled": "Cancelled",
+  "ai.edit.failed": "Not applied",
+  "ai.usage.input": "in",
+  "ai.usage.output": "out",
+  "ai.usage.cached": "cached",
+  "ai.runbook.export": "Export as runbook",
+  "ai.runbook.failed": "Failed to export runbook",
+  "ai.table.title": "Table",
+  "ai.table.filter": "Filter…",
+  "ai.table.empty": "No matching rows",
+  "ai.table.rows": "Rows",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",
@@ -642,7 +957,83 @@ const enUS: Record<MessageKey, string> = {
   "session.authHint":
     "Authentication is handled by the system SSH client, so existing keys and ssh-agent both work.",
   "session.save": "Save session",
+  "session.remove": "Delete session",
+  "session.removeTitle":
+    "Delete session “{name}”?",
+  "session.removeDescription":
+    "The session is removed from the list and its saved connection details and password are cleared. This cannot be undone.",
+  "transfer.export": "Export sessions",
+  "transfer.exportDone":
+    "Exported {count} sessions",
+  "transfer.exportEmpty": "No sessions to export",
+  "transfer.exportFailed":
+    "Export failed: {error}",
+  "transfer.import": "Import sessions",
+  "transfer.importTitle":
+    "Import {sessions} sessions and {groups} groups?",
+  "transfer.importDescription":
+    "Imported sessions are given new identifiers. Passwords are never exported, so you will need to re-enter them.",
+  "transfer.importMerged":
+    "{count} groups share a name with an existing group and will be merged into it.",
+  "transfer.importSkipped":
+    "{count} sessions already exist (same host and account) and will be skipped.",
+  "transfer.importNothingNew":
+    "Nothing to import: all {count} sessions in the file already exist.",
+  "transfer.importDone":
+    "Imported {sessions} sessions and {groups} groups",
+  "transfer.importFailed":
+    "Import failed: {error}",
   "session.hostRequired": "Host is required",
+  "session.group": "Group",
+  "session.groupPlaceholder":
+    "Empty means ungrouped; type a new name to create one",
+  "session.groupPlaceholderNew":
+    "Required. Pick an existing group, or type a new name to create one",
+  "session.groupRequired":
+    "Pick or enter a group",
+
+  "group.title": "Session group",
+  "group.newTitle": "New group",
+  "group.editTitle": "Edit group",
+  "group.name": "Group name",
+  "group.namePlaceholder":
+    "e.g. Production / Staging",
+  "group.nameRequired": "Group name is required",
+  "group.quickPick":
+    "Quick pick an existing group",
+  "group.save": "Save group",
+  "group.new": "New group",
+  "group.rename": "Rename group",
+  "group.remove": "Delete group",
+  "group.createIn": "New session in this group",
+  "group.empty":
+    "Empty group — use + to add sessions",
+  "group.removeTitle": "Delete this group?",
+  "group.removeDescription":
+    "Sessions in “{name}” move back to Ungrouped. The sessions themselves are kept.",
+
+  "colorTag.label": "Color",
+  "colorTag.none": "No color",
+  "colorTag.red": "Red",
+  "colorTag.orange": "Orange",
+  "colorTag.yellow": "Yellow",
+  "colorTag.green": "Green",
+  "colorTag.cyan": "Cyan",
+  "colorTag.blue": "Blue",
+  "colorTag.purple": "Purple",
+  "colorTag.pink": "Pink",
+  "colorTag.gray": "Gray",
+  "colorTag.custom": "Custom color",
+  "colorTag.hex": "Hex",
+  "colorTag.colorSpace": "Color space",
+  // 通道标签与色点标签分开（色点用 colorTag.red = "Red"）
+  "colorTag.chHue": "Hue",
+  "colorTag.chSaturation": "Saturation",
+  "colorTag.chLightness": "Lightness",
+  "colorTag.chBrightness": "Brightness",
+  "colorTag.chRed": "R",
+  "colorTag.chGreen": "G",
+  "colorTag.chBlue": "B",
   "sidebar.searchPlaceholder": "Search sessions",
   "sidebar.empty": "No sessions yet",
   "sidebar.connect": "Connect",
@@ -661,6 +1052,7 @@ const enUS: Record<MessageKey, string> = {
   "terminal.closeOthers": "Close other tabs",
   "terminal.closeAll": "Close all tabs",
   "terminal.splitRight": "Split right",
+  "terminal.splitDown": "Split down",
   "terminal.moreTabs": "More tabs",
   "terminal.overflowTabs":
     "{count} tabs are out of view",
@@ -683,6 +1075,8 @@ const enUS: Record<MessageKey, string> = {
     "Auto-reconnect gave up. Use the terminal context menu to reconnect manually",
   "terminal.confirmClose": "Close this session?",
   "terminal.needSession": "Open a session first",
+  "terminal.reconnect.action": "Reconnect",
+  "terminal.fullscreen.action": "Fullscreen",
 
   "macro.title": "Quick macros",
   "macro.add": "Add macro",
@@ -692,6 +1086,17 @@ const enUS: Record<MessageKey, string> = {
     "No macros yet — click + on the right to add a command",
   "macro.editAction": "Edit",
   "macro.deleteAction": "Delete",
+  "macro.broadcastAction": "Send to all",
+  "macro.broadcastActionHint":
+    "Send to all {count} open session tabs",
+  "macro.broadcastEmpty":
+    "Only this tab — nowhere to send",
+  "macro.broadcastDone":
+    "Sent to {count} session tabs",
+  "macro.broadcastNone":
+    "No session tab available",
+  "macro.broadcastSkipped":
+    "Sent to {count} sessions; skipped {skipped} that are disconnected or local",
   "macro.name": "Name",
   "macro.command": "Command",
   "macro.namePlaceholder": "Name (optional)",
@@ -703,6 +1108,30 @@ const enUS: Record<MessageKey, string> = {
   "settings.nav.terminal": "Terminal",
   "settings.nav.colorScheme": "Color scheme",
   "settings.nav.models": "Model providers",
+  "settings.nav.shortcuts": "Keyboard shortcuts",
+  "settings.nav.about": "About",
+  "about.desc":
+    "SSH terminal with an AI assistant (Tauri + React)",
+  "about.update.title": "Updates",
+  "about.update.check": "Check for updates",
+  "about.update.checking": "Checking…",
+  "about.update.hint":
+    "Manual check only — nothing is downloaded or installed automatically.",
+  "about.update.latest":
+    "You are on the latest version.",
+  "about.update.newer": "New version available:",
+  "about.update.failed": "Check failed",
+  "about.update.timeout": "request timed out",
+  "about.update.network": "network unreachable",
+  "about.update.badPayload":
+    "unexpected response",
+  "about.update.openRelease": "Release notes",
+  "about.update.allReleases": "All releases",
+  "about.repo": "GitHub repository",
+  "about.licenses.title": "Open source licenses",
+  "about.licenses.search":
+    "Search package or license",
+  "about.licenses.empty": "No matching package",
   "models.desc":
     "Manage custom model providers; enabled models can be picked when chatting.",
   "models.addProvider": "Add provider",
@@ -782,6 +1211,22 @@ const enUS: Record<MessageKey, string> = {
   "settings.back": "Back to workspace",
   "settings.subtitle":
     "Saved locally and applied to this machine only",
+  // ---- 快捷键自定义 ----
+  "shortcuts.hint":
+    "Click a shortcut then press the key combination. Esc cancels. Keeping the Ctrl+Shift prefix is recommended — bare Ctrl+letter is mostly shell line editing in the terminal.",
+  "shortcuts.scope.terminal": "Terminal window",
+  "shortcuts.scope.sftp": "SFTP window",
+  "shortcuts.action.sftpBack": "Back",
+  "shortcuts.action.sftpForward": "Forward",
+  "shortcuts.record": "Record shortcut",
+  "shortcuts.listening": "Press keys…",
+  "shortcuts.custom": "Custom",
+  "shortcuts.resetOne": "Reset to default",
+  "shortcuts.resetAll": "Reset all",
+  "shortcuts.customizedCount":
+    "{count} customized",
+  "shortcuts.conflict":
+    "Already used by “{name}”, pick another one",
   "settings.locale.title": "Interface language",
   "settings.locale.desc":
     "Language used by the app UI. Follows the system setting when set to that.",
@@ -823,6 +1268,9 @@ const enUS: Record<MessageKey, string> = {
   "settings.cursorBlink.title": "Cursor blink",
   "settings.cursorBlink.desc":
     "Whether the terminal cursor blinks.",
+  "settings.webgl.title": "Hardware acceleration",
+  "settings.webgl.desc":
+    "Draw terminal text with the GPU (WebGL). Keeps scrolling and typing smooth on heavy output. Turn it off to fall back to normal rendering — useful if you hit missing colors or glyphs.",
   "settings.dataDir.title": "Data location",
   "settings.dataDir.desc":
     "Where sessions, settings and macros are exported (defaults to your home directory). Saving copies the current data to the new location; the .tera-shell suffix is fixed.",

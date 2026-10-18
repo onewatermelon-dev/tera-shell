@@ -16,6 +16,7 @@
     "strict": true,
     "verbatimModuleSyntax": false,
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",

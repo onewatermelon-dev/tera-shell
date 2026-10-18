@@ -19,6 +19,73 @@ export type TransferDirection =
 export type TransferControlAction =
   "pause" | "resume" | "cancel";
 
+/** 远程磁盘用量（SFTP 状态条展示用）。 */
+export type RemoteDiskUsage = {
+  /** 落点所在文件系统的总容量 */
+  totalBytes: number;
+  /** 可用空间 */
+  freeBytes: number;
+  /** 当前目录累计大小；du 失败时为 0 */
+  dirBytes: number;
+};
+
+/**
+ * 同名落点冲突策略。
+ *
+ * overwrite 截断重写（旧行为）；skip 跳过已存在的；
+ * rename 换 `a (1).txt` 相邻路径；resume 从目标已有字节数处接续。
+ */
+export type TransferPolicy =
+  "overwrite" | "skip" | "rename" | "resume";
+
+/**
+ * 找出与目标目录同名的顶层条目（要传的内容 vs 目标栏当前列表）。
+ *
+ * 只按名字判断，类型不一致（源是文件、目标同名是目录）也算冲突 ——
+ * 后端遇到这种落点必然报错，提前拦在对话框里。
+ */
+export function findCollisions(
+  entries: PaneEntry[],
+  targetListing: PaneEntry[]
+): PaneEntry[] {
+  if (!entries.length || !targetListing.length) {
+    return [];
+  }
+  const names = new Set(
+    targetListing.map(entry => entry.name)
+  );
+  return entries.filter(entry =>
+    names.has(entry.name)
+  );
+}
+
+/**
+ * 冲突里是否存在可续传项：目标同名**文件**比源小。
+ *
+ * 只有这种情况"续传"按钮才有意义 —— 目标更大说明内容对不上，
+ * 目标是目录则没有"续传"概念。
+ */
+export function hasResumable(
+  collisions: PaneEntry[],
+  targetListing: PaneEntry[]
+): boolean {
+  const sizes = new Map(
+    targetListing.map(entry => [
+      entry.name,
+      entry
+    ])
+  );
+  return collisions.some(entry => {
+    const target = sizes.get(entry.name);
+    return (
+      !!target &&
+      !target.isDir &&
+      !entry.isDir &&
+      target.size < entry.size
+    );
+  });
+}
+
 /** 目录条目：本地 `fs_list_dir` 与远程 `sftp_list` 返回同构数据。 */
 export type PaneEntry = {
   name: string;
@@ -60,6 +127,10 @@ export type TransferTask = {
   startedAt: number;
   /** 结束时间（毫秒时间戳） */
   endedAt?: number;
+  /** 暂停时刻（毫秒时间戳）；恢复时清空并折算进 pausedMs */
+  pausedAt?: number;
+  /** 累计暂停时长（毫秒）：经过时间与速度都要扣除它 */
+  pausedMs?: number;
   /** 失败原因 */
   error?: string;
 };
@@ -74,6 +145,110 @@ export type TransferEvent = {
 
 /** 任务面板最多保留的记录条数，超出丢弃最早的。 */
 export const TRANSFER_LIMIT = 50;
+
+/**
+ * 把一条后端进度事件并进任务状态，返回新任务对象。
+ *
+ * 两条规则：
+ * - 暂停是用户手势：暂停生效前发出的进度事件仍在途中，到达时不能把
+ *   刚点下的暂停冲回"传输中"——否则按钮弹回"暂停"、看起来要点两次
+ *   才真的停。
+ * - 终态（完成/失败/已取消）不被迟到事件复活：取消后残留的进度事件
+ *   若把行翻回"传输中"，再点取消会因后端任务已注销而报错，行就
+ *   永远卡死在"传输中"。
+ */
+export function applyTransferEvent(
+  task: TransferTask,
+  event: TransferEvent
+): TransferTask {
+  const terminal =
+    task.status === "done" ||
+    task.status === "failed" ||
+    task.status === "cancelled";
+  return {
+    ...task,
+    bytes: event.bytes,
+    // 事件里的总量可能比列表里更准，非 0 时覆盖
+    total: event.total || task.total,
+    status: terminal
+      ? task.status
+      : event.done
+        ? "done"
+        : task.status === "paused"
+          ? "paused"
+          : "running",
+    endedAt: event.done
+      ? (task.endedAt ?? Date.now())
+      : task.endedAt
+  };
+}
+
+/**
+ * 任务的"活跃"经过时长（毫秒）：扣除累计暂停时间。
+ *
+ * 暂停中定格在暂停时刻（不再随 now 增长），运行中随 now 走，
+ * 结束后用 endedAt 收口——速度用它做分母，暂停时也会跟着定格。
+ */
+export function activeElapsedMs(
+  task: TransferTask,
+  now: number
+): number {
+  return Math.max(
+    0,
+    (task.endedAt ?? task.pausedAt ?? now) -
+      task.startedAt -
+      (task.pausedMs ?? 0)
+  );
+}
+
+/**
+ * 计算文件行被点击（主键）后的新选中集合。
+ *
+ * 与资源管理器一致：普通点击只选它；Ctrl 切换它；Shift 从锚点
+ * 扫到它（替换整个选中）。Shift 但没有锚点时退化为普通点击。
+ * `paths` 是当前列表的完整路径顺序，范围选择靠下标。
+ */
+export function nextSelection(
+  current: Set<string>,
+  paths: string[],
+  target: string,
+  options: {
+    ctrl?: boolean;
+    shift?: boolean;
+    anchor?: string | null;
+  }
+): Set<string> {
+  const anchor = options.anchor ?? null;
+  if (options.shift && anchor) {
+    const from = paths.indexOf(anchor);
+    const to = paths.indexOf(target);
+    if (from !== -1 && to !== -1) {
+      const [start, end] =
+        from < to ? [from, to] : [to, from];
+      return new Set(paths.slice(start, end + 1));
+    }
+  }
+  if (options.ctrl) {
+    const next = new Set(current);
+    if (next.has(target)) next.delete(target);
+    else next.add(target);
+    return next;
+  }
+  return new Set([target]);
+}
+
+/**
+ * 把选中路径集映射回当前列表的条目：顺序跟随列表，
+ * 自动过滤掉已不存在的路径（导航 / 刷新后的残留选中）。
+ */
+export function resolveSelected<
+  T extends { path: string }
+>(entries: T[], selected: Set<string>): T[] {
+  if (selected.size === 0) return [];
+  return entries.filter(entry =>
+    selected.has(entry.path)
+  );
+}
 
 /**
  * 生成传输任务 id：前后端共用，进度事件靠它找到面板里的那一行。
@@ -137,4 +312,54 @@ export function joinPath(
 export function baseName(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
+}
+
+/**
+ * 取路径的父目录（远程路径用 `/` 分隔）。
+ *
+ * 一级目录（`/root`）返回 `/` 自己而非空串：挪动判定用它判断
+ * 「条目是不是已经在目标目录里」。
+ */
+export function parentOf(path: string): string {
+  const index = path.lastIndexOf("/");
+  if (index <= 0) return "/";
+  return path.slice(0, index);
+}
+
+/**
+ * 把拖拽条目转成插入终端输入行的文本（拖路径进终端用）。
+ *
+ * 单个目录 → `cd '<路径>'`（最常用：拖个目录过去直接 cd）；
+ * 其余情况 → 单引号包裹的路径按空格连接（文件好接在命令后面）。
+ * 单引号按 POSIX 规则转义（`'` → `'\''`），PowerShell 也兼容。
+ * 刻意不带换行：插入后由用户决定是否回车执行。
+ */
+export function pathsToTerminalText(
+  entries: PaneEntry[]
+): string {
+  const quote = (path: string) =>
+    `'${path.replaceAll("'", "'\\''")}'`;
+  if (entries.length === 1) {
+    const entry = entries[0]!;
+    return entry.isDir
+      ? `cd ${quote(entry.path)}`
+      : quote(entry.path);
+  }
+  return entries
+    .map(entry => quote(entry.path))
+    .join(" ");
+}
+
+/**
+ * 文件名是否是右键菜单可解压的压缩包。
+ *
+ * tar 系按扩展名识别（后端 `tar -xf` 也靠它自动选解压方式），
+ * zip 单列 —— 两者的解压命令不同（tar / unzip）。
+ */
+export function isArchiveName(
+  name: string
+): boolean {
+  return /\.(tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip)$/i.test(
+    name
+  );
 }

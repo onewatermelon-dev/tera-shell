@@ -12,6 +12,7 @@ import {
   type AppSettings
 } from "@/settings/lib/settings";
 import { setLocale } from "@/settings/lib/i18n";
+import { setShortcutOverrides } from "@/shared/lib/appShortcuts";
 
 /**
  * 设置的状态管理。
@@ -44,6 +45,15 @@ export function useSettings() {
       locale: settings.locale
     }).catch(() => {});
   }, [settings.theme, settings.locale]);
+
+  // 快捷键覆盖：写进 appShortcuts 的模块级 store，菜单标签、右键菜单与
+  // 按键处理都订阅它。启动时同步一次（老配置里没有这个字段时是空对象，
+  // 等于全部用默认键位）
+  useEffect(() => {
+    setShortcutOverrides(
+      settings.shortcutOverrides
+    );
+  }, [settings.shortcutOverrides]);
 
   /** 局部更新某一项，写回存储并刷新状态。 */
   const update = useCallback(

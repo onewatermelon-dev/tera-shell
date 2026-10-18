@@ -12,6 +12,8 @@ import {
   DesktopOutlined,
   FormatPainterOutlined,
   GlobalOutlined,
+  InfoCircleOutlined,
+  KeyOutlined,
   MoonOutlined,
   SunOutlined,
   TranslationOutlined
@@ -20,8 +22,10 @@ import SettingsRow from "@/settings/components/SettingsRow";
 import Toggle from "@/shared/components/Toggle";
 import DataDirRow from "@/settings/components/DataDirRow";
 import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
-import { resolveColorScheme } from "@/terminal/lib/colorSchemes";
+import { resolveColorScheme } from "@/terminal/lib/pane/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
+import ShortcutSettings from "@/settings/components/ShortcutSettings";
+import { AboutSection } from "@/settings/components/AboutSection";
 import SettingsSelect, {
   type SelectOption
 } from "@/settings/components/SettingsSelect";
@@ -41,12 +45,14 @@ import {
   type ThemeMode
 } from "@/settings/lib/settings";
 
-/** 左侧导航的四页。 */
+/** 左侧导航的五页（关于是只读信息页）。 */
 type Section =
   | "general"
   | "terminal"
   | "colorScheme"
-  | "models";
+  | "models"
+  | "shortcuts"
+  | "about";
 
 /** 主题下拉的三项。 */
 const themeOptions = (
@@ -296,9 +302,42 @@ export default function SettingsPage({
           <ApiOutlined />
           {t("settings.nav.models")}
         </button>
+        <button
+          type="button"
+          className={
+            section === "shortcuts"
+              ? "settings-nav-item is-active"
+              : "settings-nav-item"
+          }
+          onClick={() => setSection("shortcuts")}
+        >
+          <KeyOutlined />
+          {t("settings.nav.shortcuts")}
+        </button>
+        <button
+          type="button"
+          className={
+            section === "about"
+              ? "settings-nav-item is-active"
+              : "settings-nav-item"
+          }
+          onClick={() => setSection("about")}
+        >
+          <InfoCircleOutlined />
+          {t("settings.nav.about")}
+        </button>
       </aside>
 
-      <section className="settings-content">
+      <section
+        className={
+          // 配色方案分区整页占满、只有方案列表内部滚动 —— 见
+          // _settings.scss 的 .settings-content--fill（2026-10-15 用户要求）。
+          // 其余分区内容短，照旧走整页滚动。
+          section === "colorScheme"
+            ? "settings-content settings-content--fill"
+            : "settings-content"
+        }
+      >
         <h1 className="settings-title">
           {
             {
@@ -309,15 +348,20 @@ export default function SettingsPage({
               colorScheme: t(
                 "settings.nav.colorScheme"
               ),
-              models: t("settings.nav.models")
+              models: t("settings.nav.models"),
+              shortcuts: t(
+                "settings.nav.shortcuts"
+              ),
+              about: t("settings.nav.about")
             }[section]
           }
         </h1>
-        {section !== "models" && (
-          <p className="settings-subtitle">
-            {t("settings.subtitle")}
-          </p>
-        )}
+        {section !== "models" &&
+          section !== "about" && (
+            <p className="settings-subtitle">
+              {t("settings.subtitle")}
+            </p>
+          )}
 
         {section === "general" ? (
           <>
@@ -474,6 +518,26 @@ export default function SettingsPage({
             />
 
             <SettingsRow
+              title={t("settings.webgl.title")}
+              description={t(
+                "settings.webgl.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.webgl.title"
+                  )}
+                  isSelected={
+                    settings.webglRender
+                  }
+                  onChange={webglRender =>
+                    onChange({ webglRender })
+                  }
+                />
+              }
+            />
+
+            <SettingsRow
               title={t("settings.welcome.title")}
               description={t(
                 "settings.welcome.desc"
@@ -517,6 +581,13 @@ export default function SettingsPage({
               }
             />
           </>
+        ) : section === "shortcuts" ? (
+          <ShortcutSettings
+            overrides={settings.shortcutOverrides}
+            onChange={shortcutOverrides =>
+              onChange({ shortcutOverrides })
+            }
+          />
         ) : section === "colorScheme" ? (
           <SettingsRow
             title={t(
@@ -538,6 +609,8 @@ export default function SettingsPage({
               }
             />
           </SettingsRow>
+        ) : section === "about" ? (
+          <AboutSection />
         ) : (
           <ModelProvidersPage />
         )}

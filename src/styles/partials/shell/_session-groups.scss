@@ -1,0 +1,161 @@
+// 侧栏会话分组：分组标题行（整行可点折叠、悬停现操作按钮、拖拽落点高亮）、
+// 分组列表容器与空态。
+
+.group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 15px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.group-title svg {
+  width: 14px;
+}
+
+// 会话分组列表：整列滚动，分组节在内部排布
+.session-groups {
+  flex: 1;
+  min-height: 0;
+  padding: 0 7px;
+  overflow-y: auto;
+}
+
+// 分组节
+.session-group {
+  margin-bottom: 2px;
+}
+
+.session-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+// 分组标题行：整行可点折叠，右侧操作按钮悬停才现
+.group-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 26px;
+  padding: 0 4px 0 2px;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  cursor: pointer;
+  border-radius: 6px;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.group-caret {
+  flex: none;
+  width: 12px;
+  font-size: 9px;
+  transition: transform 0.15s ease;
+
+  // 展开态箭头转 90°（原本朝右）
+  &.is-open {
+    transform: rotate(90deg);
+  }
+}
+
+.group-color {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+// 拖拽进行中：给所有分组标题行上边框，虚线表示「松手放这里」。
+// 之前只能把会话拖到同组已有条目上，空分组无处可放，用户根本猜不到
+// 标题行能不能接 —— 悬停在 body.tab-dragging 期间常驻，滚过即见。
+body.tab-dragging .group-head {
+  border-top: 1px dashed var(--accent);
+  opacity: 0.75;
+}
+
+// 拖拽经过某个分组：底色加深，明确指出「松手会进这一组」。
+// 只在拖拽中生效，平时 :hover 是侧栏常规悬停。
+body.tab-dragging .group-head:hover {
+  background: var(--accent-soft);
+  border-top-color: var(--accent);
+  opacity: 1;
+}
+
+.group-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-count {
+  flex: none;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+// 分组操作区：拦冒泡（在组件里），这里只管显隐。
+// 4px 对齐 .ai-blacklist-remove 一类小按钮的疏密：1px 会让三个按钮
+// 视觉上连成一条，删/改分不清。
+.group-ops {
+  display: flex;
+  visibility: hidden;
+  flex: none;
+  gap: 4px;
+}
+
+.group-head:hover .group-ops,
+.group-ops:focus-within {
+  visibility: visible;
+}
+
+// 分组操作按钮：压到 16px 见方。
+// ⚠️ 选择器必须带上 `.button` 提特异性 —— HeroUI 的
+// `.button--icon-only.button--sm` 是 (0,2,0)，只写 `.group-op` (0,1,0)
+// 会输给它的 `w-9 md:w-8`（32px），按钮比预期大一倍。
+.group-op.button {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  color: var(--muted);
+
+  // 同 .edit/.delete：HeroUI ghost 的 --button-bg-pressed 是
+  // var(--default)，点一下会闪出圆形色块。hover 只换颜色即可
+  --button-bg-hover: transparent;
+  --button-bg-pressed: transparent;
+
+  svg {
+    width: 11px;
+  }
+
+  &:hover {
+    color: var(--foreground);
+  }
+
+  &.danger:hover {
+    color: var(--danger);
+  }
+}
+
+.group-empty {
+  padding: 6px 0 8px 20px;
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.75;
+}

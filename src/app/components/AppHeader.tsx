@@ -16,6 +16,13 @@ import AppRail, {
   type MenuState
 } from "@/app/components/AppRail";
 import { useT } from "@/settings/lib/i18n";
+import {
+  handledElsewhere,
+  isEditableTarget,
+  isRecordingShortcut,
+  matchAction,
+  useShortcuts
+} from "@/shared/lib/appShortcuts";
 import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import type { StatusMode } from "@/settings/lib/settings";
 import {
@@ -23,6 +30,52 @@ import {
   BorderOutlined,
   CloseOutlined
 } from "@ant-design/icons";
+
+/**
+ * 按键事件的最小形状（只要用到的几个字段）。
+ */
+type KeyLike = {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+};
+
+/**
+ * 这次按键是不是「裸 Ctrl+C / Ctrl+V」（无 Shift/Alt）。
+ *
+ * 只对这两个键有意义：它们是浏览器原生复制/粘贴的默认键，而
+ * `Ctrl+Shift+C` 这类组合浏览器并不处理（某些终端还自己绑了
+ * 「复制」到 Ctrl+Shift+C），所以不能一概放行。
+ */
+function isPlainCtrl(event: KeyLike): boolean {
+  if (event.shiftKey || event.altKey)
+    return false;
+  const key = event.key.toLowerCase();
+  return key === "c" || key === "v";
+}
+
+/**
+ * 事件目标是否在**终端之外**。
+ *
+ * 判据用「最近的 `.terminal-instance` 祖先」而不是「焦点在哪」：
+ * 终端里划词后焦点仍在 xterm 的辅助 textarea 上，AI 面板里划词则焦点
+ * 落在那个 div（甚至 body）——两种都要能正确区分。
+ *
+ * 事件 target 为 null（个别合成事件）时按「在外部」处理：宁可放行给
+ * 浏览器原生复制，也不要抢走用户的复制意图。
+ */
+function isOutsideTerminal(
+  target: EventTarget | null
+): boolean {
+  if (!(target instanceof HTMLElement))
+    return true;
+  // xterm 的辅助 textarea 算终端内部（与 isEditableTarget 的排除同源）
+  if (target.closest(".xterm-helper-textarea"))
+    return false;
+  return !target.closest(".terminal-instance");
+}
 
 /**
  * 菜单可执行的动作集合。
@@ -35,15 +88,21 @@ export type HeaderActions = {
   openLocal: () => void;
   closeActive: () => void;
   find: () => void;
-  toggleCaseSensitive: () => void;
-  toggleRegex: () => void;
   copy: () => void;
   paste: () => void;
   selectAll: () => void;
   clear: () => void;
   devtools: () => void;
+  /** 重连当前活动会话（终端右键菜单「重新连接」的全局键位）。 */
+  reconnect: () => void;
+  /** 切换终端专注模式（隐藏侧栏/标签条/状态栏）。 */
+  toggleFocusMode: () => void;
   /** 打开 SFTP 窗口，连接目标取当前活动会话。 */
   openSftp: () => void;
+  /** 把当前会话与分组导出到 JSON 文件（文件菜单）。 */
+  exportSessions: () => void;
+  /** 从 JSON 文件导入会话，选完文件先弹确认框（文件菜单）。 */
+  importSessions: () => void;
   /** 打开设置页。 */
   openSettings: () => void;
   /** 竖条菜单收起后的焦点回还（菜单动作多为终端操作）。 */
@@ -53,7 +112,7 @@ export type HeaderActions = {
 type Props = {
   actions: HeaderActions;
   /** 菜单项可用性：无活动终端、无选区时对应项置灰。 */
-  menuState: Omit<MenuState, "maximized">;
+  menuState: MenuState;
   /** 会话栏展开态与切换动作：透传给左侧竖条上的开关图标。 */
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
@@ -79,6 +138,13 @@ export default function AppHeader({
 }: Props) {
   const t = useT();
   const appWindow = useRef(getCurrentWindow());
+  /**
+   * 订阅生效快捷键表（默认 + 用户覆盖）。
+   *
+   * 键位循环要遍历它、菜单标签要读它 —— 两者都必须是**生效值**，
+   * 读默认表会出现「菜单写着 Ctrl+Shift+N，用户按自己设的键没反应」。
+   */
+  const shortcuts = useShortcuts();
   const [isMaximized, setIsMaximized] =
     useState(false);
   // 点击标题栏关闭钮先弹二次确认，确认后才真正关闭窗口
@@ -108,15 +174,11 @@ export default function AppHeader({
   }, []);
 
   const menus = useMemo(
-    () =>
-      buildMenus(
-        {
-          ...menuState,
-          maximized: isMaximized
-        },
-        t
-      ),
-    [menuState, isMaximized, t]
+    () => buildMenus(menuState, t),
+    // shortcuts 是订阅到的生效表：用户在设置页改了键位，
+    // 菜单标签要跟着变（读的是同一个 store）
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 显式列出 shortcuts 作依赖
+    [menuState, t, shortcuts]
   );
 
   // 窗口级动作（退出走二次确认、最大化走窗口 API）不经过 App 传入的 actions。
@@ -142,6 +204,99 @@ export default function AppHeader({
       `[menu] 未实现的菜单动作：${id}`
     );
   }
+
+  /**
+   * 应用级快捷键。
+   *
+   * 键位与菜单标签读同一张表（`APP_SHORTCUTS`），所以改了表两边同步生效。
+   *
+   * 三条约束：
+   *
+   * 1. **在捕获阶段监听**（`capture: true`）：xterm 会吞掉一部分冒泡到
+   *    窗口的按键，`Ctrl+F` 这类必须先于 xterm 拿到。
+   *
+   * 2. **`find` / `devtools` 跳过**（`handledElsewhere`）：它们在
+   *    `useTerminals` 的挂载期监听里已经实现，这里再绑一次会触发两遍
+   *    （`openSearch` 调两次、DevTools 开两个窗口）。
+   *
+   * 3. **可编辑元素聚焦时让路**（`isEditableTarget`）：AI 助手输入框里按
+   *    `Ctrl+Shift+A` 应该是选文字，不是「终端全选」。终端（xterm 的辅助
+   *    textarea）被显式排除在判断之外，它的键位另有一套。
+   */
+  const shortcutActionsRef = useRef(actions);
+  /**
+   * 完整 handlers（含本文件的 quit / toggleMaximize 两个窗口级动作）
+   * 的 ref 镜像。经 ref 取，闭包只在挂载时建一次也不会拿到旧值。
+   */
+  const handlersRef = useRef(handlers);
+
+  // ⚠️ **ref 只能在 effect 里同步，不能渲染期写**（react-hooks/refs 会报
+  // "Cannot update ref during render"）：按键回调只在挂载时建一次，
+  // 但要拿到最新的 handlers，就靠这里每次渲染后同步一次。
+  useEffect(() => {
+    shortcutActionsRef.current = actions;
+    handlersRef.current = handlers;
+  });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Shift") return;
+      // 设置页正在录制快捷键：那次按键属于「录入」而不是「执行」，
+      // 不让路的话用户按 Ctrl+Shift+N 会被菜单动作吃掉，录不进去
+      if (isRecordingShortcut()) return;
+      // 可编辑元素聚焦时让路（AI 输入框里 Ctrl+Shift+A 应是选文字）
+      if (isEditableTarget(event.target)) return;
+      // 菜单已打开时不抢：方向键/回车要在菜单里正常导航
+      const active = document.activeElement;
+      if (active?.closest('[role="menu"]'))
+        return;
+      // ⚠️ **焦点不在终端里时不抢 Ctrl+C / Ctrl+V**：
+      // 用户在 AI 面板、设置页等界面划词后按 Ctrl+C，期望复制的是
+      // **刚划中的那段文字**；而 `copy` 动作会去读终端选区（那里是空的），
+      // 结果就是「划词能选中、Ctrl+C 没反应」——
+      // 剪贴板被写成了空串，还顺手把浏览器原生复制给 preventDefault 掉了。
+      // 这里显式放行：焦点在终端 → 走应用动作（有选区才复制）;
+      // 焦点在别处 → 交回浏览器原生复制。
+      if (
+        isOutsideTerminal(event.target) &&
+        isPlainCtrl(event)
+      )
+        return;
+      for (const id of Object.keys(shortcuts)) {
+        // find / devtools 已在 useTerminals 里实现，这里再绑会触发两遍
+        if (handledElsewhere(id)) continue;
+        if (!matchAction(event, id)) continue;
+        const handler = handlersRef.current[id];
+        if (!handler) {
+          // 表里有键位但没有对应实现：不静默，菜单项与动作脱节要能查
+          console.warn(
+            `[shortcut] ${id}（${shortcuts[id]}）没有对应实现`
+          );
+          return;
+        }
+        event.preventDefault();
+        handler();
+        refocusAfterAction(
+          shortcutActionsRef.current
+            .refocusTerminal
+        );
+        return;
+      }
+    };
+    window.addEventListener(
+      "keydown",
+      onKeyDown,
+      true
+    );
+    return () =>
+      window.removeEventListener(
+        "keydown",
+        onKeyDown,
+        true
+      );
+    // ⚠️ 依赖里带 shortcuts：用户改键位后，循环要立刻按新表匹配。
+    // 它是模块级 store 的快照引用，只在覆盖变化时换新
+  }, [shortcuts]);
 
   return (
     <>

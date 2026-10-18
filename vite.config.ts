@@ -1,15 +1,31 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { resolve } from "path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const host = process.env.TAURI_DEV_HOST;
 const root = import.meta.dirname;
+
+/**
+ * 应用版本号：**以 tauri.conf.json 为准**（安装包/更新器用的就是它）。
+ * 构建时注入 `__APP_VERSION__`，前端不必为了读版本去申请 Tauri 权限，
+ * 也不会出现 package.json 与安装包版本不一致的尴尬。
+ */
+const appVersion = JSON.parse(
+  readFileSync(
+    resolve(root, "src-tauri/tauri.conf.json"),
+    "utf8"
+  )
+).version as string;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
 
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion)
+  },
   resolve: {
     alias: {
       "@": resolve(root, "src")

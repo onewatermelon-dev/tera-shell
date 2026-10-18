@@ -3,6 +3,7 @@ import {
   Modal,
   Typography
 } from "@heroui/react";
+import { useT } from "@/settings/lib/i18n";
 
 type ConfirmDialogProps = {
   /** 标题上方的小标签，如"删除" */
@@ -33,6 +34,9 @@ export default function ConfirmDialog({
   onConfirm,
   onClose
 }: ConfirmDialogProps) {
+  // 取消/关闭钮走 i18n：其余文案都由调用方传入，只有这两个原先硬编码中文，
+  // 英文界面下会露出中文（删除分组、删除文件那两处都受影响）
+  const t = useT();
   return (
     <Modal
       isOpen
@@ -56,7 +60,9 @@ export default function ConfirmDialog({
               <Modal.Heading>
                 {title}
               </Modal.Heading>
-              <Modal.CloseTrigger aria-label="关闭" />
+              <Modal.CloseTrigger
+                aria-label={t("app.action.close")}
+              />
             </Modal.Header>
             <Modal.Body>
               <Typography.Paragraph
@@ -72,7 +78,7 @@ export default function ConfirmDialog({
                 size="sm"
                 onPress={onClose}
               >
-                取消
+                {t("common.cancel")}
               </Button>
               <Button
                 variant={

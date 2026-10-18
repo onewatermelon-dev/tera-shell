@@ -1,0 +1,65 @@
+// 终端查找浮层：右上角输入框与 5 个按钮（上下翻、大小写、正则）、命中计数。
+
+// 查找浮层：右上角，压在终端内容之上。
+// 类名用 find-* 而非 search-*，避免与侧栏"搜索会话"的 .search-box 冲突
+.find-box {
+  position: absolute;
+  top: 46px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+}
+
+.find-input {
+  width: 180px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--field-foreground);
+  background: var(--field-background);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+// 查找框 5 个按钮（↑ ↓ Aa .* ×）统一样式：等宽等高的方形按钮
+.find-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font:
+    12px Consolas,
+    monospace;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  // Aa / .* 开关开启时用主题色高亮：
+  // 改用 HeroUI ToggleButton 后，选中态由 RAC 标记成 data-selected 属性
+  &[data-selected="true"] {
+    color: var(--accent-foreground);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+.find-count {
+  min-width: 44px;
+  font-size: 12px;
+  color: var(--muted);
+}

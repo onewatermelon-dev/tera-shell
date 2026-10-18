@@ -1,0 +1,234 @@
+/* AI 输入框的底部按钮行与待发送图片缩略图条：
+   （+ / enhance / send / spinner 按钮，以及编辑器与按钮行之间的图片条）
+
+   2026-10-13 从原 PromptInput.module.css 拆出。类名哈希只在本文件内
+   有效，选择器不要引用其它 module 文件里的类。 */
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.plusWrap {
+  position: relative;
+  display: flex;
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* round soft button.
+   The fill lives on ::before so a press scales only the container (0.98),
+   never the icon on top. */
+.iconBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--pi-fg, #1a1a1a);
+  cursor: pointer;
+}
+.iconBtn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(
+    --pi-icon-fill,
+    rgba(26, 26, 26, 0.06)
+  );
+  transition:
+    background 150ms
+      cubic-bezier(0.22, 1, 0.36, 1),
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.iconBtn:hover::before {
+  background: var(
+    --pi-icon-fill-hover,
+    rgba(26, 26, 26, 0.1)
+  );
+}
+.iconBtn:active::before {
+  transform: scale(0.98);
+}
+/* keep the icon above the (opaque, when active) ::before fill */
+.iconBtn > svg {
+  position: relative;
+}
+
+.plusIcon {
+  position: relative;
+  display: inline-flex;
+  transition: transform 200ms
+    cubic-bezier(0.35, 1.55, 0.65, 1);
+}
+.plus[data-open]::before {
+  background: var(
+    --pi-icon-fill-open,
+    rgba(26, 26, 26, 0.12)
+  );
+}
+.plus[data-open] .plusIcon {
+  transform: rotate(45deg);
+}
+
+/* enhance / revert pill - same fill + press behaviour as the icon buttons */
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--pi-fg, #1a1a1a);
+  font-size: 11px;
+  line-height: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: pi-pill-in 260ms
+    cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(
+    --pi-icon-fill,
+    rgba(26, 26, 26, 0.06)
+  );
+  transition:
+    background 150ms
+      cubic-bezier(0.22, 1, 0.36, 1),
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pill:hover::before {
+  background: var(
+    --pi-icon-fill-hover,
+    rgba(26, 26, 26, 0.1)
+  );
+}
+.pill:active::before {
+  transform: scale(0.98);
+}
+@keyframes pi-pill-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+/* symmetric exit - mirrors pi-pill-in so the enhance pill (and the inline
+   skill pills) leave the same soft way they arrive */
+@keyframes pi-pill-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(2px);
+  }
+}
+.pill.pillExit {
+  animation: pi-pill-out 180ms
+    cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: none;
+}
+
+.send {
+  color: var(--pi-muted, #a1a1a1);
+}
+.send:disabled {
+  cursor: default;
+}
+.send:disabled:active::before {
+  transform: none;
+}
+.sendActive {
+  color: var(--pi-send-fg, #ffffff);
+}
+.sendActive::before {
+  background: var(--pi-send-bg, #0b0d12);
+}
+.sendActive:hover::before {
+  background: var(--pi-send-bg-hover, #2a2f3a);
+}
+
+/* 生成中：这个键是「停止」。跟发送键要能一眼分开 —— 底色换成 danger，
+   悬停再深一档。图标本身是实心方块（fill），描边箭头在 14px 下太像「上移」。*/
+.send[data-stop]::before {
+  background: var(--pi-stop-bg, #d64545);
+}
+
+.send[data-stop]:hover::before {
+  background: var(--pi-stop-bg-hover, #e05555);
+}
+
+.spinnerBtn {
+  cursor: default;
+}
+.spinner {
+  position: relative;
+  color: var(--pi-muted, #a1a1a1);
+  animation: pi-spin 0.7s linear infinite;
+}
+@keyframes pi-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 待发送图片缩略图条（编辑器与按钮行之间） */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.thumb {
+  position: relative;
+  display: inline-flex;
+}
+
+.thumbImg {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid var(--pi-menu-border, #e6e8ec);
+  border-radius: 6px;
+}
+
+.thumbRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--pi-fg, #1a1a1a);
+  cursor: pointer;
+  background: var(--pi-menu-bg, #fff);
+  border: 1px solid var(--pi-menu-border, #e6e8ec);
+  border-radius: 50%;
+}

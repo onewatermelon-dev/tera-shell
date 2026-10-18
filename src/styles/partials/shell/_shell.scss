@@ -1,0 +1,119 @@
+// 工作区布局：.workspace 网格（会话栏 + 终端列，含侧栏收起态）、
+// 侧栏卡片与其头部、搜索框。
+
+.workspace {
+  // 设置页用绝对定位覆盖在工作区之上，这里是它的定位上下文
+  position: relative;
+  display: grid;
+  grid-area: workspace;
+
+  // 强制唯一行高等于容器高度：隐式行高（auto）会按内容走，
+  // 终端网格的 fit-content 高度会把整列反推成内容高度，
+  // 窗口缩小时内容溢出、fit() 因宿主高度不变而不再触发，输入行被裁掉
+  grid-template-rows: 100%;
+
+  // 1fr 即 minmax(auto, 1fr)：auto 下限被内容反推，拆分后更宽的内容会把
+  // 整列撑出窗口。显式 minmax(0, …) 把列宽钉死在可用空间内
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 8px;
+
+  // HeroUI 的全局 section 规则带 align-items:flex-start，会覆盖本容器的
+  // grid 默认 stretch，导致 sidebar / 终端面板不撑满高度。显式还原。
+  align-items: stretch;
+  min-height: 0;
+  padding: 8px;
+  background: var(--background);
+
+  // 会话栏收起：整栏直接退出布局（开关在左侧竖条上）
+  &.sidebar-closed {
+    grid-template-columns: minmax(0, 1fr);
+
+    .sidebar {
+      display: none;
+    }
+  }
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 12px 0 16px;
+}
+
+.sidebar-head > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sidebar-head small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+// 标题栏右侧的动作组（新建分组 / 新建会话）。
+// 选择器要带上 `.sidebar-head >` —— 上面那条 `.sidebar-head > div`
+// 特异性更高（0,1,1 vs 0,1,0），会把这里的 gap 覆盖成 8px。
+// 显式 flex 也是必需的：Hint 会渲染成 Tooltip 包装层，不设 flex 时
+// 两个按钮各自撑成整行宽，贴到最左。
+// 间距 6px 对齐 .ai-panel-head-actions（同为 32px 的 sm 图标按钮）；
+// 2px 太挤，8px 又和标题拉开太多。
+.sidebar-head > .sidebar-head-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+
+  // 同 .edit/.delete：去掉 ghost 按钮按下时闪出的圆形底色
+  // （--button-bg-pressed 默认是 var(--default)）
+  .button {
+    --button-bg-hover: transparent;
+    --button-bg-pressed: transparent;
+
+    &:hover {
+      background: var(--surface-hover);
+    }
+  }
+}
+
+// 搜索框：HeroUI Input 自身就是完整字段样式，外层 TextField 不再画边框/背景，
+// 只做布局 + 图标绝对定位进输入框左侧。
+.search-box {
+  position: relative;
+  display: flex;
+
+  // HeroUI 全局 label 规则是 flex-direction:column；搜索框需要横向排布，显式还原。
+  flex-direction: row;
+  gap: 0;
+  align-items: center;
+  margin: 0 10px 12px;
+}
+
+.search-box svg {
+  position: absolute;
+  left: 10px;
+  z-index: 1;
+  width: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.search-box input {
+  width: 100%;
+  padding-left: 30px;
+  font-size: 12px;
+}

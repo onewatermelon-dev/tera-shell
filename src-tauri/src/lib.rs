@@ -9,12 +9,21 @@ pub mod icons;
 pub mod infra;
 pub mod sftp;
 pub mod terminal;
+/// 会话导入/导出的文件搬运（格式逻辑在前端，这里只管读写与对话框）
+pub mod transfer;
 
 /// 前端 F12 / Ctrl+Shift+I 打开 DevTools。
 /// 浏览器级快捷键被禁用后 F12 不再生效，需要走这个命令手动打开。
 #[tauri::command]
 fn open_devtools(window: tauri::WebviewWindow) {
     window.open_devtools();
+}
+
+/// 前端诊断日志：跨窗口交互（拖路径进终端）这类链路排查用，
+/// 写进 tracing 常规日志，`~/.tera-shell/logs/<日期>` 可查。
+#[tauri::command]
+fn debug_log(message: String) {
+    tracing::info!(message, "前端诊断");
 }
 
 /// 创建并运行 Tauri 桌面应用。
@@ -40,6 +49,8 @@ pub fn run() {
         .manage(sftp::open::EditWatchers::default())
         // AI 命令的 exec 会话池：独立于终端 PTY 的命令执行通道。
         .manage(ai::ExecPool::default())
+        // 进行中的模型流，供「停止生成」掐断 reqwest 请求。
+        .manage(ai::AiStreams::default())
         // 暴露给前端 invoke() 的最小终端命令集合。
         .invoke_handler(tauri::generate_handler![
             terminal::start,
@@ -58,24 +69,33 @@ pub fn run() {
             fs::create_file,
             fs::remove_path,
             fs::copy_path,
+            fs::save_text_file,
+            fs::pick_file,
+            fs::pick_save_path,
             fs::rename::rename_local,
-            sftp::list,
-            sftp::upload,
-            sftp::download,
-            sftp::make_remote_dir,
-            sftp::create_remote_file,
-            sftp::remove_remote_path,
-            sftp::chmod,
-            sftp::pause_transfer,
+            sftp::browse::list,
+            sftp::transfer::upload,
+            sftp::transfer::download,
+            sftp::remote_ops::disk_usage,
+            sftp::remote_ops::archive,
+            sftp::remote_ops::remote_fs,
+            debug_log,
+            sftp::remote_ops::make_remote_dir,
+            sftp::remote_ops::create_remote_file,
+            sftp::remote_ops::remove_remote_path,
+            sftp::remote_ops::chmod,
+            sftp::transfer::pause_transfer,
             sftp::open::edit_remote,
             sftp::open::stop_edit,
             sftp::open::stop_all_edits,
             sftp::rename::rename_remote,
             sftp::window::open_sftp_window,
-            sftp::resume_transfer,
-            sftp::cancel_transfer,
+            sftp::transfer::resume_transfer,
+            sftp::transfer::cancel_transfer,
             ai::run_command,
+            ai::exec_cancel,
             ai::chat_stream,
+            ai::chat_cancel,
             infra::secret::encrypt,
             infra::secret::decrypt,
             infra::http::http_post_json,
@@ -86,6 +106,8 @@ pub fn run() {
             data::set_data_dir,
             data::pick_data_dir,
             fonts::list_fonts,
+            transfer::export_to_file,
+            transfer::import_from_file,
             open_devtools
         ])
         .setup(|app| {

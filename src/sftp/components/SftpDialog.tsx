@@ -11,13 +11,21 @@ import type {
   PaneEntry,
   PaneListing,
   PaneSide,
+  RemoteDiskUsage,
   TransferControlAction,
   TransferTask
 } from "@/sftp/lib/useSftp";
-import type { FileAction } from "@/sftp/components/FileContextMenu";
-import FilePane from "@/sftp/components/FilePane";
+import { formatSize } from "@/sftp/lib/fileFormat";
+import type { FileAction } from "@/sftp/components/panes/FileContextMenu";
+import FilePane from "@/sftp/components/panes/FilePane";
 import SftpDock from "@/sftp/components/SftpDock";
-import TransferPanel from "@/sftp/components/TransferPanel";
+import TransferPanel from "@/sftp/components/panes/TransferPanel";
+import { usePaneDrag } from "@/sftp/lib/usePaneDrag";
+import {
+  bookmarkPathsFor,
+  type SftpBookmark
+} from "@/sftp/lib/sftpBookmarks";
+import type { DropTarget } from "@/sftp/lib/dragTransfer";
 
 type Props = {
   /** 当前活动会话：由 App 从终端状态里取，用于确定 SFTP 的连接目标。 */
@@ -29,6 +37,10 @@ type Props = {
   remote: PaneListing | null;
   remoteError: string;
   remoteBusy: boolean;
+  /** 远程磁盘用量（状态条展示）；未加载或查询失败为 null。 */
+  remoteUsage: RemoteDiskUsage | null;
+  /** 底部进度条文案（远程复制/挪动/压缩/解压进行中）；null 不显示。 */
+  remoteOpLabel: string | null;
   onNavigateLocal: (path: string) => void;
   onNavigateRemote: (path: string) => void;
   onRefreshLocal: () => void;
@@ -38,11 +50,26 @@ type Props = {
   onClose: () => void;
   /** 剪贴板里是否有可粘贴的内容 */
   canPaste: boolean;
-  /** 右键菜单动作；pane 指明发生在哪一栏 */
+  /** 目录书签（全部；本地栏按空 host 过滤，远程栏按会话主机过滤）。 */
+  bookmarks: SftpBookmark[];
+  /** 收藏 / 取消收藏某个目录。 */
+  onToggleBookmark: (
+    side: PaneSide,
+    host: string,
+    path: string
+  ) => void;
+  /** 删除一条书签。 */
+  onRemoveBookmark: (
+    side: PaneSide,
+    host: string,
+    path: string
+  ) => void;
+  /** 右键菜单动作；pane 指明发生在哪一栏，entries 为完整作用条目集 */
   onFileAction: (
     pane: PaneSide,
     action: FileAction,
-    entry: PaneEntry | null
+    entry: PaneEntry | null,
+    entries: PaneEntry[]
   ) => void;
   /** 新建文件夹 / 文件（对话框确认后触发） */
   onCreateEntry: (
@@ -56,19 +83,27 @@ type Props = {
     entry: PaneEntry,
     name: string
   ) => void;
-  /** 权限修改确认（仅远程栏） */
+  /** 权限修改确认（仅远程栏；多选整批生效） */
   onChmodEntry: (
-    entry: PaneEntry,
+    entries: PaneEntry[],
     mode: number
   ) => void;
   /** 传输任务（底部面板展示） */
   transfers: TransferTask[];
   /** 清空已结束的传输记录 */
   onClearTransfers: () => void;
+  /** 删除单条已结束的传输记录 */
+  onRemoveTransfers: (id: string) => void;
   /** 暂停 / 恢复 / 取消传输任务 */
   onTransferControl: (
     id: string,
     action: TransferControlAction
+  ) => void;
+  /** 跨栏拖放落点：把条目从来源栏传进目标栏的该目录 */
+  onDropEntries: (
+    from: PaneSide,
+    entries: PaneEntry[],
+    directory: string
   ) => void;
   /** 全部打开的 SFTP 窗口（底部标签栏用；只有一个窗口时不显示） */
   windowTabs?: { id: string; label: string }[];
@@ -95,18 +130,25 @@ export default function SftpDialog({
   remote,
   remoteError,
   remoteBusy,
+  remoteUsage,
+  remoteOpLabel,
   onNavigateLocal,
   onNavigateRemote,
   onRefreshLocal,
   onRefreshRemote,
   canPaste,
+  bookmarks,
+  onToggleBookmark,
+  onRemoveBookmark,
   onFileAction,
   onCreateEntry,
   onRenameEntry,
   onChmodEntry,
   transfers,
   onClearTransfers,
+  onRemoveTransfers,
   onTransferControl,
+  onDropEntries,
   windowTabs,
   activeWindowId,
   onSelectWindow,
@@ -118,6 +160,22 @@ export default function SftpDialog({
   const [maximized, setMaximized] =
     useState(false);
 
+  // 跨栏拖拽。⚠️ hook 必须写在下面的 `if (!session) return null` **之前** ——
+  // 条件渲染会让 hook 数量变化，React 直接报「Rendered fewer hooks」。
+  const {
+    startDrag,
+    isDragging,
+    isTarget,
+    isPaneTarget
+  } = usePaneDrag({
+    onDrop: (payload, target: DropTarget) =>
+      onDropEntries(
+        payload.from,
+        payload.entries,
+        target.intoDirectory
+      )
+  });
+
   // 兜底：父级条件渲染已保证有会话，HMR 或异常时序下仍可能短暂为空值
   if (!session) return null;
 
@@ -126,6 +184,38 @@ export default function SftpDialog({
     session.kind === "ssh"
       ? `远程 · ${session.host}`
       : "远程";
+  // 书签按栏过滤：本地栏 host 恒空串；远程栏跟会话主机走
+  const remoteHost =
+    session.kind === "ssh" ? session.host : "";
+  const localBookmarks = bookmarkPathsFor(
+    bookmarks,
+    "local",
+    ""
+  );
+  const remoteBookmarks = bookmarkPathsFor(
+    bookmarks,
+    "remote",
+    remoteHost
+  );
+
+  /**
+   * 磁盘用量摘要，显示在远程栏标题旁：`可用 X / 共 Y · 目录 Z`。
+   * 无数据（未加载 / 查询失败）返回 null，标题旁就不显示。
+   */
+  function formatUsage(
+    usage: RemoteDiskUsage | null
+  ): string | null {
+    if (!usage) return null;
+    const parts = [
+      `可用 ${formatSize(usage.freeBytes)} / 共 ${formatSize(usage.totalBytes)}`
+    ];
+    if (usage.dirBytes > 0) {
+      parts.push(
+        `目录 ${formatSize(usage.dirBytes)}`
+      );
+    }
+    return parts.join(" · ");
+  }
 
   return (
     <Modal
@@ -226,14 +316,34 @@ export default function SftpDialog({
                   canPickPath
                   isLocal
                   canPaste={canPaste}
+                  bookmarks={localBookmarks}
+                  bookmarked={localBookmarks.includes(
+                    local?.path ?? ""
+                  )}
+                  onToggleBookmark={() =>
+                    onToggleBookmark(
+                      "local",
+                      "",
+                      local?.path ?? ""
+                    )
+                  }
+                  onRemoveBookmark={path =>
+                    onRemoveBookmark(
+                      "local",
+                      "",
+                      path
+                    )
+                  }
                   onContextAction={(
                     action,
-                    entry
+                    entry,
+                    entries
                   ) =>
                     onFileAction(
                       "local",
                       action,
-                      entry
+                      entry,
+                      entries
                     )
                   }
                   onCreate={(isDir, name) =>
@@ -250,6 +360,13 @@ export default function SftpDialog({
                       name
                     )
                   }
+                  side="local"
+                  onDragStart={startDrag}
+                  isDragging={isDragging}
+                  isTarget={isTarget}
+                  isPaneTarget={isPaneTarget(
+                    "local"
+                  )}
                 />
                 <FilePane
                   label={remoteLabel}
@@ -265,14 +382,34 @@ export default function SftpDialog({
                   onRefresh={onRefreshRemote}
                   isLocal={false}
                   canPaste={canPaste}
+                  bookmarks={remoteBookmarks}
+                  bookmarked={remoteBookmarks.includes(
+                    remote?.path ?? ""
+                  )}
+                  onToggleBookmark={() =>
+                    onToggleBookmark(
+                      "remote",
+                      remoteHost,
+                      remote?.path ?? ""
+                    )
+                  }
+                  onRemoveBookmark={path =>
+                    onRemoveBookmark(
+                      "remote",
+                      remoteHost,
+                      path
+                    )
+                  }
                   onContextAction={(
                     action,
-                    entry
+                    entry,
+                    entries
                   ) =>
                     onFileAction(
                       "remote",
                       action,
-                      entry
+                      entry,
+                      entries
                     )
                   }
                   onCreate={(isDir, name) =>
@@ -289,14 +426,33 @@ export default function SftpDialog({
                       name
                     )
                   }
-                  onChmod={(entry, mode) =>
-                    onChmodEntry(entry, mode)
+                  onChmod={(entries, mode) =>
+                    onChmodEntry(entries, mode)
                   }
+                  side="remote"
+                  onDragStart={startDrag}
+                  isDragging={isDragging}
+                  isTarget={isTarget}
+                  isPaneTarget={isPaneTarget(
+                    "remote"
+                  )}
+                  usageText={formatUsage(
+                    remoteUsage
+                  )}
                 />
               </div>
+              {remoteOpLabel && (
+                <footer className="sftp-opbar">
+                  <span>{remoteOpLabel}</span>
+                  <span className="sftp-opbar-track">
+                    <i />
+                  </span>
+                </footer>
+              )}
               <TransferPanel
                 tasks={transfers}
                 onClear={onClearTransfers}
+                onRemove={onRemoveTransfers}
                 onControl={onTransferControl}
               />
             </Modal.Body>

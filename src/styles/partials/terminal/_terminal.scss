@@ -1,0 +1,225 @@
+// 终端宿主与窗格内容：xterm 尺寸收缩与滚动条、标签拖拽全局光标与跟手浮标、
+// 字号缩放提示、状态栏（宏区 + 信息入口）、空状态。
+
+.terminal-host {
+  // 在 .pane-cell（纵向 flex）里撑满标签条以下的剩余高度。
+  // basis 0% + grow 1 才能让「剩余空间」而不是「内容高度」决定大小，
+  // 否则终端一多就把窗格顶出去
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+
+  // 终端撑满容器：原来四周留的 padding 缝隙会露出宿主底色（换配色方案
+  // 后尤其明显），现在直接贴边；xterm canvas 是行列整除的，边缘可能剩
+  // 几像素余数，背景仍跟配色方案走（变量由 App 注入，缺省旧黑底）
+  padding: 0;
+  overflow: hidden;
+  background: var(--terminal-bg, #0b0e14);
+}
+
+// 手写标签拖拽进行中：全局换成抓取光标（标签本身拖不动，光标提示而已）
+body.tab-dragging {
+  cursor: grabbing;
+
+  * {
+    cursor: grabbing !important;
+  }
+}
+
+// 拖标签的跟手浮标：复刻胶囊外观，跟着指针走。
+// pointer-events 必须关掉 —— 否则 elementFromPoint 命中的是它，落点判定失效
+.tab-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  max-width: 160px;
+  height: 32px;
+  padding: 0 16px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--segment);
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+  opacity: 0.9;
+}
+
+.terminal-instance {
+  position: relative;
+  height: 100%;
+}
+
+// Ctrl + 滚轮缩放字号时的悬浮提示（节点由 terminal/lib/fontZoom.ts 建）。
+// 绝对定位相对 .terminal-instance，不参与 xterm 的尺寸测量；
+// pointer-events 关掉，免得盖住终端右下角的点击。
+.terminal-zoom-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--foreground);
+  pointer-events: none;
+  background: var(--segment);
+  border-radius: 9999px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.terminal-zoom-hint.is-visible {
+  opacity: 0.92;
+}
+
+// .xterm 收缩到网格实际大小：网格右侧/下方的空白区域归 .terminal-instance（普通
+// div）所有，鼠标事件不再被 xterm 映射成选区，"文字后面的区域"因此不可滑选。
+// fit 插件测量的是父容器 .terminal-instance 的尺寸，不受此处收缩影响。
+
+.terminal-host .xterm {
+  width: fit-content;
+  height: fit-content;
+}
+
+// 专注模式保持原列宽，但滚动视口要铺满卡片，滚动条才会贴右边缘。
+.terminal-focus .xterm {
+  width: 100%;
+  height: 100%;
+}
+
+// xterm 6 的滚动条是自绘 DOM（VS Code ScrollableElement），
+// ::-webkit-scrollbar 对它无效；滑块颜色走 theme.scrollbarSlider*（useTerminals.ts）。
+// 宽度由 JS 以内联样式写入，CSS 覆盖必须 !important。
+// 选择器保持两段以内：prettier 会把三段以上的选择器强制展开，与缩进规则冲突
+.xterm-scrollable-element .scrollbar.vertical {
+  width: 6px !important;
+
+  // 滑块同样要收窄到 6px。
+  // ⚠️ 原来这条写成 `.vertical .slider`（两段、无作用域），会命中**任何**
+  // `.vertical` 下的 `.slider`。已收敛到滚动条内部 —— 一旦将来别处
+  // 出现同名 class，跨模块污染会让滑块定位算错（表现为滚动条乱跳）。
+  .slider {
+    width: 6px !important;
+    border-radius: 3px;
+  }
+}
+
+// 用 grid 而不是 flex：flex 下"宏区收缩"这件事根本压不住 ——
+// 宏按钮外面还套着 Tooltip 的包装层（见 Hint），`.macro-btn` 的 flex 属性
+// 作用在孙元素上，收缩计算失效，宏一多就把右侧状态文字顶出可视区。
+// grid 的 `minmax(0, 1fr)` 可以真正压到 0，`auto` 列按状态文字实际宽度走。
+.terminal-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 0 12px;
+  font:
+    9px Consolas,
+    monospace;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+// 状态文字按内容定宽、不换行，宏再多也不会被压缩或挤出
+.status-meta {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+// 状态栏的「信息」形态：左侧入口按钮，与宏区同一布局位（可收缩、可溢出）
+.status-info {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+// 信息入口按钮：外观对齐宏按钮（9px 基调、弱化色），纯按钮无 HeroUI 包装
+.status-info-btn {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  svg {
+    width: 12px;
+  }
+
+  // 运行时长是只读展示，不是入口，不给悬浮反馈
+  &.is-static {
+    cursor: default;
+
+    &:hover {
+      color: var(--muted);
+      background: transparent;
+    }
+  }
+}
+
+// 空状态：HeroUI EmptyState 只提供 p-2/text-sm/text-muted 的基础排版，
+// 垂直居中与元素间距在这里补齐；图标底盘、标题、描述、操作区各自成组。
+.empty-terminal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+// 圆形图标底盘（HeroUI Surface 默认面板圆角，这里改成正圆）
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 16px;
+  color: var(--muted);
+  border-radius: 50%;
+}
+
+.empty-icon svg {
+  width: 22px;
+}
+
+// 标题用主前景色、描述保持弱化，形成 HeroUI 空状态的层次
+.empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.empty-desc {
+  max-width: 300px;
+  margin: 6px 0 18px;
+}
+
+.empty-actions {
+  display: flex;
+  gap: 8px;
+}

@@ -1,0 +1,226 @@
+// 应用外壳上半：标题栏、左侧竖条（AppRail）、品牌区、标题栏动作组、
+// 窗口控制按钮与应用菜单项内部布局。
+
+.shell-app {
+  display: grid;
+
+  // 标题栏横跨全宽（logo 在最左上角）；竖条是第二行里的一张独立卡片
+  grid-template:
+    "titlebar titlebar" 46px
+    "rail workspace" minmax(0, 1fr) / 48px minmax(
+      0,
+      1fr
+    );
+  height: 100%;
+  background: var(--background);
+
+  // 设置页打开：竖条整个退出布局，工作区（含设置页）横跨全宽
+  &.settings-open {
+    grid-template:
+      "titlebar" 46px
+      "workspace" minmax(0, 1fr) / minmax(0, 1fr);
+  }
+}
+
+// 左侧竖排卡片：与 .sidebar 同风格（底色/描边/圆角），不与标题栏相连。
+// 汉堡菜单挂顶部，会话栏开关与以后的功能入口图标排在下面
+.app-rail {
+  // DOM 里会话栏在竖条之后，会把伸出去的气泡盖住 —— 提层叠让气泡浮在上面
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  grid-area: rail;
+  gap: 4px;
+  align-items: center;
+  padding: 5px 0;
+
+  // 右侧不留 margin：卡片间距统一由 .workspace 的 8px 内边距提供，
+  // 避免 margin + padding 叠成 16px；上下内边距让按钮方块离卡片边也有距离
+  margin: 8px 0 8px 8px;
+
+  // 不能 overflow:hidden —— 汉堡的 CSS 悬停气泡要伸出卡片右侧；
+  // 按钮色块自带圆角，不会溢出卡片圆角
+  overflow: visible;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.titlebar {
+  display: flex;
+  grid-area: titlebar;
+  align-items: center;
+  justify-content: flex-start;
+  height: 46px;
+  user-select: none;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border);
+
+  // HeroUI 全局 header 规则会强加 justify-content:space-between，
+  // 把中间菜单推到右侧；上面显式 flex-start 还原，右侧对齐交给 .title-actions 的 margin-left:auto。
+}
+
+// 竖条上的图标按钮：居中的小方块，四周离卡片边缘留一点距离，
+// 悬停高亮是带圆角的独立方块而不是通到边的色条
+.rail-trigger {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  svg {
+    width: 16px;
+  }
+}
+
+// 汉堡按钮的 CSS 悬停气泡：HeroUI Tooltip 与 Dropdown.Trigger 不兼容
+// （包装层被 RAC press 判定为嵌套交互元素，吞掉点击、菜单打不开），
+// 手绘一份对齐 .tooltip 的外观（bg-overlay / 圆角 / 阴影 / text-xs）
+.rail-trigger--hint {
+  position: relative;
+
+  &::after {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 10px);
+    z-index: 30;
+    padding: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--foreground);
+    white-space: nowrap;
+    pointer-events: none;
+    content: attr(data-tip);
+    background: var(--overlay);
+    border-radius: 12px;
+    box-shadow: var(--shadow-overlay);
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 0.15s ease;
+  }
+
+  &:hover::after,
+  &:focus-visible::after {
+    opacity: 1;
+  }
+}
+
+// 竖条底部区域（设置按钮）：auto margin 把它推到卡片最下面
+.rail-bottom {
+  display: flex;
+  justify-content: center;
+  margin-top: auto;
+}
+
+.brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 224px;
+  padding-left: 14px;
+  font-size: 13px;
+}
+
+// Tauri 的拖拽判定只看 mousedown 事件目标本身是否带 drag-region 属性，
+// 品牌区的文本子元素会吞掉事件导致拖不动——让它们穿透到带属性的父级
+.titlebar [data-tauri-drag-region] * {
+  pointer-events: none;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  font-weight: 800;
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border-radius: 6px;
+}
+
+.title-actions {
+  display: flex;
+  gap: 0;
+  height: 100%;
+  padding-inline: 0;
+
+  // HeroUI 全局 nav 规则会加 gap 与 padding-inline，让菜单按钮互相分开，
+  // 本项目按钮间距由各自 padding 控制，上面清零避免被 hero 污染。
+  margin-left: auto;
+}
+
+.title-actions button,
+.win-controls button {
+  height: 100%; // HeroUI Button 自带固定高度，标题栏内需撑满 46px
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.title-actions button:hover,
+.win-controls button:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// 窗口控制组：主窗口标题栏与 SFTP 窗口共用同一套按钮外观
+.win-controls {
+  display: flex;
+  gap: 0;
+  align-items: center;
+  height: 100%;
+}
+
+// 关闭按钮沿用 Windows 习惯：悬浮时红底白字
+.win-close:hover {
+  color: #ffffff;
+  background: var(--danger);
+}
+
+// 菜单项内部布局：HeroUI MenuItem 只负责外观（悬浮/圆角/间距），
+// 标签与快捷键的左右分布由这里控制。快捷键沿用 HeroUI menu shortcut 的弱化色。
+.menu-item-label {
+  flex: 1;
+}
+
+.menu-item-check,
+.menu-item-key {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.menu-item-key {
+  font:
+    11px Consolas,
+    monospace;
+}
+
+.title-actions button,
+.win-controls button {
+  width: 42px;
+  padding: 12px;
+}
+
+.title-actions svg,
+.win-controls svg,
+.pane-tab-new svg {
+  width: 16px;
+}

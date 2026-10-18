@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { stepPromptHistory } from "@/terminal/components/aicss/PromptInput";
+import { stepPromptHistory } from "@/terminal/components/ai/PromptInput";
 
 test("上下键回溯问题并恢复草稿", () => {
   const history = ["第一问", "第二问"];

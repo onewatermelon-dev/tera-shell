@@ -1,0 +1,696 @@
+// 设置页：盖在工作区之上（绝对定位，见 App.tsx 的说明），
+// 而不是替换工作区内容 —— 那样会让终端卸载、xterm 实例丢失。
+// 全部用主题变量取色，切换明暗主题时自动适配。
+.settings-page {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  overflow: hidden;
+  background: var(--background);
+}
+
+// ---- 左侧导航 ----
+
+.settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 208px;
+  padding: 14px 10px;
+  overflow-y: auto;
+  background: var(--surface-secondary);
+  border-right: 1px solid var(--border);
+}
+
+.settings-back {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+.settings-back:hover {
+  background: var(--surface-hover);
+}
+
+// 分组标题：小字、弱色，只做视觉分隔，不参与交互
+.settings-nav-group {
+  padding: 0 10px;
+  margin: 12px 0 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings-nav-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+.settings-nav-item:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+.settings-nav-item.is-active {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
+
+// ---- 右侧内容 ----
+
+// 内容区：宽度封顶后靠 margin 居中 —— flex 里 `margin-inline: auto` 会
+// 吸收剩余空间，窗口最大化时卡片不会拉到满屏宽，保持参考图的观感。
+.settings-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 720px;
+  padding: 28px 32px 32px;
+  margin-inline: auto;
+  overflow-y: auto;
+
+  // 滚动条藏掉、滚轮照常：设置页分区内容都是自绘卡片，原生滚动条
+  // 叠在圆角卡片上很突兀
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+// 配色方案分区专用：整页占满屏幕高，外层不滚动，滚动只发生在
+// 方案列表内部（2026-10-15 用户要求「高度占满屏幕高，不要滚动，
+// 滚动只需要在选择方案中滚动就行」）。
+// 关键在于整条收缩链每一层都得放开：外层 overflow 关掉 → 配置卡
+// flex:1 → 卡体 flex 列 → 选择区 flex 列 → 列表 flex:1。少任何一层的
+// min-height:0，列表都会被内容顶高，外层又冒出滚动条。
+// 只修饰配色方案分区：其他分区内容短，仍走上面的整页滚动。
+.settings-content--fill {
+  overflow-y: hidden;
+
+  .settings-row {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .settings-row-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+.settings-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+// 紧贴标题下方：用负外边距抵消 content 的 gap
+.settings-subtitle {
+  margin: -6px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// ---- 配置卡片 ----
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.settings-row-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.settings-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+// 标题后追加的说明（如当前配色方案名）：主题色、稍小一号
+.settings-row-title-extra {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.settings-row-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.settings-row-control {
+  flex: none;
+}
+
+// ---- 快捷键自定义 ----
+// 一行一个动作：左边名称（+「已自定义」角标），右边键位格 + 恢复按钮。
+// 键位格是「录制入口」而非静态文本 —— 点一下就进入等按键状态。
+.shortcut-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.shortcut-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+// 快捷键按生效窗口分两段（终端 / SFTP）的段标题
+.shortcut-scope + .shortcut-scope {
+  margin-top: 16px;
+}
+
+.shortcut-scope-title {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.shortcut-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 8px 16px;
+
+  // 行分隔线用 inset box-shadow 而不是 border-bottom：
+  // 这样最后一行不会多出一条边（列表已有外框）
+  border-bottom: 1px solid var(--border);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.shortcut-name {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.shortcut-label {
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.shortcut-custom {
+  flex: none;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--surface-secondary);
+  border-radius: 4px;
+}
+
+.shortcut-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+}
+
+// 键位格：同时是「当前键位」与「录制入口」
+.shortcut-key {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+
+  // 放得下最长的键位串（Ctrl+Shift+Alt+Delete 之类）
+  min-width: 132px;
+  height: 28px;
+  padding: 0 10px;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+
+  &:hover {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+  }
+
+  // ⚠️ 半透明的「已自定义」提示必须给 :focus-visible，
+  // 否则 Tab 聚焦过去看着像没焦点
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  &.is-recording {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+.shortcut-recording {
+  font-family: inherit;
+}
+
+.shortcut-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+
+  &:hover:not(:disabled) {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  // 已经是默认值就没得恢复：置灰而不是点了没反应
+  &:disabled {
+    cursor: default;
+    opacity: 0.35;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
+
+.shortcut-conflict {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.shortcut-footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.shortcut-reset-all {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.35;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
+
+.shortcut-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// ---- 控件 ----
+
+// 设置页通用下拉的触发器：自绘替代原生 select（原生 option 由系统绘制，
+// 既放不进图标也改不了样式）。主题与界面语言共用。
+.settings-select {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  // 给个下限让两个下拉等宽，展开的菜单也能对齐这个宽度
+  min-width: 132px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.settings-select:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+// 展开时 Trigger 处于 data-pressed 态，HeroUI .button 会加 scale(0.97)，
+// 整框看着缩了一圈 —— 下拉框不是按压按钮，取消这个缩放
+.settings-select[data-pressed="true"],
+.settings-select:active {
+  transform: none;
+}
+
+.settings-select-icon {
+  display: flex;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+// 标签占满剩余宽度，把箭头顶到最右侧，视觉上更像个下拉；超长文字省略
+.settings-select-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.settings-select-caret {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+// 展开的菜单：HeroUI 的 Dropdown 默认给菜单一个较宽的 min-width，
+// 比触发器宽出一大截、显得突兀。这里按内容定宽，并对齐触发器的下限宽度。
+// 长字体名会把菜单撑得过宽，给个上限，超出由菜单项省略号兜底。
+.settings-select-menu {
+  width: max-content;
+  min-width: 132px;
+  max-width: min(360px, 80vw);
+}
+
+// 菜单项列表：字体清单可能上百条，限高滚动
+.settings-select-menu-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+// 下拉里的每项：图标 + 文字，左对齐排一行
+.settings-select-menu .settings-select-item-icon {
+  display: inline-flex;
+  margin-right: 8px;
+  color: var(--muted);
+}
+
+// 菜单项文字占满剩余宽度，把选中勾顶到最右侧；超长字体名省略
+.settings-select-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.settings-select-check {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+// ---- 输入框 ----
+
+.settings-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  outline: none;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
+// ---- 数据存储路径 ----
+
+// 文件夹图标 + 路径输入框排一行；图标不参与收缩
+.data-dir-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.data-dir-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.data-dir-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.data-dir-actions {
+  display: flex;
+  gap: 8px;
+}
+
+// 结果提示里的路径可能很长，允许在任意字符处断行，避免撑破卡片
+.data-dir-message {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+// ---- 配色方案 ----
+
+// 选择区整体：撑满配置卡的剩余高度，把滚动收敛到列表内部。
+// flex 列 + min-height:0 —— 少了 min-height:0，flex 子项的最小尺寸
+// 默认是内容高度，列表会被卡片顶高、外层又冒出滚动条。
+.scheme-picker {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+// 大预览 / 分组 tab / 搜索框是固定 chrome，不参与高度分配；
+// 剩余空间全给方案列表。
+.scheme-preview,
+.scheme-tabs,
+.scheme-search {
+  flex: none;
+}
+
+// 当前方案的大预览 + 卡片内的小预览：模拟 ls 输出，纯 HTML 着色
+.scheme-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  font-family:
+    Consolas, "Cascadia Code", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 8px;
+}
+
+.scheme-preview-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+}
+
+.scheme-preview-dim {
+  opacity: 0.75;
+}
+
+// 夜间/亮色分组 tab：当前项白字 + 主题色下划线，未激活灰字
+.scheme-tabs {
+  display: flex;
+  gap: 20px;
+  margin-top: 14px;
+}
+
+.scheme-tab {
+  padding: 0 2px 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}
+
+.scheme-tab.is-active {
+  color: var(--foreground);
+  border-bottom-color: var(--accent);
+}
+
+.scheme-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+
+  svg {
+    flex: none;
+    color: var(--muted);
+  }
+
+  .heroui--input,
+  input {
+    width: 100%;
+  }
+}
+
+.scheme-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+
+  // 吃满选择区剩余高度、内部滚动；原来写死 520px，占不满屏、
+  // 下方留一片空白，外层还要再滚一次
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+
+  // 滚动功能保留，滚动条藏掉（卡片本身够宽，滚动条太碍眼）
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.scheme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+}
+
+.scheme-card.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.scheme-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.scheme-card-check {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+// 16 色点：两行各 8 个
+.scheme-dots {
+  display: grid;
+  grid-template-columns: repeat(8, 12px);
+  gap: 4px;
+  justify-content: end;
+
+  i {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+}
+
+.scheme-more {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}

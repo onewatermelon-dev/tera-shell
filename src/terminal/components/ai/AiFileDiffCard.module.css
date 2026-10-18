@@ -1,0 +1,233 @@
+/* 文件改动卡（先出 diff 再应用）。aicss 无 FileDiff 组件，本卡视觉语言
+   对齐已移植的 aicss CodeBlock（等宽字体 + 行号列 + 圆角卡片），diff 用
+   git 标准形态：红删绿增。 */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: stretch;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  background: var(--surface-secondary);
+  border-radius: 6px;
+}
+
+.iconSvg {
+  width: 13px;
+  height: 13px;
+}
+
+.title {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* 路径的触发层（Hint 的 div）：flex 约束挂这里，span 才能被截断 */
+.pathWrap {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 目标路径：等宽 + 单行截断，完整路径走气泡 */
+.path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: right;
+}
+
+.summary {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-line;
+}
+
+.statusRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.spin {
+  width: 12px;
+  height: 12px;
+  color: var(--accent);
+}
+
+.error {
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--danger);
+  white-space: pre-line;
+  background: rgb(239 68 68 / 10%);
+  border-radius: 6px;
+}
+
+/* ---- diff 主体：固定 One Dark Pro 深色代码面板 ----
+   ⚠️ 这里**刻意不用主题变量**：diff 区是一块固定的深色编辑器（VS Code
+   One Dark Pro 的 #282c34），亮主题下也是深色面板 —— token 的 ODP 色值
+   （#98c379 亮绿之流）只有压在这个底上对比度才够，放白底等于看不见。
+   与终端 cat 同一个哲学：固定主题，不随应用/终端配色变。 */
+.diff {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font:
+    11px Consolas,
+    monospace;
+  background: #282c34;
+  border-radius: 8px;
+}
+
+.hunk + .hunk {
+  border-top: 1px solid #21252b;
+}
+
+/* 行栅格：旧行号 | 新行号 | 增删标记 | 内容（对齐 aicss CodeBlock 的
+   行号列宽，标记列 14px 刚好放一个 +/-） */
+.diffLine {
+  display: grid;
+  grid-template-columns: 34px 34px 14px 1fr;
+  min-height: 18px;
+  line-height: 18px;
+}
+
+/* ODP 的红删绿增，低透明度叠加在深色底上 */
+.diffLine[data-kind="remove"] {
+  background: rgb(224 108 119 / 16%);
+}
+
+.diffLine[data-kind="add"] {
+  background: rgb(152 195 121 / 14%);
+}
+
+/* 行号列：ODP  gutter 灰；有改动的行提亮一档 */
+.lineNo {
+  padding-right: 6px;
+  color: #5c6370;
+  text-align: right;
+  user-select: none;
+}
+
+.diffLine[data-kind="remove"] .lineNo,
+.diffLine[data-kind="add"] .lineNo {
+  color: #7f848e;
+}
+
+/* 增删标记列：ODP 的红 / 绿（与行底色同一套色相的加深） */
+.lineMark {
+  color: #5c6370;
+  font-weight: 700;
+  text-align: center;
+  user-select: none;
+}
+
+.lineMark[data-kind="add"] {
+  color: #98c379;
+}
+
+.lineMark[data-kind="remove"] {
+  color: #e06c75;
+}
+
+/* 行内容：ODP 默认前景；保留缩进与空行，长行折行不撑破卡片 */
+.lineText {
+  padding-right: 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  color: #abb2bf;
+  font: inherit;
+}
+
+/* ---- 底部：统计 + 操作 ---- */
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.stats {
+  display: flex;
+  gap: 8px;
+  margin-right: auto;
+  font:
+    11px Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 统计数字：ODP 的红绿，与 diff 主体一致 */
+.added {
+  color: #98c379;
+}
+
+.removed {
+  color: #e06c75;
+}
+
+.planState {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.btnGhost,
+.btnPrimary {
+  padding: 4px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+.btnGhost {
+  color: var(--foreground);
+  background: var(--surface-secondary);
+}
+
+.btnPrimary {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border-color: var(--accent);
+}
