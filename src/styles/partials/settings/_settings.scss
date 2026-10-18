@@ -532,6 +532,84 @@
   word-break: break-all;
 }
 
+// ---- 网络代理 ----
+
+// 输入框 + 示例按钮 + 测试按钮排一行；窄屏时换行
+.proxy-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.proxy-input {
+  flex: 1;
+  min-width: 0;
+}
+
+// 测试按钮放在输入框右侧，宽度固定：文案在「测试连接」与
+// 「测试中…」之间切换，不固定的话按钮宽度会随文字抖动
+.proxy-test {
+  flex: none;
+  min-width: 88px;
+}
+
+// 标题右侧的地址摘要（借用 SettingsRow 的 titleExtra 弱色位）
+.proxy-summary {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+// 示例按钮是纯文字的小 chip：给出「协议 + 端口」的现成组合，
+// 省得用户去查自己代理软件的监听端口
+.proxy-example {
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--segment);
+  border: 0;
+  border-radius: 9999px;
+  transition: color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    color: var(--foreground);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+}
+
+// 归一化后的地址 / 测试结论
+.proxy-message {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+
+  // 地址可能很长（含凭据），允许在任意字符处断行
+  word-break: break-all;
+
+  &.is-ok {
+    color: var(--accent);
+  }
+
+  &.is-error {
+    color: var(--danger, #dd3333);
+  }
+}
+
+.proxy-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
 // ---- 配色方案 ----
 
 // 选择区整体：撑满配置卡的剩余高度，把滚动收敛到列表内部。

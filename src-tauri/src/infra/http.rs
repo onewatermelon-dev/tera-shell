@@ -1,17 +1,21 @@
-//! 通用 HTTP 出口：目前供模型连通性测试使用。
+//! 通用 HTTP 出口：目前供模型连通性测试与聊天请求使用。
 //!
 //! 为什么不走前端 fetch：WebView2 里那是跨域请求，模型网关普遍不带
 //! CORS 响应头，请求会被浏览器拦下、原因还被 catch 吞掉。
-//! 从 Rust 侧发请求没有这层限制，并且每一步都有日志可查。
+//! 从 Rust 侧发请求没有这层限制，并且每一步都有日志可查 ——
+//! 同时也是代理设置唯一能生效的地方（见 `infra::proxy`）。
 
 use std::collections::HashMap;
 use std::time::Duration;
 
 use tracing::{error, info};
 
+use crate::infra::proxy;
+
 /// 以 JSON 体 POST 一次，返回 HTTP 状态码；网络层错误返回 `Err(原因)`。
 #[tauri::command]
 pub async fn http_post_json(
+	app: tauri::AppHandle,
 	url: String,
 	headers: HashMap<String, String>,
 	body: serde_json::Value,
@@ -23,10 +27,8 @@ pub async fn http_post_json(
 		body = %body,
 		"发起 HTTP POST（模型连通性测试）"
 	);
-	let client = reqwest::Client::builder()
-		.timeout(Duration::from_secs(15))
-		.build()
-		.map_err(|error| error.to_string())?;
+	let client =
+		proxy::client_for(&app, Some(Duration::from_secs(15)))?;
 	let mut request = client.post(&url).json(&body);
 	for (name, value) in &headers {
 		request = request.header(name.as_str(), value.as_str());
@@ -64,14 +66,13 @@ pub async fn http_post_json(
 /// 模型推理可能远慢于连通性测试，超时放宽到 120 秒。
 #[tauri::command]
 pub async fn http_post_text(
+	app: tauri::AppHandle,
 	url: String,
 	headers: HashMap<String, String>,
 	body: serde_json::Value,
 ) -> Result<String, String> {
-	let client = reqwest::Client::builder()
-		.timeout(Duration::from_secs(120))
-		.build()
-		.map_err(|error| error.to_string())?;
+	let client =
+		proxy::client_for(&app, Some(Duration::from_secs(120)))?;
 	let mut request = client.post(&url).json(&body);
 	for (name, value) in &headers {
 		request = request.header(name.as_str(), value.as_str());

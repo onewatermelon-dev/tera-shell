@@ -489,11 +489,28 @@ const zhCN = {
   "about.update.latest": "已是最新版本。",
   "about.update.newer": "发现新版本",
   "about.update.failed": "检查失败",
-  "about.update.timeout": "请求超时",
-  "about.update.network": "网络不可达",
+  "about.update.network":
+    "网络不可达（可在设置里配置代理后重试）",
   "about.update.badPayload": "返回格式异常",
   "about.update.openRelease": "查看更新说明",
   "about.update.allReleases": "全部版本",
+  "proxy.title": "网络代理",
+  "proxy.desc":
+    "让 AI 模型请求与版本检查走代理。关闭时全部直连；填写本机端口可省略协议，如 127.0.0.1:7890。",
+  "proxy.enable": "启用代理",
+  "proxy.url": "代理地址",
+  "proxy.urlPlaceholder": "127.0.0.1:7890",
+  "proxy.test": "测试连接",
+  "proxy.testing": "测试中…",
+  "proxy.invalid.empty": "请填写代理地址",
+  "proxy.invalid.scheme":
+    "协议不支持，请用 http:// 或 socks5:// 开头",
+  "proxy.hint.storage":
+    "含凭据的地址会原样保存在本地设置文件中，请勿公开该文件。",
+  "proxy.status.ok": "代理可用（{ms} ms）",
+  "proxy.status.reachable":
+    "已连上代理，但探测站点返回 {status} —— 代理本身可用",
+  "proxy.status.fail": "连不上：",
   "about.repo": "GitHub 仓库",
   "about.licenses.title": "开源许可",
   "about.licenses.search": "搜索组件或许可证",
@@ -1121,12 +1138,29 @@ const enUS: Record<MessageKey, string> = {
     "You are on the latest version.",
   "about.update.newer": "New version available:",
   "about.update.failed": "Check failed",
-  "about.update.timeout": "request timed out",
-  "about.update.network": "network unreachable",
+  "about.update.network":
+    "network unreachable (try again after configuring a proxy)",
   "about.update.badPayload":
     "unexpected response",
   "about.update.openRelease": "Release notes",
   "about.update.allReleases": "All releases",
+  "proxy.title": "Network proxy",
+  "proxy.desc":
+    "Route AI model requests and update checks through a proxy. Everything goes out directly when off; the scheme may be omitted for local ports, e.g. 127.0.0.1:7890.",
+  "proxy.enable": "Enable proxy",
+  "proxy.url": "Proxy address",
+  "proxy.urlPlaceholder": "127.0.0.1:7890",
+  "proxy.test": "Test connection",
+  "proxy.testing": "Testing…",
+  "proxy.invalid.empty": "Enter a proxy address",
+  "proxy.invalid.scheme":
+    "Unsupported scheme — start with http:// or socks5://",
+  "proxy.hint.storage":
+    "Addresses with credentials are stored verbatim in your local settings file; do not share it.",
+  "proxy.status.ok": "Proxy reachable ({ms} ms)",
+  "proxy.status.reachable":
+    "Connected through the proxy, but the probe returned {status} — the proxy itself works",
+  "proxy.status.fail": "Cannot connect:",
   "about.repo": "GitHub repository",
   "about.licenses.title": "Open source licenses",
   "about.licenses.search":

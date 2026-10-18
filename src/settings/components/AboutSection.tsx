@@ -12,9 +12,13 @@
  *   然后把人送到发布页；
  * - **失败必须给出路**：国内直连 api.github.com 经常被打断，所以检查
  *   失败时不是一句"检查失败"，而是把版本、原因和发布页链接一起给出。
+ * - **请求走 Rust 而非前端 fetch**：WebView2 的 fetch 走浏览器网络栈，
+ *   既不认系统代理也不认设置里的代理（见 infra::proxy）——用户挂了代理
+ *   之后检查更新照样失败，那这个功能等于没有。
  */
 
 import { useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useT } from "@/settings/lib/i18n";
 import {
@@ -93,33 +97,29 @@ export function AboutSection() {
    */
   async function checkUpdate() {
     setUpdate({ kind: "checking" });
-    const controller = new AbortController();
-    const timer = window.setTimeout(
-      () => controller.abort(),
-      8000
-    );
     try {
-      const response = await fetch(RELEASES_API, {
-        headers: {
-          Accept: "application/vnd.github+json"
-        },
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        // 403 = 触发限流，404 = 还没有 release，都比较常见
+      // 经 Rust 代发：代理只对后端请求生效（infra::proxy）
+      const text = await invoke<string>(
+        "app_http_get_json",
+        { url: RELEASES_API }
+      );
+      // Rust 侧返回的是文本，这里才解 JSON —— 解析失败按「载荷不对」
+      // 处理，与 parseRelease 的失败语义一致
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch (reason) {
         console.warn(
-          "[about] 检查更新失败，HTTP",
-          response.status
+          "[about] 检查更新响应不是合法 JSON",
+          reason
         );
         setUpdate({
           kind: "failed",
-          reason: `HTTP ${response.status}`
+          reason: t("about.update.badPayload")
         });
         return;
       }
-      const release = parseRelease(
-        await response.json()
-      );
+      const release = parseRelease(payload);
       if (!release) {
         setUpdate({
           kind: "failed",
@@ -148,14 +148,13 @@ export function AboutSection() {
       );
       setUpdate({
         kind: "failed",
-        reason:
-          reason instanceof Error &&
-          reason.name === "AbortError"
-            ? t("about.update.timeout")
-            : t("about.update.network")
+        reason: String(reason).startsWith("HTTP ")
+          ? String(reason)
+          : t("about.update.network")
       });
     } finally {
-      window.clearTimeout(timer);
+      // 超时改由 Rust 侧的 client 超时兜底（见 infra::proxy），
+      // 这里没有本地计时器可清
     }
   }
 

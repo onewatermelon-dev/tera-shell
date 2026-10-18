@@ -128,6 +128,20 @@ pub async fn load_all(
 	.map_err(|error| format!("读取数据失败：{error}"))
 }
 
+/// 读取某个逻辑数据名的文本内容；不存在返回 `None`。
+///
+/// 供后端自己消费配置（如网络代理）——那些逻辑跑在 Rust 侧、不经过
+/// 前端，得有个直接读盘的口子。
+pub(crate) fn read_setting_text(
+	app: &AppHandle,
+	name: &str,
+) -> Option<String> {
+	if ensure_name(name).is_err() {
+		return None;
+	}
+	std::fs::read_to_string(data_file(app, name)).ok()
+}
+
 /// 写入单个数据文件。
 #[tauri::command]
 pub async fn save_one(

@@ -81,6 +81,21 @@ export type AppSettings = {
    * 校验交给 `appShortcuts` 的 `sanitizeOverrides`（见 setShortcutOverrides）。
    */
   shortcutOverrides: ShortcutOverrides;
+  /**
+   * 是否让出站请求走代理（AI 模型请求、检查更新）。
+   *
+   * 开关与地址分开：地址留着、临时关掉代理是常见操作（比如代理软件没开
+   * 又不想重填地址），合成一个字段就得连地址一起清。
+   */
+  proxyEnabled: boolean;
+  /**
+   * 代理地址，支持 `http://` / `socks5://` / `socks5h://`。
+   *
+   * ⚠️ 这里可能含用户名密码。**它会原样写进 settings.json**，而该文件
+   * 不加密（会话密码才走 DPAPI，见 session.ts）。因此该文件不要提交到
+   * 公开仓库、也不要打进安装包。
+   */
+  proxyUrl: string;
 };
 
 /** 终端字体的内置默认值：与创建 Terminal 时的取值保持一致。 */
@@ -129,6 +144,8 @@ export const defaultSettings: AppSettings = {
   webglRender: true,
   scrollback: DEFAULT_SCROLLBACK,
   dataDir: "",
+  proxyEnabled: false,
+  proxyUrl: "",
   shortcutOverrides: {}
 };
 
@@ -216,6 +233,14 @@ export function loadSettings(): AppSettings {
       dataDir:
         typeof parsed.dataDir === "string"
           ? parsed.dataDir
+          : "",
+      // 代理：默认关（旧设置没这两项时不要突然开始走代理）。
+      // 地址只 trim 不校验 —— 校验放在设置页做，这里保持宽松，
+      // 免得手改文件填了个带空格的值就被静默改写
+      proxyEnabled: parsed.proxyEnabled === true,
+      proxyUrl:
+        typeof parsed.proxyUrl === "string"
+          ? parsed.proxyUrl.trim()
           : "",
       // 快捷键覆盖：手改过设置文件的话这里可能有未知 id / 撞车键位，
       // sanitizeOverrides 会剔掉（见 appShortcuts）

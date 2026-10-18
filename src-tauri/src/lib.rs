@@ -100,6 +100,8 @@ pub fn run() {
             infra::secret::decrypt,
             infra::http::http_post_json,
             infra::http::http_post_text,
+            infra::proxy::http_get_json,
+            infra::proxy::proxy_test,
             data::load_all,
             data::save_one,
             data::current_root,

@@ -544,11 +544,9 @@ pub async fn chat_stream(
 	headers: HashMap<String, String>,
 	body: serde_json::Value,
 ) -> Result<(), String> {
-	let client = reqwest::Client::builder()
-		.connect_timeout(Duration::from_secs(15))
-		// 不设总超时：长回答的流可能持续几分钟，中断由前端按 Esc / 错误处理
-		.build()
-		.map_err(|error| error.to_string())?;
+	// 不设总超时：长回答的流可能持续几分钟，中断由前端按 Esc / 错误处理。
+	// 连接超时仍由 client_for 统一给 15 秒
+	let client = crate::infra::proxy::client_for(&app, None)?;
 	let mut request = client.post(&url).json(&body);
 	for (name, value) in &headers {
 		request = request.header(name.as_str(), value.as_str());
