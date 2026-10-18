@@ -9,7 +9,10 @@ import {
   useRef,
   useState
 } from "react";
-import { HistoryOutlined } from "@ant-design/icons";
+import {
+  FileMarkdownOutlined,
+  HistoryOutlined
+} from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
 import {
   deleteHistory,
@@ -21,7 +24,8 @@ import {
 export function AiHistoryMenu({
   host,
   onRestore,
-  renameCurrent
+  renameCurrent,
+  onExportRunbook
 }: {
   /** 当前会话的服务器地址：只列它的历史 */
   host: string;
@@ -32,6 +36,13 @@ export function AiHistoryMenu({
     id: string,
     next: string
   ) => void;
+  /**
+   * 导出某条历史为 Runbook。历史里自带 entries 快照，不需要先恢复。
+   *
+   * 只做「逐条导出」：当前对话在引擎空闲时会自动落一份历史，
+   * 它自己就在列表第一行，不需要额外的「导出当前对话」入口。
+   */
+  onExportRunbook?: (history: AiHistory) => void;
 }) {
   const t = useT();
   const [historyOpen, setHistoryOpen] =
@@ -183,6 +194,23 @@ export function AiHistoryMenu({
                     })}
                   </span>
                   <span className="ai-history-ops">
+                    {onExportRunbook && (
+                      <button
+                        type="button"
+                        className="ai-history-op"
+                        title={t(
+                          "ai.runbook.export"
+                        )}
+                        aria-label={t(
+                          "ai.runbook.export"
+                        )}
+                        onClick={() =>
+                          onExportRunbook(history)
+                        }
+                      >
+                        <FileMarkdownOutlined />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="ai-history-op"

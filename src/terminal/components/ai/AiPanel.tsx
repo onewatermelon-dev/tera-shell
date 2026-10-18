@@ -1,15 +1,25 @@
 import {
   useEffect,
+  useCallback,
   useRef,
   useState
 } from "react";
 import "streamdown/styles.css";
+import { invoke } from "@tauri-apps/api/core";
 import {
   PlusOutlined,
   RightOutlined
 } from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
-import { useAiChat } from "@/terminal/lib/ai/aiChat";
+import {
+  useAiChat,
+  type AiChatEntry
+} from "@/terminal/lib/ai/aiChat";
+import type { AiHistory } from "@/terminal/lib/ai/aiHistory";
+import {
+  buildRunbook,
+  runbookFileName
+} from "@/terminal/lib/ai/runbook";
 import {
   AI_ASK_PRESETS,
   onAiAsk
@@ -140,6 +150,54 @@ export default function AiPanel({
       node.scrollTop = node.scrollHeight;
     }
   }, [entries, error, pendingCardId, stream]);
+  // 导出 Runbook：**只按历史条目导出**（逐条）。
+  // 历史里自带 entries 快照（见 AiHistory），所以不用先恢复就能导出；
+  // 当前对话由引擎空闲时自动落盘进历史，它自己就在列表第一行。
+  const exportRunbook = useCallback(
+    (history: AiHistory) => {
+      const createdAt = Date.now();
+      const source = (
+        history.entries as AiChatEntry[]
+      ).filter(Boolean);
+      if (source.length === 0) {
+        console.info(
+          "[ai] 这条历史没有可导出的内容，跳过"
+        );
+        return;
+      }
+      const content = buildRunbook(source, {
+        host: history.host,
+        createdAt
+      });
+      const suggestedName = runbookFileName(
+        source,
+        history.host,
+        createdAt
+      );
+      void invoke<string | null>(
+        "fs_save_text_file",
+        { content, suggestedName }
+      )
+        .then(path => {
+          if (path)
+            console.info(
+              `[ai] Runbook 已导出到 ${path}`
+            );
+          else
+            console.info(
+              "[ai] 用户取消了 Runbook 导出"
+            );
+        })
+        .catch(reason => {
+          console.error(
+            "[ai] 导出 Runbook 失败",
+            reason
+          );
+          setSaveError(t("ai.runbook.failed"));
+        });
+    },
+    [t]
+  );
   // 终端右键「解释这条 / 让 AI 看看」：菜单经 askFromTerminal 桥把终端
   // 内容送进来，这里直接作为一轮提问发出。面板收起时由
   // TerminalWorkspace 订阅同一事件展开 —— 那边只负责展开，不管发送，
@@ -212,6 +270,7 @@ export default function AiPanel({
               restore(history);
             }}
             renameCurrent={renameCurrent}
+            onExportRunbook={exportRunbook}
           />
           <button
             type="button"

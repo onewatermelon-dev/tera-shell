@@ -311,6 +311,8 @@ const zhCN = {
   "ai.usage.input": "输入",
   "ai.usage.output": "输出",
   "ai.usage.cached": "缓存",
+  "ai.runbook.export": "导出为 Runbook",
+  "ai.runbook.failed": "导出 Runbook 失败",
 
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
@@ -909,6 +911,8 @@ const enUS: Record<MessageKey, string> = {
   "ai.usage.input": "in",
   "ai.usage.output": "out",
   "ai.usage.cached": "cached",
+  "ai.runbook.export": "Export as runbook",
+  "ai.runbook.failed": "Failed to export runbook",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",
