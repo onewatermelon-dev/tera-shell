@@ -39,6 +39,32 @@ export function listOpenAiModels(): AiModelOption[] {
 }
 
 /**
+ * 这条命令能不能**自动执行**（不必弹确认卡）。
+ *
+ * 单一真源：runLoop 的主循环与「同批排队」的补跑都必须用同一个判断，
+ * 否则两条路径对「只读/读写开关、黑名单」的理解会漂移 —— 出现过
+ * 主循环守规矩、补跑却把读写命令直接跑掉的风险。
+ *
+ * 规则：黑名单一票否决；只读看「自动执行」，读写看「自动应用」。
+ */
+export function shouldAutoRun(
+  call: { command: string; isReadOnly: boolean },
+  options: {
+    autoExecute: boolean;
+    autoApply: boolean;
+    blacklist: string[];
+  }
+): boolean {
+  if (
+    isBlacklisted(call.command, options.blacklist)
+  )
+    return false;
+  return call.isReadOnly
+    ? options.autoExecute
+    : options.autoApply;
+}
+
+/**
  * 命令是否命中黑名单：扫描命令里**每一个**词的 basename（含 && ; | 管道
  * 拆出的后续命令与 sudo/env 前缀后的真命令）比对黑名单——复合命令
  * （`cd /root && rm -rf x`、`sh -c "rm ..."`）只看首词必然漏检。

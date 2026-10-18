@@ -42,6 +42,7 @@ import {
   parsePlanToolArguments,
   parseToolArguments,
   planStepAutoRuns,
+  shouldAutoRun,
   type AiModelOption
 } from "./tools";
 import {
@@ -140,6 +141,7 @@ export {
   parseToolArguments,
   planStepAutoRuns,
   shellQuote,
+  shouldAutoRun,
   type AiModelOption,
   type PlanToolStep
 } from "./tools";
@@ -288,6 +290,18 @@ export function useAiChat(
     >
   >(new Map());
   /**
+   * 同一批 tool_calls 里被「挂起」挡住的后续命令。
+   *
+   * ⚠️ 模型经常一条消息里发 2-3 条 run_command。旧实现只认第一条，其余
+   * 回填「本条未执行，确认后请重新发起」就算了 —— 用户看到的是
+   * 「第二条命令又没执行成功」，模型也以为自己被挂起了（2026-10-18 报）。
+   * 现在把它们排队：确认完当前卡片后按顺序跑完，需要确认的逐条弹卡，
+   * 都处理完再回到模型（模型一次拿到全部结果）。
+   */
+  const queuedToolCallsRef = useRef<
+    { call: AiToolCall; toolCallId: string }[]
+  >([]);
+  /**
    * 计划执行中止标记（用户点停止 / 切历史 / 关面板）。
    *
    * 计划循环每步之间查它；单步确认挂起时由 stop 置位，executeCard 的
@@ -347,6 +361,9 @@ export function useAiChat(
         held.settle?.(true);
       }
     pendingRef.current.clear();
+    // 同批排队的命令也一并丢弃：会话已清空 / 切走，留着会在下次
+    // confirm 时莫名其妙跑起来
+    queuedToolCallsRef.current = [];
     resumeRef.current = null;
   }, []);
 
@@ -428,6 +445,64 @@ export function useAiChat(
     },
     [session]
   );
+
+  /**
+   * 依次执行排队中的同批命令。
+   *
+   * 规则与 runLoop 里一致：黑名单永不自动执行；只读看 autoExecute，
+   * 读写看 autoApply。轮到一条需要确认的就**弹卡挂起**并返回 true
+   * （调用方不要再跑 runLoop，等用户点第二张卡）；全部跑完返回 false。
+   */
+  const drainQueuedCommands =
+    useCallback(async (): Promise<boolean> => {
+      while (
+        queuedToolCallsRef.current.length > 0
+      ) {
+        const next =
+          queuedToolCallsRef.current.shift();
+        if (!next) break;
+        const {
+          autoExecute,
+          autoApply,
+          blacklist
+        } = runOptionsRef.current;
+        if (
+          !shouldAutoRun(next.call, {
+            autoExecute,
+            autoApply,
+            blacklist
+          })
+        ) {
+          console.info(
+            "[ai-exec] 队列中的命令需要确认：",
+            next.call.command
+          );
+          setEntries(list => [
+            ...list,
+            { kind: "tool", call: next.call }
+          ]);
+          pendingRef.current.set(
+            next.toolCallId,
+            {
+              kind: "tool",
+              call: next.call,
+              toolCallId: next.toolCallId
+            }
+          );
+          setPendingCardId(next.toolCallId);
+          return true;
+        }
+        console.info(
+          "[ai-exec] 队列续跑：",
+          next.call.command
+        );
+        await executeCard(
+          next.call,
+          next.toolCallId
+        );
+      }
+      return false;
+    }, [executeCard]);
 
   /** 工具循环：从当前协议流继续请求模型，直到出现普通回复或等确认。 */
   const runLoop = useCallback(
@@ -792,10 +867,11 @@ export function useAiChat(
               "[ai-exec] 黑名单命令，转人工确认"
             );
           if (
-            !blacklisted &&
-            (card.isReadOnly
-              ? autoExecute
-              : autoApply)
+            shouldAutoRun(card, {
+              autoExecute,
+              autoApply,
+              blacklist
+            })
           ) {
             await executeCard(card, toolCallId);
             continue;
@@ -827,15 +903,45 @@ export function useAiChat(
           // 未被改指，条件成立照旧清。
           const yieldedCallId =
             calls[yieldedIndex]?.id;
+          // 本批剩余的命令**排队**而不是丢弃：确认完当前卡片后按顺序
+          // 执行（见 drainQueuedCommands）。只有 run_command 能排队 ——
+          // 计划 / 反问 / 文件改动 / 文件传输一次只处理一个，成批出现
+          // 时仍按旧逻辑回填占位（协议完整性要求每条 tool_call 都有
+          // 配对的 tool 消息，否则下一轮供应商直接 400）
+          queuedToolCallsRef.current = [];
           for (const call of calls.slice(
             yieldedIndex + 1
           )) {
-            messagesRef.current.push({
-              role: "tool",
-              content:
-                "[上一条命令等待用户确认，本条未执行；确认后请重新发起]",
-              tool_call_id: call.id
+            const rest =
+              call.function.name ===
+              TOOL_RUN_COMMAND
+                ? parseToolArguments(
+                    call.function.arguments
+                  )
+                : null;
+            if (!rest) {
+              messagesRef.current.push({
+                role: "tool",
+                content:
+                  "[上一条命令等待用户确认，本条未执行；确认后请重新发起]",
+                tool_call_id: call.id
+              });
+              continue;
+            }
+            queuedToolCallsRef.current.push({
+              call: {
+                id: call.id,
+                command: rest.command,
+                question: rest.question,
+                isReadOnly: rest.isReadOnly,
+                state: "pending"
+              },
+              toolCallId: call.id
             });
+            console.info(
+              "[ai-exec] 排队等待执行：",
+              rest.command
+            );
           }
           // 挂起：等确认 / 跳过后由 confirm / skip 里新一轮
           // runLoop 接管剩余循环，这里直接收尾。
@@ -1119,6 +1225,17 @@ export function useAiChat(
           return;
         }
         pendingRef.current.delete(pendingCardId);
+        // 同批排队的命令一并作废：停止就是全停，别把后面的留着
+        // （留着的话下次 confirm 会把它们跑掉，用户没批准过）
+        for (const queued of queuedToolCallsRef.current) {
+          messagesRef.current.push({
+            role: "tool",
+            content:
+              "[用户停止了本轮，本条未执行]",
+            tool_call_id: queued.toolCallId
+          });
+        }
+        queuedToolCallsRef.current = [];
         // 判别联合：传输卡片走自己的执行器（skip 分支同样不弹框）
         const skipped =
           held.kind === "file"
@@ -1347,6 +1464,18 @@ export function useAiChat(
           mode
         );
       }
+      // 同一批里还有排队的命令：先把它们跑完再回到模型 —— 否则模型
+      // 拿不到这些命令的结果，只能让用户重新放行（旧行为，用户报过）
+      if (await drainQueuedCommands()) {
+        // 已经弹出下一张确认卡：释放 busy 让它的按钮可点，
+        // 本轮由那张卡的 confirm 接管
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        }
+        return;
+      }
       try {
         await runLoop(option);
       } catch (reason) {
@@ -1367,6 +1496,7 @@ export function useAiChat(
     [
       executeCard,
       executeFileCard,
+      drainQueuedCommands,
       runLoop,
       beginRound
     ]
@@ -1425,6 +1555,15 @@ export function useAiChat(
           true
         );
       }
+      // 同 confirm：同批排队的命令先跑完（跳过当前这张，不代表跳过后面）
+      if (await drainQueuedCommands()) {
+        if (ownsRound(round, roundRef.current)) {
+          setBusy(false);
+          setStream(null);
+          streamIdRef.current = null;
+        }
+        return;
+      }
       try {
         await runLoop(option);
       } catch (reason) {
@@ -1445,6 +1584,7 @@ export function useAiChat(
     [
       executeCard,
       executeFileCard,
+      drainQueuedCommands,
       runLoop,
       beginRound
     ]

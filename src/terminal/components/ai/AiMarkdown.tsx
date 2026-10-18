@@ -34,7 +34,12 @@ import {
 } from "streamdown";
 import { fillCodeFenceLanguage } from "@/terminal/lib/codeFence";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
+import { parseMetricChart } from "@/terminal/lib/ai/metricChart";
 import { AiCodeBlock } from "./AiCodeBlock";
+import { AiMetricChart } from "./AiMetricChart";
+
+/** 图表围栏块的语言标识（见 metricChart.ts 的格式说明） */
+const CHART_LANG = "metric-chart";
 
 /** 代码元素的 props（Streamdown 给块级代码打了 `data-block` 标记） */
 type CodeProps = {
@@ -78,11 +83,17 @@ export function AiMarkdown({
         const code = String(
           props.children ?? ""
         ).replace(/\n$/, "");
+        const lang = match?.[1] ?? "text";
+        // 指标图表：模型按提示词用 ```metric-chart 输出监控数据。
+        // 解析失败（流式期间 JSON 没闭合、或格式坏）就回落成普通代码块
+        // —— 用户至少能看到原始数据，不会白屏。
+        if (lang === CHART_LANG) {
+          const spec = parseMetricChart(code);
+          if (spec)
+            return <AiMetricChart spec={spec} />;
+        }
         return (
-          <AiCodeBlock
-            lang={match?.[1] ?? "text"}
-            code={code}
-          />
+          <AiCodeBlock lang={lang} code={code} />
         );
       }
     }),

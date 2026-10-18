@@ -7,6 +7,7 @@ import {
   nudgeQueued,
   ownsRound,
   parseToolArguments,
+  shouldAutoRun,
   responsesAdapter,
   trimToolOutput,
   type AiQueuedMessage
@@ -599,5 +600,83 @@ describe("ownsRound（轮次令牌）", () => {
     expect(distinct.length).toBe(seen.length);
     // 最早那个号在任何后续时刻都已被判失效
     expect(ownsRound(1, current)).toBe(false);
+  });
+});
+
+describe("shouldAutoRun（自动执行判定，单一真源）", () => {
+  const all = {
+    autoExecute: true,
+    autoApply: true,
+    blacklist: [] as string[]
+  };
+
+  it("只读看 autoExecute，读写看 autoApply", () => {
+    expect(
+      shouldAutoRun(
+        { command: "df -h", isReadOnly: true },
+        { ...all, autoApply: false }
+      )
+    ).toBe(true);
+    expect(
+      shouldAutoRun(
+        { command: "df -h", isReadOnly: true },
+        { ...all, autoExecute: false }
+      )
+    ).toBe(false);
+    expect(
+      shouldAutoRun(
+        {
+          command: "systemctl restart nginx",
+          isReadOnly: false
+        },
+        { ...all, autoApply: false }
+      )
+    ).toBe(false);
+    expect(
+      shouldAutoRun(
+        {
+          command: "systemctl restart nginx",
+          isReadOnly: false
+        },
+        all
+      )
+    ).toBe(true);
+  });
+
+  it("黑名单一票否决，即使模型标了只读、开关全开", () => {
+    expect(
+      shouldAutoRun(
+        {
+          command: "rm -rf /data",
+          isReadOnly: true
+        },
+        { ...all, blacklist: ["rm"] }
+      )
+    ).toBe(false);
+  });
+});
+
+describe("同批排队命令（第二条不再丢）", () => {
+  it("挂起分支把剩余命令排队，而不是回填「未执行」", async () => {
+    const src = (
+      await import("@/terminal/lib/ai/aiChat.ts?raw")
+    ).default;
+    // 队列容器
+    expect(src).toContain("queuedToolCallsRef");
+    // 补跑函数 + 两处接入（confirm / skip）
+    expect(src).toContain("drainQueuedCommands");
+    expect(
+      (src.match(/drainQueuedCommands/g) ?? [])
+        .length
+    ).toBeGreaterThanOrEqual(4);
+    // 只有 run_command 可排队（其它卡片一次只能处理一个）
+    // 不锁具体换行：prettier 会把长表达式拆行
+    expect(src).toMatch(
+      /call\.function\.name ===\s+TOOL_RUN_COMMAND/
+    );
+    // 停止 / 清空会话要丢弃队列，别在下次 confirm 时莫名跑起来
+    expect(src).toContain(
+      "用户停止了本轮，本条未执行"
+    );
   });
 });
