@@ -1,11 +1,29 @@
 /* 指标图表卡片：跟 AI 回答里的代码块同款卡片外观（圆角 + 细边框）。 */
 
 .card {
+  /* ⚠️ 同 AiTopologyGraph：--border 在深色主题下与卡片底几乎同色，
+     网格线会消失。单独定一套并按三种主题情况给值。 */
+  --chart-grid: #e2e5e9;
+
   padding: 10px 12px 8px;
   margin: 10px 0;
   background: var(--surface-secondary);
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    --chart-grid: #363c45;
+  }
+
+  :global([data-theme="light"]) .card {
+    --chart-grid: #e2e5e9;
+  }
+}
+
+:global([data-theme="dark"]) .card {
+  --chart-grid: #363c45;
 }
 
 .head {
@@ -46,7 +64,7 @@
 }
 
 .grid {
-  stroke: var(--border);
+  stroke: var(--chart-grid);
   stroke-width: 1;
   stroke-dasharray: 3 4;
 }

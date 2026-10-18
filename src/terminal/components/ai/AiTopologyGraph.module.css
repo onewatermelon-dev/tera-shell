@@ -1,0 +1,97 @@
+/* 拓扑关系图卡片：与图表卡同款外观。 */
+
+.card {
+  /* ⚠️ 连线/描边不能用 --border：深色主题下它和卡片底几乎同色，
+     连线直接看不见（用户 2026-10-18 反馈）。这里单独定一套，
+     并按「显式浅色 / 显式深色 / 跟随系统」三种情况分别给值。 */
+  --topo-line: #b6bcc6;
+  --topo-node-border: #d5d9df;
+
+  padding: 10px 12px 8px;
+  margin: 10px 0;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    --topo-line: #6b7482;
+    --topo-node-border: #3c434d;
+  }
+
+  /* 显式浅色要盖回来 */
+  :global([data-theme="light"]) .card {
+    --topo-line: #b6bcc6;
+    --topo-node-border: #d5d9df;
+  }
+}
+
+:global([data-theme="dark"]) .card {
+  --topo-line: #6b7482;
+  --topo-node-border: #3c434d;
+}
+
+.head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.count {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.node {
+  fill: var(--background);
+  stroke: var(--topo-node-border);
+  stroke-width: 1;
+}
+
+.label {
+  font-size: 10px;
+  fill: var(--foreground);
+  font-family:
+    -apple-system, "Segoe UI", "PingFang SC",
+    sans-serif;
+}
+
+/* 连线：虚线，但要比 --border 亮一档，否则深色主题看不见 */
+.edge {
+  stroke: var(--topo-line);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 3;
+}
+
+/* ---- 节点种类色条 ---- */
+
+.kindHost {
+  fill: var(--accent);
+}
+
+.kindService {
+  fill: var(--success);
+}
+
+.kindPort {
+  fill: var(--muted);
+}
+
+.kindProcess {
+  fill: var(--foreground);
+}

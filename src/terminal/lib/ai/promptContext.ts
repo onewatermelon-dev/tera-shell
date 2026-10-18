@@ -17,6 +17,10 @@ export const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行�
 - \`type\`：趋势用 \`line\`，各维度对比（如各分区占用）用 \`bar\`；
 - \`points\` 最多 60 个，超过就按等间隔抽样；\`label\` 要短（时间或维度名），\`value\` 必须是数字（不要带单位、不要引号）；
 - 一张图只放一个指标；多个指标就输出多个围栏块；
+- **层级关系**（主机 → 服务 → 端口 → 进程、依赖链、挂载关系）用 \`type: "graph"\`：\`nodes\` 给 id / label / kind（host、service、port、process），\`edges\` 用 \`from\`/\`to\` 连 id。节点最多 40 个，按重要性声明顺序排（同层会按声明顺序从左到右）。
+\`\`\`metric-chart
+{"title":"web-01 服务拓扑","type":"graph","nodes":[{"id":"host","label":"web-01","kind":"host"},{"id":"nginx","label":"nginx","kind":"service"},{"id":"443","label":"443/tcp","kind":"port"},{"id":"w1","label":"nginx: worker","kind":"process"}],"edges":[{"from":"host","to":"nginx"},{"from":"nginx","to":"443"},{"from":"nginx","to":"w1"}]}
+\`\`\`
 - 表格只在「不适合画图」时用（如命令输出、配置项、纯文本对照）。
 
 **命令输出的表格数据用 \`data-table\` 围栏块，不要贴等宽文本或空手写 markdown 表格**：\`ps aux\`、\`docker ps\`、\`ss -tlnp\`、\`kubectl get\`、\`df -h\` 这类结果要整理成列，前端会渲染成可排序、可筛选的表格卡：

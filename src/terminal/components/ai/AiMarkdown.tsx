@@ -35,9 +35,11 @@ import {
 import { fillCodeFenceLanguage } from "@/terminal/lib/codeFence";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import { parseMetricChart } from "@/terminal/lib/ai/metricChart";
+import { parseTopologyChart } from "@/terminal/lib/ai/topology";
 import { parseStructuredTable } from "@/terminal/lib/ai/structuredTable";
 import { AiCodeBlock } from "./AiCodeBlock";
 import { AiMetricChart } from "./AiMetricChart";
+import { AiTopologyGraph } from "./AiTopologyGraph";
 import { AiStructuredTable } from "./AiStructuredTable";
 
 /** 图表围栏块的语言标识（见 metricChart.ts 的格式说明） */
@@ -95,6 +97,12 @@ export function AiMarkdown({
           const spec = parseMetricChart(code);
           if (spec)
             return <AiMetricChart spec={spec} />;
+          // 同一围栏块的另一种形态：type=graph 走拓扑图
+          const graph = parseTopologyChart(code);
+          if (graph)
+            return (
+              <AiTopologyGraph spec={graph} />
+            );
         }
         // 结构化表格：同一套路子，解析失败回落代码块
         if (lang === TABLE_LANG) {
