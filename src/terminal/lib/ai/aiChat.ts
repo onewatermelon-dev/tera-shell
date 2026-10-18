@@ -30,6 +30,7 @@ import {
   type AiPlanStep,
   type AiQuestionCall,
   type AiToolCall,
+  type AiUsage,
   type ExecCardMode,
   type ProtocolMessage
 } from "./protocol";
@@ -119,6 +120,7 @@ export {
   type AiQuestion,
   type AiQuestionCall,
   type AiToolCall,
+  type AiUsage,
   type ExecCardMode,
   type FileTransferDirection,
   type ProtocolMessage,
@@ -431,6 +433,9 @@ export function useAiChat(
   const runLoop = useCallback(
     async (option: AiModelOption) => {
       const MAX_HOPS = 8;
+      // 纯工具调用跳（模型只回 tool_calls、没正文也没思考）不建条目，
+      // 其 token 用量结转到下一条可见回复，别让成本可视漏账
+      let carriedUsage: AiUsage | undefined;
       for (
         let hop = 0;
         hop < MAX_HOPS;
@@ -439,7 +444,9 @@ export function useAiChat(
         const startedAt = Date.now();
         // 流式：先挂一条空的流式条目，delta 到达就地追加，结束后落为正式条目
         setStream({ text: "", reasoning: "" });
-        const message =
+        // 纯工具调用跳（无正文无思考）不建条目，它的用量结转到下一条
+        // 可见回复上 —— 否则那部分 token 在成本可视里凭空消失
+        const { message, usage } =
           await streamChatCompletion(
             option,
             // 请求前自愈协议流：挂起期间发新消息 / 异常中断都可能留下
@@ -466,6 +473,27 @@ export function useAiChat(
               streamIdRef.current = id;
             }
           );
+        if (usage)
+          carriedUsage = carriedUsage
+            ? {
+                inputTokens:
+                  carriedUsage.inputTokens +
+                  usage.inputTokens,
+                outputTokens:
+                  carriedUsage.outputTokens +
+                  usage.outputTokens,
+                ...(carriedUsage.cachedInputTokens ||
+                usage.cachedInputTokens
+                  ? {
+                      cachedInputTokens:
+                        (carriedUsage.cachedInputTokens ??
+                          0) +
+                        (usage.cachedInputTokens ??
+                          0)
+                    }
+                  : {})
+              }
+            : usage;
         messagesRef.current.push(message);
         setStream(null);
         // 用户点过「停止」：把已收到的部分留成一条回复就收工，
@@ -480,6 +508,15 @@ export function useAiChat(
           message.content?.trim() ||
           message.reasoning
         ) {
+          // 结转用量并清空：这一跳连同之前没建条目的工具跳，
+          // 成本都算在这条回复头上
+          const entryUsage = carriedUsage
+            ? {
+                ...carriedUsage,
+                modelId: option.modelId
+              }
+            : undefined;
+          carriedUsage = undefined;
           setEntries(list => [
             ...list,
             {
@@ -493,6 +530,9 @@ export function useAiChat(
                       (Date.now() - startedAt) /
                       1000
                   }
+                : {}),
+              ...(entryUsage
+                ? { usage: entryUsage }
                 : {})
             }
           ]);

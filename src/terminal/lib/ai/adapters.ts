@@ -8,6 +8,7 @@
 import type { ModelProvider } from "@/settings/lib/modelProviders";
 import type { AiModelOption } from "./tools";
 import type {
+  AiUsage,
   ProtocolMessage,
   StreamAccumulator
 } from "./protocol";
@@ -759,6 +760,9 @@ function adapterOf(
 function openAiAccumulator(): StreamAccumulator {
   let content = "";
   let reasoning = "";
+  // usage 在**最后一个 chunk** 才给（且要请求体带
+  // stream_options.include_usage，见 stream.ts），零散的不收
+  let usage: AiUsage | undefined;
   const tools = new Map<
     number,
     { id: string; name: string; args: string }
@@ -782,7 +786,32 @@ function openAiAccumulator(): StreamAccumulator {
             }[];
           };
         }[];
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          prompt_tokens_details?: {
+            cached_tokens?: number;
+          };
+        };
       };
+      // 用量 chunk 没有 choices，别当成空 delta 提前返回
+      if (chunk.usage) {
+        usage = {
+          inputTokens:
+            chunk.usage.prompt_tokens ?? 0,
+          outputTokens:
+            chunk.usage.completion_tokens ?? 0,
+          ...(chunk.usage.prompt_tokens_details
+            ?.cached_tokens != null
+            ? {
+                cachedInputTokens:
+                  chunk.usage
+                    .prompt_tokens_details
+                    .cached_tokens
+              }
+            : {})
+        };
+      }
       const delta = chunk.choices?.[0]?.delta;
       if (!delta) return {};
       content += delta.content ?? "";
@@ -837,7 +866,8 @@ function openAiAccumulator(): StreamAccumulator {
           ? { tool_calls: toolCalls }
           : {})
       };
-    }
+    },
+    usage: () => usage
   };
 }
 
@@ -845,6 +875,8 @@ function openAiAccumulator(): StreamAccumulator {
 function anthropicAccumulator(): StreamAccumulator {
   let text = "";
   let thinking = "";
+  // usage 拆两个事件：message_start 给 input，message_delta 给 output
+  let usage: AiUsage | undefined;
   const tools = new Map<
     number,
     { id: string; name: string; args: string }
@@ -865,7 +897,44 @@ function anthropicAccumulator(): StreamAccumulator {
           thinking?: string;
           partial_json?: string;
         };
+        message?: {
+          usage?: {
+            input_tokens?: number;
+            output_tokens?: number;
+            cache_read_input_tokens?: number;
+          };
+        };
+        usage?: {
+          output_tokens?: number;
+        };
       };
+      // message_start：整条消息的输入用量（含缓存读取）
+      if (event.type === "message_start") {
+        const start = event.message?.usage;
+        if (start)
+          usage = {
+            inputTokens: start.input_tokens ?? 0,
+            outputTokens: 0,
+            ...(start.cache_read_input_tokens !=
+            null
+              ? {
+                  cachedInputTokens:
+                    start.cache_read_input_tokens
+                }
+              : {})
+          };
+        return {};
+      }
+      // message_delta：输出用量（累计值，直接覆盖）
+      if (event.type === "message_delta") {
+        if (usage && event.usage)
+          usage = {
+            ...usage,
+            outputTokens:
+              event.usage.output_tokens ?? 0
+          };
+        return {};
+      }
       if (event.type === "content_block_start") {
         // tool_use 块开始时登记 id / name；text 与 thinking 走 delta
         if (
@@ -933,14 +1002,16 @@ function anthropicAccumulator(): StreamAccumulator {
           ? { tool_calls: toolCalls }
           : {})
       };
-    }
+    },
+    usage: () => usage
   };
 }
 
-/** Responses 流：文本/摘要走 delta 事件，函数调用按 item_id 归并，completed 事件只做信号。 */
+/** Responses 流：文本/摘要走 delta 事件，函数调用按 item_id 归并，completed 事件带 usage。 */
 function responsesAccumulator(): StreamAccumulator {
   let content = "";
   let reasoning = "";
+  let usage: AiUsage | undefined;
   const calls = new Map<
     string,
     { callId: string; name: string; args: string }
@@ -957,7 +1028,36 @@ function responsesAccumulator(): StreamAccumulator {
           name?: string;
         };
         item_id?: string;
+        response?: {
+          usage?: {
+            input_tokens?: number;
+            output_tokens?: number;
+            input_tokens_details?: {
+              cached_tokens?: number;
+            };
+          };
+        };
       };
+      // response.completed：整次调用的用量别在 response 对象里
+      if (
+        event.type === "response.completed" &&
+        event.response?.usage
+      ) {
+        const done = event.response.usage;
+        usage = {
+          inputTokens: done.input_tokens ?? 0,
+          outputTokens: done.output_tokens ?? 0,
+          ...(done.input_tokens_details
+            ?.cached_tokens != null
+            ? {
+                cachedInputTokens:
+                  done.input_tokens_details
+                    .cached_tokens
+              }
+            : {})
+        };
+        return {};
+      }
       if (
         event.type ===
         "response.output_text.delta"
@@ -1022,7 +1122,8 @@ function responsesAccumulator(): StreamAccumulator {
           ? { tool_calls: toolCalls }
           : {})
       };
-    }
+    },
+    usage: () => usage
   };
 }
 

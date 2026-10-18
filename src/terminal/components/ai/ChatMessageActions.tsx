@@ -7,9 +7,16 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  CommentOutlined,
+  HistoryOutlined,
+  InboxOutlined
+} from "@ant-design/icons";
+import {
   useLocale,
   useT
 } from "@/settings/lib/i18n";
+import { formatTokens } from "@/terminal/lib/ai/usageFormat";
+import type { AiUsage } from "@/terminal/lib/ai/aiChat";
 import styles from "./ChatMessageActions.module.css";
 
 /** 按 aicss MessageActions 的相对时间规则显示，并跟随界面语言。 */
@@ -124,15 +131,24 @@ export function shouldDismissTipOnScroll(
     : true;
 }
 
-/** 改造自 aicss MessageActions：为用户与助手消息显示复制和时间。 */
+/** 改造自 aicss MessageActions：为用户与助手消息显示用量、复制和时间。 */
 export function ChatMessageActions({
   text,
   sentAt,
-  align = "end"
+  align = "end",
+  usage
 }: {
   text: string;
   sentAt?: number;
   align?: "start" | "end";
+  /**
+   * 本轮 token 用量（只有助手消息有）。
+   *
+   * 直接并进这一行（复制 / 时间之前）—— 单独占一行会多出一条视觉噪音。
+   * 图标刻意不用上下箭头：输入/输出在语义上是「进去的 token / 出来的
+   * token」，箭头容易被读成「上传/下载」。
+   */
+  usage?: AiUsage;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -287,7 +303,37 @@ export function ChatMessageActions({
     <div
       className={styles.root}
       data-align={align}
+      data-has-usage={usage ? "true" : undefined}
     >
+      {usage && (
+        <span className={styles.usage}>
+          <span className={styles.usageItem}>
+            <InboxOutlined
+              className={styles.usageIcon}
+            />
+            {t("ai.usage.input")}{" "}
+            {formatTokens(usage.inputTokens)}
+          </span>
+          <span className={styles.usageItem}>
+            <CommentOutlined
+              className={styles.usageIcon}
+            />
+            {t("ai.usage.output")}{" "}
+            {formatTokens(usage.outputTokens)}
+          </span>
+          {(usage.cachedInputTokens ?? 0) > 0 && (
+            <span className={styles.usageItem}>
+              <HistoryOutlined
+                className={styles.usageIcon}
+              />
+              {t("ai.usage.cached")}{" "}
+              {formatTokens(
+                usage.cachedInputTokens ?? 0
+              )}
+            </span>
+          )}
+        </span>
+      )}
       <button
         ref={copyRef}
         type="button"

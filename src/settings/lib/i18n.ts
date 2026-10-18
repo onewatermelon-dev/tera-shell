@@ -308,6 +308,9 @@ const zhCN = {
   "ai.edit.applied": "已应用",
   "ai.edit.cancelled": "已取消",
   "ai.edit.failed": "未应用",
+  "ai.usage.input": "输入",
+  "ai.usage.output": "输出",
+  "ai.usage.cached": "缓存",
 
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
@@ -903,6 +906,9 @@ const enUS: Record<MessageKey, string> = {
   "ai.edit.applied": "Applied",
   "ai.edit.cancelled": "Cancelled",
   "ai.edit.failed": "Not applied",
+  "ai.usage.input": "in",
+  "ai.usage.output": "out",
+  "ai.usage.cached": "cached",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",

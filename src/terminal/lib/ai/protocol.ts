@@ -29,6 +29,8 @@ export type AiChatEntry =
       reasoning?: string;
       /** 思考耗时（秒） */
       elapsedSeconds?: number;
+      /** 本轮（这一跳）模型调用的 token 用量，消息流里显示成本 */
+      usage?: AiUsage;
     }
   | { kind: "tool"; call: AiToolCall }
   | { kind: "file"; call: AiFileCall }
@@ -226,6 +228,26 @@ export type AiFileEditCall = {
   tooLarge?: boolean;
 };
 
+/**
+ * 一次模型调用的 token 用量。
+ *
+ * 三家 API 都返回（字段名各异，这里归一）：OpenAI 系
+ * `prompt_tokens`/`completion_tokens`、Anthropic `input_tokens`/
+ * `output_tokens`、Responses `input_tokens`/`output_tokens`。
+ * 随 assistant 条目落盘，历史恢复后仍在。
+ */
+export type AiUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  /** 输入里命中上下文缓存的 token（便宜得多；没给就不填） */
+  cachedInputTokens?: number;
+  /**
+   * 产出这份用量的模型 id。**当前只落盘不展示**（成本显示已撤掉），
+   * 留着是为了历史数据里带上"谁花的 token"，将来要恢复成本口径不必回填。
+   */
+  modelId?: string;
+};
+
 /** OpenAI Chat Completions 协议消息（引擎内部流转用）。 */
 export type ProtocolMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -254,6 +276,8 @@ export type StreamAccumulator = {
   feed: (payload: string) => StreamDelta;
   /** 组装最终的助手消息（content / reasoning / tool_calls） */
   finalize: () => ProtocolMessage;
+  /** 本次调用的 token 用量（模型没给就 undefined） */
+  usage: () => AiUsage | undefined;
 };
 
 /**

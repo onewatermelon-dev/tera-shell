@@ -13,6 +13,7 @@ import {
   LoadingOutlined
 } from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
+import Hint from "@/shared/components/Hint";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import { diffLanguageFor } from "@/terminal/lib/ai/fileDiff";
 import {
@@ -180,13 +181,20 @@ export function AiFileDiffCard({
         <span className={styles.title}>
           {t("ai.edit.title")}
         </span>
-        {/* 路径等宽显示，长路径截断；完整路径在 title 里 */}
-        <span
-          className={styles.path}
-          title={call.path}
+        {/* 路径等宽显示，长路径截断；完整路径走 HeroUI 气泡
+            （触发层是 Hint 的 div，flex 约束得挂在它身上，
+            见 Hint 的 triggerClassName 注释） */}
+        <Hint
+          label={call.path}
+          placement="bottom left"
+          triggerClassName={styles.pathWrap}
+          // 单行不折行；路径按自然宽度撑开（限宽 + nowrap 会让文字溢出）
+          contentStyle={{ whiteSpace: "nowrap" }}
         >
-          {call.path}
-        </span>
+          <span className={styles.path}>
+            {call.path}
+          </span>
+        </Hint>
       </div>
 
       {call.summary && (

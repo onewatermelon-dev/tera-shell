@@ -469,6 +469,28 @@ describe("文件改动的接线（防静默失效）", () => {
     expect(css).toContain("#98c379");
   });
 
+  it("路径悬停提示走 HeroUI 气泡（Hint），不再用原生 title", async () => {
+    const card = (
+      await import("@/terminal/components/ai/AiFileDiffCard.tsx?raw")
+    ).default;
+    expect(card).toContain(
+      "@/shared/components/Hint"
+    );
+    // 截断约束落在触发层（Hint 的 div）上
+    expect(card).toContain("triggerClassName");
+    expect(card).not.toContain(
+      "title={call.path}"
+    );
+    // 气泡不许飘出 AI 面板：左对齐（向右生长）；文字单行不折行
+    expect(card).toContain(
+      'placement="bottom left"'
+    );
+    expect(card).toContain(
+      'whiteSpace: "nowrap"'
+    );
+    expect(card).not.toContain("maxWidth");
+  });
+
   it("提示词交代了「不給整份内容、一律等批准」", async () => {
     const { SYSTEM_PROMPT } =
       await import("@/terminal/lib/ai/promptContext");
@@ -548,7 +570,10 @@ describe("diff 卡渲染（+/- 标记）", () => {
     expect(html).not.toContain("@@");
     // 操作按钮在位
     expect(html).toContain("ai.edit.apply");
-  });
+    // 60s：本用例是**首个** import AiFileDiffCard 的用例，卡片经 Hint
+    // 拉进 HeroUI Tooltip 整条依赖，并发跑时首次 Transform 会顶穿
+    // vitest 配置里 20s 的上限（上限只影响这一次冷启动）
+  }, 60_000);
 
   it("loading 态：转圈 + 无 diff 无按钮", async () => {
     const { AiFileDiffCard } =

@@ -43,7 +43,15 @@
   color: var(--foreground);
 }
 
-/* 目标路径：等宽 + 单行截断，完整路径在 title 属性里 */
+/* 路径的触发层（Hint 的 div）：flex 约束挂这里，span 才能被截断 */
+.pathWrap {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 目标路径：等宽 + 单行截断，完整路径走气泡 */
 .path {
   flex: 1;
   min-width: 0;

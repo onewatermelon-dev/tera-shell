@@ -11,6 +11,7 @@ import {
   adapterOf
 } from "./adapters";
 import type {
+  AiUsage,
   ProtocolMessage,
   StreamDelta
 } from "./protocol";
@@ -18,7 +19,8 @@ import type {
 /**
  * 流式对话补全：请求体加 stream:true 走 Rust SSE 桥，delta 通过
  * onDelta 实时回调（content / reasoning 增量），结束后返回组装完
- * 整的助手消息（与 chatCompletion 同形态，协议流无缝衔接）。
+ * 整的助手消息（与 chatCompletion 同形态，协议流无缝衔接）与本次
+ * 调用的 token 用量（模型没给则 undefined）。
  *
  * withTools=false 时从请求体剥掉 run_command 工具定义 —— 命令解释
  * 这类纯文本请求若带着工具，模型可能直接回 tool_call 而没有正文。
@@ -35,7 +37,10 @@ export async function streamChatCompletion(
    * 生成的，调用方拿不到，所以开这个口子把它透出去。
    */
   onStreamId?: (streamId: string) => void
-): Promise<ProtocolMessage> {
+): Promise<{
+  message: ProtocolMessage;
+  usage: AiUsage | undefined;
+}> {
   const adapter = adapterOf(
     option.provider.apiFormat
   );
@@ -105,13 +110,26 @@ export async function streamChatCompletion(
       delete built.tools;
       delete built.tool_choice;
     }
+    // OpenAI 系流式**默认不返回 usage**，要显式要一份（最后一个 chunk
+    // 才给）。⚠️ 只给 openai 格式加：Anthropic / Responses 不认这个字段，
+    // 滥加有被 400 的风险。Anthropic 的用量在 message_start /
+    // message_delta 事件里，Responses 在 response.completed 里，都无需
+    // 请求端配合。
+    const body: Record<string, unknown> = {
+      ...built,
+      stream: true
+    };
+    if (option.provider.apiFormat === "openai")
+      body.stream_options = {
+        include_usage: true
+      };
     await invoke("ai_chat_stream", {
       streamId,
       url: adapter.endpoint(base),
       headers: adapter.headers(
         option.provider.apiKey
       ),
-      body: { ...built, stream: true }
+      body
     });
     // 命令返回前已广播 done 事件，这里等监听器确认到达（留宽限兜底）
     if (!done) {
@@ -123,7 +141,10 @@ export async function streamChatCompletion(
       ]);
     }
     if (streamError) throw new Error(streamError);
-    return accumulator.finalize();
+    return {
+      message: accumulator.finalize(),
+      usage: accumulator.usage()
+    };
   } finally {
     unlisten();
   }

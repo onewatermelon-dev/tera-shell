@@ -34,6 +34,36 @@
   justify-content: flex-start;
 }
 
+/* 带用量的助手消息：这一行常驻可见（token 是常规信息，不该藏在悬停里），
+   复制 / 时间跟着一起露出来 —— 同一行的可见性没法分开控制 */
+.root[data-has-usage="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ---- 用量块：图标 + 文字 + 数字（不用上下箭头） ---- */
+
+.usage {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--ma-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.usageItem {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.usageIcon {
+  font-size: 10px;
+}
+
 .copy {
   position: relative;
   display: inline-flex;

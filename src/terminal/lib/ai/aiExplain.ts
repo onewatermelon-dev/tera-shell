@@ -47,17 +47,18 @@ export async function explainCommand(
     }
   ];
   let streamed = false;
-  const result = await streamChatCompletion(
-    option,
-    messages,
-    chunk => {
-      if (!chunk.content) return;
-      streamed = true;
-      onText(chunk.content);
-    },
-    // 纯文本解释请求：不带工具，防模型回 tool_call 导致无正文
-    false
-  );
+  const { message: result } =
+    await streamChatCompletion(
+      option,
+      messages,
+      chunk => {
+        if (!chunk.content) return;
+        streamed = true;
+        onText(chunk.content);
+      },
+      // 纯文本解释请求：不带工具，防模型回 tool_call 导致无正文
+      false
+    );
   // 模型不支持流式时 onDelta 全程为空：一次性补全正文
   if (!streamed && result.content) {
     onText(result.content);

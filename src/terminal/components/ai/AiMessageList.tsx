@@ -292,6 +292,7 @@ export function AiMessageList({
                 )}
                 sentAt={entry.sentAt}
                 align="start"
+                usage={entry.usage}
               />
             </div>
           );
