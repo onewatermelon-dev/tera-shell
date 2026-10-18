@@ -1,0 +1,132 @@
+/* 结构化表格卡片：与代码块/图表同款卡片外观。 */
+
+.card {
+  margin: 10px 0;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 6px;
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.filter {
+  flex: 0 1 140px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+}
+
+/* 行多时内部滚动，别把整段回答拉太长 */
+.scroll {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+  text-align: left;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.sortButton {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}
+
+.sortMark {
+  font-size: 8px;
+}
+
+.table td {
+  padding: 4px 8px;
+  color: var(--foreground);
+  border-bottom: 1px solid var(--border);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover td {
+  background: var(--background);
+}
+
+/* 数字列右对齐 + 等宽：同列数字才能对齐比较 */
+.headNum {
+  text-align: right;
+
+  & .sortButton {
+    justify-content: flex-end;
+    width: 100%;
+  }
+}
+
+.cellNum {
+  font-family: Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.empty {
+  padding: 12px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.foot {
+  padding: 4px 10px 6px;
+  font:
+    10px Consolas,
+    monospace;
+  color: var(--muted);
+}

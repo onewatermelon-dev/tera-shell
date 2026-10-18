@@ -35,11 +35,15 @@ import {
 import { fillCodeFenceLanguage } from "@/terminal/lib/codeFence";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import { parseMetricChart } from "@/terminal/lib/ai/metricChart";
+import { parseStructuredTable } from "@/terminal/lib/ai/structuredTable";
 import { AiCodeBlock } from "./AiCodeBlock";
 import { AiMetricChart } from "./AiMetricChart";
+import { AiStructuredTable } from "./AiStructuredTable";
 
 /** 图表围栏块的语言标识（见 metricChart.ts 的格式说明） */
 const CHART_LANG = "metric-chart";
+/** 结构化表格围栏块的语言标识（见 structuredTable.ts） */
+const TABLE_LANG = "data-table";
 
 /** 代码元素的 props（Streamdown 给块级代码打了 `data-block` 标记） */
 type CodeProps = {
@@ -91,6 +95,14 @@ export function AiMarkdown({
           const spec = parseMetricChart(code);
           if (spec)
             return <AiMetricChart spec={spec} />;
+        }
+        // 结构化表格：同一套路子，解析失败回落代码块
+        if (lang === TABLE_LANG) {
+          const spec = parseStructuredTable(code);
+          if (spec)
+            return (
+              <AiStructuredTable spec={spec} />
+            );
         }
         return (
           <AiCodeBlock lang={lang} code={code} />

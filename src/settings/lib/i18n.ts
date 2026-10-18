@@ -313,6 +313,10 @@ const zhCN = {
   "ai.usage.cached": "缓存",
   "ai.runbook.export": "导出为 Runbook",
   "ai.runbook.failed": "导出 Runbook 失败",
+  "ai.table.title": "数据表",
+  "ai.table.filter": "筛选…",
+  "ai.table.empty": "没有匹配的行",
+  "ai.table.rows": "显示",
 
   "session.editTitle": "编辑连接",
   "session.newTitle": "新建连接",
@@ -913,6 +917,10 @@ const enUS: Record<MessageKey, string> = {
   "ai.usage.cached": "cached",
   "ai.runbook.export": "Export as runbook",
   "ai.runbook.failed": "Failed to export runbook",
+  "ai.table.title": "Table",
+  "ai.table.filter": "Filter…",
+  "ai.table.empty": "No matching rows",
+  "ai.table.rows": "Rows",
 
   "session.editTitle": "Edit connection",
   "session.newTitle": "New connection",
