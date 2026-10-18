@@ -478,6 +478,26 @@ const zhCN = {
   "settings.nav.colorScheme": "配色方案",
   "settings.nav.models": "模型设置",
   "settings.nav.shortcuts": "快捷键",
+  "settings.nav.about": "关于",
+  "about.desc":
+    "SSH 终端 · AI 助手（Tauri + React）",
+  "about.update.title": "版本更新",
+  "about.update.check": "检查更新",
+  "about.update.checking": "检查中…",
+  "about.update.hint":
+    "手动检查；不会自动下载安装。",
+  "about.update.latest": "已是最新版本。",
+  "about.update.newer": "发现新版本",
+  "about.update.failed": "检查失败",
+  "about.update.timeout": "请求超时",
+  "about.update.network": "网络不可达",
+  "about.update.badPayload": "返回格式异常",
+  "about.update.openRelease": "查看更新说明",
+  "about.update.allReleases": "全部版本",
+  "about.repo": "GitHub 仓库",
+  "about.licenses.title": "开源许可",
+  "about.licenses.search": "搜索组件或许可证",
+  "about.licenses.empty": "没有匹配的组件",
   "models.desc":
     "管理自定义模型供应商，配置后可在聊天时选择使用。",
   "models.addProvider": "添加供应商",
@@ -1089,6 +1109,29 @@ const enUS: Record<MessageKey, string> = {
   "settings.nav.colorScheme": "Color scheme",
   "settings.nav.models": "Model providers",
   "settings.nav.shortcuts": "Keyboard shortcuts",
+  "settings.nav.about": "About",
+  "about.desc":
+    "SSH terminal with an AI assistant (Tauri + React)",
+  "about.update.title": "Updates",
+  "about.update.check": "Check for updates",
+  "about.update.checking": "Checking…",
+  "about.update.hint":
+    "Manual check only — nothing is downloaded or installed automatically.",
+  "about.update.latest":
+    "You are on the latest version.",
+  "about.update.newer": "New version available:",
+  "about.update.failed": "Check failed",
+  "about.update.timeout": "request timed out",
+  "about.update.network": "network unreachable",
+  "about.update.badPayload":
+    "unexpected response",
+  "about.update.openRelease": "Release notes",
+  "about.update.allReleases": "All releases",
+  "about.repo": "GitHub repository",
+  "about.licenses.title": "Open source licenses",
+  "about.licenses.search":
+    "Search package or license",
+  "about.licenses.empty": "No matching package",
   "models.desc":
     "Manage custom model providers; enabled models can be picked when chatting.",
   "models.addProvider": "Add provider",

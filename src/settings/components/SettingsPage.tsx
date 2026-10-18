@@ -12,6 +12,7 @@ import {
   DesktopOutlined,
   FormatPainterOutlined,
   GlobalOutlined,
+  InfoCircleOutlined,
   KeyOutlined,
   MoonOutlined,
   SunOutlined,
@@ -24,6 +25,7 @@ import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
 import { resolveColorScheme } from "@/terminal/lib/pane/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
 import ShortcutSettings from "@/settings/components/ShortcutSettings";
+import { AboutSection } from "@/settings/components/AboutSection";
 import SettingsSelect, {
   type SelectOption
 } from "@/settings/components/SettingsSelect";
@@ -43,13 +45,14 @@ import {
   type ThemeMode
 } from "@/settings/lib/settings";
 
-/** 左侧导航的四页。 */
+/** 左侧导航的五页（关于是只读信息页）。 */
 type Section =
   | "general"
   | "terminal"
   | "colorScheme"
   | "models"
-  | "shortcuts";
+  | "shortcuts"
+  | "about";
 
 /** 主题下拉的三项。 */
 const themeOptions = (
@@ -311,6 +314,18 @@ export default function SettingsPage({
           <KeyOutlined />
           {t("settings.nav.shortcuts")}
         </button>
+        <button
+          type="button"
+          className={
+            section === "about"
+              ? "settings-nav-item is-active"
+              : "settings-nav-item"
+          }
+          onClick={() => setSection("about")}
+        >
+          <InfoCircleOutlined />
+          {t("settings.nav.about")}
+        </button>
       </aside>
 
       <section
@@ -336,15 +351,17 @@ export default function SettingsPage({
               models: t("settings.nav.models"),
               shortcuts: t(
                 "settings.nav.shortcuts"
-              )
+              ),
+              about: t("settings.nav.about")
             }[section]
           }
         </h1>
-        {section !== "models" && (
-          <p className="settings-subtitle">
-            {t("settings.subtitle")}
-          </p>
-        )}
+        {section !== "models" &&
+          section !== "about" && (
+            <p className="settings-subtitle">
+              {t("settings.subtitle")}
+            </p>
+          )}
 
         {section === "general" ? (
           <>
@@ -592,6 +609,8 @@ export default function SettingsPage({
               }
             />
           </SettingsRow>
+        ) : section === "about" ? (
+          <AboutSection />
         ) : (
           <ModelProvidersPage />
         )}

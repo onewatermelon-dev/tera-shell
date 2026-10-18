@@ -12,6 +12,7 @@
     "lint:eslint": "eslint",
     "lint:stylelint": "stylelint --cache --fix \"**/*.{css,scss}\" --cache-location node_modules/.cache/stylelint/",
     "commit": "node scripts/precommit-check.mjs",
+    "licenses": "node scripts/gen-licenses.mjs",
     "precommit": "lint-staged --max-arg-length 6000",
     "prepare": "husky",
     "test": "vitest"
