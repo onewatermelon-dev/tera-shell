@@ -2,9 +2,11 @@ import {
   beforeEach,
   describe,
   expect,
-  it
+  it,
+  vi
 } from "vitest";
 import {
+  applyReduceMotion,
   clampCursorWidth,
   clampLineHeight,
   DEFAULT_CURSOR_WIDTH,
@@ -71,14 +73,29 @@ describe("clampCursorWidth", () => {
   });
 });
 
+describe("applyReduceMotion", () => {
+  it("打开时挂 data-motion=off，关闭时移除属性", () => {
+    // node 环境没有 DOM：applyReduceMotion 只碰 documentElement.dataset，
+    // 造一个最小桩就够（dataset 用普通对象模拟，delete 语义一致）
+    const dataset: Record<string, string> = {};
+    vi.stubGlobal("document", {
+      documentElement: { dataset }
+    });
+    applyReduceMotion(true);
+    expect(dataset.motion).toBe("off");
+    applyReduceMotion(false);
+    expect(dataset.motion).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("loadSettings 的新字段", () => {
   beforeEach(() => {
     // writeData 内存先行：清不掉旧缓存就直接覆盖成空，
     // 让 loadSettings 走「没有设置文件」的默认分支再逐个验证
     writeData(DataName.settings, "");
   });
-
-  it("旧数据缺字段时用默认值（1.3 / 1 / outline）", () => {
+  it("旧数据缺字段时用默认值（1.3 / 1 / outline / 动效默认开）", () => {
     writeData(
       DataName.settings,
       JSON.stringify({ fontSize: 16 })
@@ -93,6 +110,7 @@ describe("loadSettings 的新字段", () => {
     expect(settings.cursorInactiveStyle).toBe(
       "outline"
     );
+    expect(settings.reduceMotion).toBe(false);
   });
 
   it("合法值原样保留", () => {

@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import App from "./app/components/App";
 import SftpApp from "./sftp/components/SftpApp";
 import {
+  applyReduceMotion,
   applyTheme,
   loadSettings,
   type LanguageMode,
@@ -40,6 +41,7 @@ async function bootstrap() {
   const settings = loadSettings();
   setLocale(settings.locale);
   applyTheme(settings.theme);
+  applyReduceMotion(settings.reduceMotion);
 
   // SFTP 窗口随后续变化跟随主窗口的外观设置（广播见 useSettings）。
   // 广播会送达所有窗口，但只有 SFTP 窗口在这里注册监听。
@@ -47,9 +49,13 @@ async function bootstrap() {
     void listen<{
       theme: ThemeMode;
       locale: LanguageMode;
+      reduceMotion: boolean;
     }>("app://appearance-changed", event => {
       applyTheme(event.payload.theme);
       setLocale(event.payload.locale);
+      applyReduceMotion(
+        event.payload.reduceMotion
+      );
     });
   }
 

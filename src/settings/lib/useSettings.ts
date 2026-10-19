@@ -6,6 +6,7 @@ import {
 import { emit } from "@tauri-apps/api/event";
 import {
   applyLocale,
+  applyReduceMotion,
   applyTheme,
   loadSettings,
   saveSettings,
@@ -30,6 +31,11 @@ export function useSettings() {
     applyTheme(settings.theme);
   }, [settings.theme]);
 
+  // 减少动效：根节点挂 data-motion="off"，样式层两套选择器并行生效
+  useEffect(() => {
+    applyReduceMotion(settings.reduceMotion);
+  }, [settings.reduceMotion]);
+
   // 语言：落到 <html lang>（断词、字体回退、读屏发音），
   // 并同步给 i18n store —— 订阅它的组件会自动重渲染
   useEffect(() => {
@@ -42,9 +48,14 @@ export function useSettings() {
   useEffect(() => {
     emit("app://appearance-changed", {
       theme: settings.theme,
-      locale: settings.locale
+      locale: settings.locale,
+      reduceMotion: settings.reduceMotion
     }).catch(() => {});
-  }, [settings.theme, settings.locale]);
+  }, [
+    settings.theme,
+    settings.locale,
+    settings.reduceMotion
+  ]);
 
   // 快捷键覆盖：写进 appShortcuts 的模块级 store，菜单标签、右键菜单与
   // 按键处理都订阅它。启动时同步一次（老配置里没有这个字段时是空对象，

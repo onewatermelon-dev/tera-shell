@@ -80,6 +80,14 @@ export type AppSettings = {
   /** 失焦时的光标形态（设置-终端里选择），见 CursorInactiveStyle。 */
   cursorInactiveStyle: CursorInactiveStyle;
   /**
+   * 减少动效：关掉标签名跑马灯、加载动画等持续动效（无障碍项）。
+   *
+   * 系统级的 `prefers-reduced-motion` 已有两处 CSS 媒体查询在跟，
+   * 但没给应用内开关 —— 用户没法在不改系统设置的前提下关动画。
+   * 打开时根节点挂 `data-motion="off"`，样式层两套选择器并行生效。
+   */
+  reduceMotion: boolean;
+  /**
    * 硬件加速渲染（WebGL）。
    *
    * 关掉后终端退回 DOM 渲染器：大输出时滚动/输入会明显变涩，
@@ -233,6 +241,8 @@ export const defaultSettings: AppSettings = {
   lineHeight: DEFAULT_LINE_HEIGHT,
   cursorWidth: DEFAULT_CURSOR_WIDTH,
   cursorInactiveStyle: "outline",
+  // 默认关：动画对多数人无害，需要的人再开
+  reduceMotion: false,
   webglRender: true,
   scrollback: DEFAULT_SCROLLBACK,
   dataDir: "",
@@ -337,6 +347,8 @@ export function loadSettings(): AppSettings {
         parsed.cursorInactiveStyle === "none"
           ? parsed.cursorInactiveStyle
           : "outline",
+      // 减少动效：默认关，只有显式存过 true 才开
+      reduceMotion: parsed.reduceMotion === true,
       // 默认开：只有显式存过 false 才关
       webglRender: parsed.webglRender !== false,
       // 回滚行数：旧数据没这个字段（undefined）时 clampScrollback
@@ -411,6 +423,24 @@ export function firstFontOf(
 ): string {
   const first = stack.split(",")[0]?.trim() ?? "";
   return first.replace(/^["']|["']$/g, "");
+}
+
+/**
+ * 把「减少动效」应用到文档根元素。
+ *
+ * 与 applyTheme 同套路：根节点挂 `data-motion="off"`，CSS 里为每个动画
+ * 并行写两套选择器（系统媒体查询 + 属性选择器），避免 JS 逐条改样式。
+ * 关闭时移除属性，动画行为完全交回给系统偏好。
+ */
+export function applyReduceMotion(
+  reduceMotion: boolean
+): void {
+  const root = document.documentElement;
+  if (reduceMotion) {
+    root.dataset.motion = "off";
+  } else {
+    delete root.dataset.motion;
+  }
 }
 
 /**

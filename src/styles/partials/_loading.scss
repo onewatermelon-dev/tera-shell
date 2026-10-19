@@ -47,6 +47,12 @@ button:active {
   }
 }
 
+// 应用内开关（设置-常规「减少动效」）：与系统媒体查询同一效果，
+// 两套选择器并行 —— 见 settings.ts 的 applyReduceMotion
+[data-motion="off"] * {
+  transition: none !important;
+}
+
 // 对齐 HeroUI popover + list-box-item 规格（overlay 底、--shadow-overlay、
 // 36px 行高、8px 项圆角、hover --default、按压 scale(.98)）
 .terminal-context-menu {

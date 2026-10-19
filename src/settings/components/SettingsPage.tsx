@@ -492,6 +492,27 @@ export default function SettingsPage({
                 />
               }
             />
+            <SettingsRow
+              title={t(
+                "settings.reduceMotion.title"
+              )}
+              description={t(
+                "settings.reduceMotion.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.reduceMotion.title"
+                  )}
+                  isSelected={
+                    settings.reduceMotion
+                  }
+                  onChange={reduceMotion =>
+                    onChange({ reduceMotion })
+                  }
+                />
+              }
+            />
             <DataDirRow />
             {/* 代理与通知都排在数据路径之后 */}
             <ProxyRow

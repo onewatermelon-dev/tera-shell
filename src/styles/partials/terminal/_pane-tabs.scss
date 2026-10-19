@@ -146,6 +146,12 @@
   }
 }
 
+// 应用内开关（设置-常规「减少动效」）：与系统媒体查询同一效果，
+// 两套选择器并行 —— 见 settings.ts 的 applyReduceMotion
+[data-motion="off"] .name-scroll {
+  animation-name: none;
+}
+
 // 标签条右侧的「新建」与「更多」：absolute 钉在可视区右缘。
 // 用 absolute 而非 sticky：sticky 在 overflow 容器里会随内容滚动
 .pane-tab-new,

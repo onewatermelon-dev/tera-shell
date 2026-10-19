@@ -670,6 +670,9 @@ const zhCN = {
     "焦点切到其他窗格时的光标形态，便于分辨敲下的命令会进哪个终端。",
   "settings.cursorInactive.outline": "变淡描边",
   "settings.cursorInactive.none": "隐藏",
+  "settings.reduceMotion.title": "减少动效",
+  "settings.reduceMotion.desc":
+    "关闭标签名滚动、加载动画等持续动效；对晕动敏感或希望界面更安静时开启。",
   "settings.webgl.title": "硬件加速渲染",
   "settings.webgl.desc":
     "用 GPU 绘制终端文字（WebGL）。大输出时滚动与输入更顺滑；关闭后退回普通渲染，若遇到缺色、字形缺失等显示异常可先关掉它。",
@@ -1352,6 +1355,9 @@ const enUS: Record<MessageKey, string> = {
   "settings.cursorInactive.outline":
     "Dim outline",
   "settings.cursorInactive.none": "Hidden",
+  "settings.reduceMotion.title": "Reduce motion",
+  "settings.reduceMotion.desc":
+    "Turn off continuous animations such as the scrolling tab name and loading indicator.",
   "settings.webgl.title": "Hardware acceleration",
   "settings.webgl.desc":
     "Draw terminal text with the GPU (WebGL). Keeps scrolling and typing smooth on heavy output. Turn it off to fall back to normal rendering — useful if you hit missing colors or glyphs.",
