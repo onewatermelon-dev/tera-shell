@@ -801,26 +801,3 @@
   line-height: 1.5;
   color: var(--muted);
 }
-
-// 测试按钮行：与上方三个分类开关之间留一道分隔，避免被误认成第四个分类
-.notify-test {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  padding-top: 12px;
-  margin-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.notify-test-result {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-// 提示文字独占一行：与按钮同行会在窄窗口里挤成两截
-.notify-test .notify-kind-hint {
-  flex-basis: 100%;
-}

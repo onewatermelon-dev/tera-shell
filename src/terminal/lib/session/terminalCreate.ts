@@ -39,6 +39,9 @@ export type TerminalAppearance = Pick<
   | "commandCompletion"
   | "cursorStyle"
   | "cursorBlink"
+  | "cursorWidth"
+  | "cursorInactiveStyle"
+  | "lineHeight"
   | "webglRender"
   | "scrollback"
 >;
@@ -105,6 +108,10 @@ export function createTerminalInstance(
   const terminal = new Terminal({
     cursorBlink: appearance.cursorBlink,
     cursorStyle: appearance.cursorStyle,
+    // 行距 / 光标宽度 / 失焦光标形态均取自设置（改动由外观 effect 推送）
+    cursorWidth: appearance.cursorWidth,
+    cursorInactiveStyle:
+      appearance.cursorInactiveStyle,
     allowProposedApi: true,
     // 字体与字号取自设置；自定义字体会拼在内置字体栈前面，
     // 没装时顺着回退，不会掉成难看的默认衬线体
@@ -112,7 +119,7 @@ export function createTerminalInstance(
       appearance.fontFamily
     ),
     fontSize: appearance.fontSize,
-    lineHeight: 1.3,
+    lineHeight: appearance.lineHeight,
     // 回滚行数取自设置（改动由 effect 推送到已有终端）
     scrollback: appearance.scrollback,
     theme: toXtermTheme(

@@ -30,6 +30,19 @@ export type StatusMode = "macros" | "info";
 export type CursorStyle =
   "block" | "underline" | "bar";
 
+/**
+ * 焦点不在终端上时的光标形态（xterm 的 `cursorInactiveStyle`）。
+ *
+ * outline 是 xterm 默认：方块退成描边，「还在但不归你管」一眼可辨；
+ * none 直接隐藏。与 CursorStyle 同的三个值表示「失焦也保持原形状」。
+ */
+export type CursorInactiveStyle =
+  | "outline"
+  | "block"
+  | "underline"
+  | "bar"
+  | "none";
+
 export type AppSettings = {
   /** 终端字体族。留空表示用内置默认（见 TERMINAL_FONT_FALLBACK）。 */
   fontFamily: string;
@@ -51,6 +64,21 @@ export type AppSettings = {
   cursorStyle: CursorStyle;
   /** 终端光标是否闪烁（设置-终端里开关）。 */
   cursorBlink: boolean;
+  /**
+   * 行距：字符行盒高度的倍数（xterm 的 `lineHeight`）。
+   *
+   * 1 = 一行挨一行，2 = 一倍空行。行距一改行高就变，
+   * 终端行列数必须重算 —— 生效链路见 useTerminalAppearance。
+   */
+  lineHeight: number;
+  /**
+   * 光标宽度（xterm 的 `cursorWidth`），单位 px，仅对竖线/下划线形状生效。
+   *
+   * xterm 默认 1px，高分屏上细得几乎看不见 —— 这是加它的唯一理由。
+   */
+  cursorWidth: number;
+  /** 失焦时的光标形态（设置-终端里选择），见 CursorInactiveStyle。 */
+  cursorInactiveStyle: CursorInactiveStyle;
   /**
    * 硬件加速渲染（WebGL）。
    *
@@ -110,6 +138,59 @@ export type AppSettings = {
 export const TERMINAL_FONT_FALLBACK =
   '"Cascadia Code", "JetBrains Mono", Consolas, monospace';
 
+/**
+ * 行距可调范围与默认值。
+ *
+ * 下限 1（自然排布，再小就叠字），上限 2（恰好一行空白）；
+ * 默认 1.3 —— 与此前硬编码在 terminalCreate 的值一致，升级不改变观感。
+ */
+export const MIN_LINE_HEIGHT = 1;
+export const MAX_LINE_HEIGHT = 2;
+export const DEFAULT_LINE_HEIGHT = 1.3;
+
+/** 行距步进（0.05 一档）：设置页下拉按它生成选项。 */
+export const LINE_HEIGHT_STEP = 0.05;
+
+/** 光标宽度可调范围与默认值。1 是 xterm 默认，4 已经像一堵墙。 */
+export const MIN_CURSOR_WIDTH = 1;
+export const MAX_CURSOR_WIDTH = 4;
+export const DEFAULT_CURSOR_WIDTH = 1;
+
+/**
+ * 把任意输入夹到合法行距；非法值一律退回默认，并对齐到 0.05 档位。
+ *
+ * 用乘 20 取整而不是 toFixed：后者返回字符串，parseFloat 再转一次
+ * 纯属绕路，且 1.25 这类值在二进制下本就有误差，取整足以消掉。
+ */
+export function clampLineHeight(
+  value: unknown
+): number {
+  const height = Number(value);
+  if (!Number.isFinite(height))
+    return DEFAULT_LINE_HEIGHT;
+  const clamped = Math.min(
+    MAX_LINE_HEIGHT,
+    Math.max(MIN_LINE_HEIGHT, height)
+  );
+  return (
+    Math.round(clamped / LINE_HEIGHT_STEP) *
+    LINE_HEIGHT_STEP
+  );
+}
+
+/** 把任意输入夹到合法光标宽度（整数 px）；非法值一律退回默认。 */
+export function clampCursorWidth(
+  value: unknown
+): number {
+  const width = Number(value);
+  if (!Number.isFinite(width))
+    return DEFAULT_CURSOR_WIDTH;
+  return Math.min(
+    MAX_CURSOR_WIDTH,
+    Math.max(MIN_CURSOR_WIDTH, Math.round(width))
+  );
+}
+
 /** 字号可调范围。太小看不清，太大一屏放不下几行。 */
 export const MIN_FONT_SIZE = 10;
 export const MAX_FONT_SIZE = 24;
@@ -149,6 +230,9 @@ export const defaultSettings: AppSettings = {
   commandCompletion: true,
   cursorStyle: "block",
   cursorBlink: true,
+  lineHeight: DEFAULT_LINE_HEIGHT,
+  cursorWidth: DEFAULT_CURSOR_WIDTH,
+  cursorInactiveStyle: "outline",
   webglRender: true,
   scrollback: DEFAULT_SCROLLBACK,
   dataDir: "",
@@ -237,6 +321,22 @@ export function loadSettings(): AppSettings {
           ? parsed.cursorStyle
           : "block",
       cursorBlink: parsed.cursorBlink !== false,
+      // 行距 / 光标宽度：旧数据没这两个字段时 clamp 会退回默认值
+      lineHeight: clampLineHeight(
+        parsed.lineHeight
+      ),
+      cursorWidth: clampCursorWidth(
+        parsed.cursorWidth
+      ),
+      // 失焦光标：非法值退回 outline（xterm 默认）
+      cursorInactiveStyle:
+        parsed.cursorInactiveStyle === "block" ||
+        parsed.cursorInactiveStyle ===
+          "underline" ||
+        parsed.cursorInactiveStyle === "bar" ||
+        parsed.cursorInactiveStyle === "none"
+          ? parsed.cursorInactiveStyle
+          : "outline",
       // 默认开：只有显式存过 false 才关
       webglRender: parsed.webglRender !== false,
       // 回滚行数：旧数据没这个字段（undefined）时 clampScrollback

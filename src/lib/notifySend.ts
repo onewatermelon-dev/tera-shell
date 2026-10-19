@@ -211,51 +211,6 @@ export async function notify(
   }
 }
 
-/** 测试通知的诊断结果，供设置页给出可执行的修法。 */
-export type TestOutcome =
-  | { ok: true }
-  | {
-      ok: false;
-      reason: "unsupported" | "denied";
-    };
-
-/**
- * 发一条测试通知：**绕过所有判定**（开关、窗口焦点、耗时阈值都不看）。
- *
- * 存在的唯一理由是排查：正常路径上有四道闸门（总开关、分类开关、
- * 焦点、阈值），任何一道没过都表现为「没弹」。测试通知把它们全跳过，
- * 于是——
- * - 测试能弹 → 通路正常，问题在触发条件（去查计时器与阈值）
- * - 测试不弹 → 与触发逻辑无关，是通知支持或权限的问题
- *
- * 没有它，这两种情况的外部表现完全一样，只能靠猜。
- *
- * @returns 是否成功发出；失败时带上**具体**原因，设置页据此给出修法
- */
-export async function sendTestNotification(): Promise<TestOutcome> {
-  const permission = await ensurePermission();
-  if (!permission.ok)
-    return {
-      ok: false,
-      reason: permission.reason
-    };
-  try {
-    sendNotification({
-      title: "Tera Shell",
-      body: "通知功能正常，长命令与 AI 回答结束时会在此提醒。",
-      sound: NOTIFY_SOUND
-    });
-    console.info("[notify] 测试通知已发出");
-    return { ok: true };
-  } catch (reason) {
-    console.warn(
-      "[notify] 测试通知发送失败",
-      reason
-    );
-    return { ok: false, reason: "unsupported" };
-  }
-}
-
 /** 长命令跑完的通知内容。 */
 export function commandNotification(
   command: string,

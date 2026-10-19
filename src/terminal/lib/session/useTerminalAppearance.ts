@@ -67,6 +67,13 @@ export function useTerminalAppearance(options: {
         appearance.cursorStyle;
       session.terminal.options.cursorBlink =
         appearance.cursorBlink;
+      session.terminal.options.cursorWidth =
+        appearance.cursorWidth;
+      session.terminal.options.cursorInactiveStyle =
+        appearance.cursorInactiveStyle;
+      // 行距改变行高 → 行列数必须重算，走与字号同一条 resize 路径
+      session.terminal.options.lineHeight =
+        appearance.lineHeight;
       /* eslint-enable react-hooks/immutability */
       // 命令补全开关实时同步：关掉立即收起已显示的 ghost text
       session.completion.setEnabled(
@@ -87,6 +94,11 @@ export function useTerminalAppearance(options: {
     appearance.commandCompletion,
     appearance.cursorStyle,
     appearance.cursorBlink,
+    // 行距进这个 effect 是必须的（行列数重算）；光标宽度与失焦形态
+    // 不影响布局，跟着一起走只是多一次无变化的 resize，代价可忽略
+    appearance.lineHeight,
+    appearance.cursorWidth,
+    appearance.cursorInactiveStyle,
     appearance.webglRender,
     pausePtySync,
     resize,

@@ -1,0 +1,135 @@
+import {
+  beforeEach,
+  describe,
+  expect,
+  it
+} from "vitest";
+import {
+  clampCursorWidth,
+  clampLineHeight,
+  DEFAULT_CURSOR_WIDTH,
+  DEFAULT_LINE_HEIGHT,
+  loadSettings,
+  MAX_CURSOR_WIDTH,
+  MAX_LINE_HEIGHT,
+  MIN_CURSOR_WIDTH,
+  MIN_LINE_HEIGHT
+} from "@/settings/lib/settings";
+import {
+  DataName,
+  writeData
+} from "@/settings/lib/storage";
+
+describe("clampLineHeight", () => {
+  it("非法值退回默认行距", () => {
+    expect(clampLineHeight(undefined)).toBe(
+      DEFAULT_LINE_HEIGHT
+    );
+    expect(clampLineHeight("abc")).toBe(
+      DEFAULT_LINE_HEIGHT
+    );
+    expect(clampLineHeight(NaN)).toBe(
+      DEFAULT_LINE_HEIGHT
+    );
+  });
+
+  it("越界值夹到边界", () => {
+    expect(clampLineHeight(0.5)).toBe(
+      MIN_LINE_HEIGHT
+    );
+    expect(clampLineHeight(3)).toBe(
+      MAX_LINE_HEIGHT
+    );
+  });
+
+  it("对齐到 0.05 档位且不带浮点误差", () => {
+    // 1.234 应落到 1.25，且 1.25 要与 UI 下拉的 value 严格相等
+    expect(clampLineHeight(1.234)).toBe(1.25);
+    expect(clampLineHeight(1.3)).toBe(1.3);
+    expect(clampLineHeight("1.55")).toBe(1.55);
+  });
+});
+
+describe("clampCursorWidth", () => {
+  it("非法值退回默认宽度", () => {
+    expect(clampCursorWidth(undefined)).toBe(
+      DEFAULT_CURSOR_WIDTH
+    );
+    expect(clampCursorWidth("x")).toBe(
+      DEFAULT_CURSOR_WIDTH
+    );
+  });
+
+  it("越界值夹到边界并取整", () => {
+    expect(clampCursorWidth(0)).toBe(
+      MIN_CURSOR_WIDTH
+    );
+    expect(clampCursorWidth(9)).toBe(
+      MAX_CURSOR_WIDTH
+    );
+    expect(clampCursorWidth(2.6)).toBe(3);
+  });
+});
+
+describe("loadSettings 的新字段", () => {
+  beforeEach(() => {
+    // writeData 内存先行：清不掉旧缓存就直接覆盖成空，
+    // 让 loadSettings 走「没有设置文件」的默认分支再逐个验证
+    writeData(DataName.settings, "");
+  });
+
+  it("旧数据缺字段时用默认值（1.3 / 1 / outline）", () => {
+    writeData(
+      DataName.settings,
+      JSON.stringify({ fontSize: 16 })
+    );
+    const settings = loadSettings();
+    expect(settings.lineHeight).toBe(
+      DEFAULT_LINE_HEIGHT
+    );
+    expect(settings.cursorWidth).toBe(
+      DEFAULT_CURSOR_WIDTH
+    );
+    expect(settings.cursorInactiveStyle).toBe(
+      "outline"
+    );
+  });
+
+  it("合法值原样保留", () => {
+    writeData(
+      DataName.settings,
+      JSON.stringify({
+        lineHeight: 1.8,
+        cursorWidth: 2,
+        cursorInactiveStyle: "none"
+      })
+    );
+    const settings = loadSettings();
+    expect(settings.lineHeight).toBe(1.8);
+    expect(settings.cursorWidth).toBe(2);
+    expect(settings.cursorInactiveStyle).toBe(
+      "none"
+    );
+  });
+
+  it("非法值退回默认", () => {
+    writeData(
+      DataName.settings,
+      JSON.stringify({
+        lineHeight: "abc",
+        cursorWidth: -1,
+        cursorInactiveStyle: "diagonal"
+      })
+    );
+    const settings = loadSettings();
+    expect(settings.lineHeight).toBe(
+      DEFAULT_LINE_HEIGHT
+    );
+    expect(settings.cursorWidth).toBe(
+      DEFAULT_CURSOR_WIDTH
+    );
+    expect(settings.cursorInactiveStyle).toBe(
+      "outline"
+    );
+  });
+});

@@ -310,7 +310,7 @@ describe("通知提示音", () => {
     expect(sound).not.toContain("\\");
   });
 
-  it("两处发送都必须带 sound（漏掉就是显式静音）", async () => {
+  it("发送都必须带 sound（漏掉就是显式静音）", async () => {
     const source =
       await import("@/lib/notifySend.ts?raw").then(
         m => m.default as string
@@ -318,10 +318,8 @@ describe("通知提示音", () => {
     const sendCalls = source.match(
       /sendNotification\(\{/g
     );
-    // 主路径 + 测试通知
-    expect(
-      sendCalls?.length
-    ).toBeGreaterThanOrEqual(2);
+    // 仅剩主路径一处发送（测试通知按钮已于 2026-10-19 移除）
+    expect(sendCalls?.length).toBe(1);
     const withSound =
       source.match(/sound: NOTIFY_SOUND/g) ?? [];
     expect(withSound.length).toBe(

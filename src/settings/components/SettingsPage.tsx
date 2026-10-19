@@ -36,12 +36,19 @@ import {
   type Translator
 } from "@/settings/lib/i18n";
 import {
+  clampLineHeight,
   firstFontOf,
+  LINE_HEIGHT_STEP,
+  MAX_CURSOR_WIDTH,
   MAX_FONT_SIZE,
+  MAX_LINE_HEIGHT,
+  MIN_CURSOR_WIDTH,
   MIN_FONT_SIZE,
+  MIN_LINE_HEIGHT,
   SCROLLBACK_PRESETS,
   TERMINAL_FONT_FALLBACK,
   type AppSettings,
+  type CursorInactiveStyle,
   type CursorStyle,
   type LanguageMode,
   type ThemeMode
@@ -141,6 +148,76 @@ const scrollbackOptions = (
   }));
 };
 
+/** 失焦光标下拉：outline 是 xterm 默认，none 直接隐藏。 */
+const cursorInactiveOptions = (
+  t: Translator
+): SelectOption<CursorInactiveStyle>[] => [
+  {
+    value: "outline",
+    label: t("settings.cursorInactive.outline")
+  },
+  {
+    value: "block",
+    label: t("settings.cursor.block")
+  },
+  {
+    value: "underline",
+    label: t("settings.cursor.underline")
+  },
+  {
+    value: "bar",
+    label: t("settings.cursor.bar")
+  },
+  {
+    value: "none",
+    label: t("settings.cursorInactive.none")
+  }
+];
+
+/** 光标宽度下拉：整数像素档位。 */
+const cursorWidthOptions =
+  (): SelectOption<string>[] => {
+    const options: SelectOption<string>[] = [];
+    for (
+      let width = MIN_CURSOR_WIDTH;
+      width <= MAX_CURSOR_WIDTH;
+      width++
+    ) {
+      options.push({
+        value: String(width),
+        label: `${width} px`
+      });
+    }
+    return options;
+  };
+
+/**
+ * 行距下拉：1.00–2.00 每 0.05 一档，外加「当前值」。
+ *
+ * 补当前值与 scrollbackOptions 同理：手改过设置文件留下非档位值时，
+ * 不补的话下拉会回退显示成第一项，与实际不符。
+ */
+const lineHeightOptions = (
+  current: number
+): SelectOption<string>[] => {
+  const values: number[] = [];
+  for (
+    let height = MIN_LINE_HEIGHT;
+    height <= MAX_LINE_HEIGHT + 1e-9;
+    height += LINE_HEIGHT_STEP
+  ) {
+    values.push(Number(height.toFixed(2)));
+  }
+  if (!values.includes(current)) {
+    values.push(current);
+    values.sort((a, b) => a - b);
+  }
+  return values.map(height => ({
+    value: String(height),
+    label: height.toFixed(2)
+  }));
+};
+
 type SettingsPageProps = {
   settings: AppSettings;
   onChange: (patch: Partial<AppSettings>) => void;
@@ -171,6 +248,18 @@ export default function SettingsPage({
   const cursorList = useMemo(
     () => cursorStyleOptions(t),
     [t]
+  );
+  const cursorInactiveList = useMemo(
+    () => cursorInactiveOptions(t),
+    [t]
+  );
+  const cursorWidthList = useMemo(
+    () => cursorWidthOptions(),
+    []
+  );
+  const lineHeightList = useMemo(
+    () => lineHeightOptions(settings.lineHeight),
+    [settings.lineHeight]
   );
   const scrollbackList = useMemo(
     () =>
@@ -434,7 +523,6 @@ export default function SettingsPage({
                 />
               }
             />
-
             <SettingsRow
               title={t("settings.fontSize.title")}
               description={t(
@@ -461,7 +549,6 @@ export default function SettingsPage({
                 />
               }
             />
-
             <SettingsRow
               title={t(
                 "settings.scrollback.title"
@@ -486,7 +573,6 @@ export default function SettingsPage({
                 />
               }
             />
-
             <SettingsRow
               title={t("settings.cursor.title")}
               description={t(
@@ -504,8 +590,82 @@ export default function SettingsPage({
                   }
                 />
               }
+            />{" "}
+            <SettingsRow
+              title={t(
+                "settings.cursorWidth.title"
+              )}
+              description={t(
+                "settings.cursorWidth.desc"
+              )}
+              control={
+                <SettingsSelect
+                  value={String(
+                    settings.cursorWidth
+                  )}
+                  options={cursorWidthList}
+                  ariaLabel={t(
+                    "settings.cursorWidth.title"
+                  )}
+                  onChange={width =>
+                    onChange({
+                      cursorWidth: Number(width)
+                    })
+                  }
+                />
+              }
             />
-
+            <SettingsRow
+              title={t(
+                "settings.cursorInactive.title"
+              )}
+              description={t(
+                "settings.cursorInactive.desc"
+              )}
+              control={
+                <SettingsSelect
+                  value={
+                    settings.cursorInactiveStyle
+                  }
+                  options={cursorInactiveList}
+                  ariaLabel={t(
+                    "settings.cursorInactive.title"
+                  )}
+                  onChange={cursorInactiveStyle =>
+                    onChange({
+                      cursorInactiveStyle
+                    })
+                  }
+                />
+              }
+            />
+            <SettingsRow
+              title={t(
+                "settings.lineHeight.title"
+              )}
+              description={t(
+                "settings.lineHeight.desc"
+              )}
+              control={
+                <SettingsSelect
+                  value={String(
+                    clampLineHeight(
+                      settings.lineHeight
+                    )
+                  )}
+                  options={lineHeightList}
+                  ariaLabel={t(
+                    "settings.lineHeight.title"
+                  )}
+                  onChange={height =>
+                    onChange({
+                      lineHeight:
+                        clampLineHeight(height)
+                    })
+                  }
+                />
+              }
+            />
             <SettingsRow
               title={t(
                 "settings.cursorBlink.title"
@@ -527,7 +687,6 @@ export default function SettingsPage({
                 />
               }
             />
-
             <SettingsRow
               title={t("settings.webgl.title")}
               description={t(
@@ -547,7 +706,6 @@ export default function SettingsPage({
                 />
               }
             />
-
             <SettingsRow
               title={t("settings.welcome.title")}
               description={t(
@@ -567,7 +725,6 @@ export default function SettingsPage({
                 />
               }
             />
-
             <SettingsRow
               title={t(
                 "settings.completion.title"

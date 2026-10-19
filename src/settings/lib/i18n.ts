@@ -524,15 +524,6 @@ const zhCN = {
   "notify.transfer": "传输结束",
   "notify.transferHint":
     "上传或下载完成、失败时提醒。",
-  "notify.test": "发一条测试通知",
-  "notify.testSent":
-    "已发出，若没看到请检查系统通知设置。",
-  "notify.testUnsupported":
-    "当前 WebView2 未开启宿主通知，这个应用环境弹不出系统通知。",
-  "notify.testDenied":
-    "通知权限被拒绝：可在 Windows 设置 → 系统 → 通知里为本应用重新允许。",
-  "notify.testHint":
-    "测试会跳过所有开关与「窗口未聚焦」的判定，用来区分「通知发不出去」和「触发条件没满足」。",
   "about.repo": "GitHub 仓库",
   "about.licenses.title": "开源许可",
   "about.licenses.search": "搜索组件或许可证",
@@ -668,6 +659,17 @@ const zhCN = {
   "settings.cursorBlink.title": "光标闪烁",
   "settings.cursorBlink.desc":
     "终端光标是否闪烁。",
+  "settings.lineHeight.title": "行距",
+  "settings.lineHeight.desc":
+    "字符行之间的间距倍数，改后立即重排行数。",
+  "settings.cursorWidth.title": "光标宽度",
+  "settings.cursorWidth.desc":
+    "竖线 / 下划线光标的粗细（像素），方块光标不受影响。",
+  "settings.cursorInactive.title": "失焦光标",
+  "settings.cursorInactive.desc":
+    "焦点切到其他窗格时的光标形态，便于分辨敲下的命令会进哪个终端。",
+  "settings.cursorInactive.outline": "变淡描边",
+  "settings.cursorInactive.none": "隐藏",
   "settings.webgl.title": "硬件加速渲染",
   "settings.webgl.desc":
     "用 GPU 绘制终端文字（WebGL）。大输出时滚动与输入更顺滑；关闭后退回普通渲染，若遇到缺色、字形缺失等显示异常可先关掉它。",
@@ -1196,15 +1198,6 @@ const enUS: Record<MessageKey, string> = {
   "notify.transfer": "Transfer finished",
   "notify.transferHint":
     "Notify when an upload or download completes or fails.",
-  "notify.test": "Send a test notification",
-  "notify.testSent":
-    "Sent — if you don't see it, check your system notification settings.",
-  "notify.testUnsupported":
-    "This WebView2 has host notifications disabled, so no system notification can be shown here.",
-  "notify.testDenied":
-    "Notification permission denied — re-allow it under Windows Settings → System → Notifications.",
-  "notify.testHint":
-    "The test skips every switch and the 'window not focused' rule, which separates 'notifications cannot be sent' from 'trigger conditions not met'.",
   "about.repo": "GitHub repository",
   "about.licenses.title": "Open source licenses",
   "about.licenses.search":
@@ -1346,6 +1339,19 @@ const enUS: Record<MessageKey, string> = {
   "settings.cursorBlink.title": "Cursor blink",
   "settings.cursorBlink.desc":
     "Whether the terminal cursor blinks.",
+  "settings.lineHeight.title": "Line height",
+  "settings.lineHeight.desc":
+    "Spacing between character rows, as a multiplier. Rows are recalculated immediately.",
+  "settings.cursorWidth.title": "Cursor width",
+  "settings.cursorWidth.desc":
+    "Thickness of the bar / underline cursor in pixels. Block cursors are unaffected.",
+  "settings.cursorInactive.title":
+    "Inactive cursor",
+  "settings.cursorInactive.desc":
+    "Cursor shape when focus moves to another pane, so you can tell where keystrokes go.",
+  "settings.cursorInactive.outline":
+    "Dim outline",
+  "settings.cursorInactive.none": "Hidden",
   "settings.webgl.title": "Hardware acceleration",
   "settings.webgl.desc":
     "Draw terminal text with the GPU (WebGL). Keeps scrolling and typing smooth on heavy output. Turn it off to fall back to normal rendering — useful if you hit missing colors or glyphs.",
