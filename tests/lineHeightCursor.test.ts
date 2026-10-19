@@ -114,6 +114,10 @@ describe("loadSettings 的新字段", () => {
     // 连接层：私钥留空（交给 ssh 默认）、配置读取默认开
     expect(settings.sshKeyPath).toBe("");
     expect(settings.useSshConfig).toBe(true);
+    // 旧数据无密钥策略字段：退回 accept-new，与此前硬编码行为一致
+    expect(settings.hostKeyPolicy).toBe(
+      "accept-new"
+    );
   });
 
   it("合法值原样保留", () => {

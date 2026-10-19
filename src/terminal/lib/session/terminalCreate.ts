@@ -46,6 +46,7 @@ export type TerminalAppearance = Pick<
   | "scrollback"
   | "sshKeyPath"
   | "useSshConfig"
+  | "hostKeyPolicy"
 >;
 
 /** createTerminalInstance 的参数：createTerminal 原先闭包捕获的全部依赖。 */

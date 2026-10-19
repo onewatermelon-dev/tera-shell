@@ -19,6 +19,7 @@ fn ssh_config(key_path: Option<&str>, use_ssh_config: Option<bool>) -> Config {
 		cols: None,
 		key_path: key_path.map(Into::into),
 		use_ssh_config,
+		host_key_policy: None,
 	}
 }
 
@@ -65,6 +66,55 @@ fn 缺省与开启时不拼空设备参数() {
 		assert!(
 			!command.get_argv().iter().any(|arg| arg == "-F"),
 			"use_ssh_config={use_ssh_config:?} 时不应出现 -F"
+		);
+	}
+}
+
+/// 造一个带密钥策略的 ssh Config。
+fn ssh_config_with_policy(policy: Option<&str>) -> Config {
+	let mut config = ssh_config(None, None);
+	config.host_key_policy = policy.map(Into::into);
+	config
+}
+
+/// 取 argv 里所有 `-o` 后面跟着的选项值。
+fn options(argv: &[std::ffi::OsString]) -> Vec<String> {
+	argv.windows(2)
+		.filter(|pair| pair[0] == "-o")
+		.filter_map(|pair| pair[1].to_str().map(Into::into))
+		.collect()
+}
+
+#[test]
+fn 密钥策略三档拼进严格检查选项() {
+	for (policy, expected) in [
+		(Some("ask"), "ask"),
+		(Some("accept-new"), "accept-new"),
+		(Some("strict"), "strict"),
+	] {
+		let command = command(&ssh_config_with_policy(policy)).unwrap();
+		assert!(
+			options(command.get_argv())
+				.contains(&format!("StrictHostKeyChecking={expected}")),
+			"policy={policy:?} 时应拼对应档位"
+		);
+	}
+}
+
+#[test]
+fn 密钥策略缺省与非法值退回默认档() {
+	// 缺省 = 旧前端，必须与此前硬编码的 accept-new 行为一致；
+	// 非法值（手改设置文件）也不能拼出让 ssh 拒启的选项
+	for policy in [None, Some(""), Some("banana")] {
+		let command = command(&ssh_config_with_policy(policy)).unwrap();
+		let joined: Vec<&str> = command
+			.get_argv()
+			.iter()
+			.filter_map(|arg| arg.to_str())
+			.collect();
+		assert!(
+			joined.contains(&"StrictHostKeyChecking=accept-new"),
+			"policy={policy:?} 应退回 accept-new"
 		);
 	}
 }

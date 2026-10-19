@@ -23,6 +23,15 @@ export type ThemeMode =
 export type LanguageMode =
   "system" | "zh-CN" | "en-US";
 
+/**
+ * SSH 主机密钥策略（对应 ssh 的 StrictHostKeyChecking）：
+ * - accept-new：新主机自动钉扎（TOFU），已知主机指纹**变更时拒绝连接**
+ * - ask：新主机在终端里交互询问（ssh 原生 yes/no 提示）
+ * - strict：只连 known_hosts 里指纹一致的主机，新主机直接拒绝
+ */
+export type HostKeyPolicy =
+  "accept-new" | "ask" | "strict";
+
 /** 底部状态栏的形态：macros=快捷宏，info=系统信息栏。 */
 export type StatusMode = "macros" | "info";
 
@@ -146,6 +155,13 @@ export type AppSettings = {
    * ssh 默认行为就是读它，这个开关只能「关」不能指定别的文件。
    */
   useSshConfig: boolean;
+  /**
+   * 主机密钥策略（设置-常规里选），见 HostKeyPolicy。
+   *
+   * 指纹变更被拒时 ssh 也以 255 退出，与网络断开无法从退出码区分 ——
+   * 前端靠输出里的标记文本识别，不白白重连（见 reconnect.ts）。
+   */
+  hostKeyPolicy: HostKeyPolicy;
   /** 系统通知总开关；关掉时下面三项都不生效 */
   notifyEnabled: boolean;
   /** 长命令跑完时通知 */
@@ -198,6 +214,15 @@ export function clampLineHeight(
     Math.round(clamped / LINE_HEIGHT_STEP) *
     LINE_HEIGHT_STEP
   );
+}
+
+/** 把任意输入夹到合法主机密钥策略；非法值一律退回 accept-new。 */
+export function clampHostKeyPolicy(
+  value: string
+): HostKeyPolicy {
+  return value === "ask" || value === "strict"
+    ? value
+    : "accept-new";
 }
 
 /** 把任意输入夹到合法光标宽度（整数 px）；非法值一律退回默认。 */
@@ -265,6 +290,8 @@ export const defaultSettings: AppSettings = {
   sshKeyPath: "",
   // 默认读：与 ssh 自身默认行为一致，旧数据也无此字段
   useSshConfig: true,
+  // 默认 accept-new：与此前硬编码行为一致，升级不改变连接体验
+  hostKeyPolicy: "accept-new",
   // 通知默认全关：系统通知会弹到桌面上去，属于「用户明确要求被打扰」
   // 的行为，不该由安装默认开启
   notifyEnabled: false,
@@ -393,6 +420,10 @@ export function loadSettings(): AppSettings {
           : "",
       // 默认读（旧数据缺字段 = true）
       useSshConfig: parsed.useSshConfig !== false,
+      // 密钥策略：非法值（手改设置文件）退回 accept-new
+      hostKeyPolicy: clampHostKeyPolicy(
+        String(parsed.hostKeyPolicy ?? "")
+      ),
       // 通知：总开关默认关（弹到桌面上的行为不该由安装默认开启），
       // 三个分类开关默认开 —— 用户打开总开关时多半是三样都想要
       notifyEnabled:

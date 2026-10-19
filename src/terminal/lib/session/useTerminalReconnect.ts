@@ -38,6 +38,8 @@ type ReconnectOptions = {
   sshKeyPath: string;
   /** 是否读 ~/.ssh/config（关掉时后端传 -F） */
   useSshConfig: boolean;
+  /** 主机密钥策略（StrictHostKeyChecking 三档） */
+  hostKeyPolicy: string;
   onError: (reason: unknown) => void;
 };
 
@@ -60,6 +62,7 @@ export function useTerminalReconnect({
   cursorBlink,
   sshKeyPath,
   useSshConfig,
+  hostKeyPolicy,
   onError
 }: ReconnectOptions) {
   const t = useT();
@@ -107,9 +110,10 @@ export function useTerminalReconnect({
             port: session.port,
             username: session.username,
             password: session.password,
-            // 与首连同一套连接层设置：认证方式/配置文件读取不因重连而变
+            // 与首连同一套连接层设置：认证方式/配置读取/密钥策略不因重连而变
             sshKeyPath,
             useSshConfig,
+            hostKeyPolicy,
             rows: session.terminal.rows,
             cols: session.terminal.cols
           }
@@ -152,6 +156,7 @@ export function useTerminalReconnect({
       setDisconnected,
       sshKeyPath,
       useSshConfig,
+      hostKeyPolicy,
       t
     ]
   );

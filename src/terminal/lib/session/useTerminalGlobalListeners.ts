@@ -35,6 +35,28 @@ import type { useTerminalSearch } from "@/terminal/lib/search/useTerminalSearch"
 import { disableWebgl } from "@/terminal/lib/webglRenderer";
 import type { OpenSession } from "./terminalTypes";
 import { matchTerminalShortcut } from "./terminalInput";
+import { isHostKeyError } from "./reconnect";
+
+/**
+ * 每个会话保留的输出尾部长度（字符）：够盖住 ssh 的密钥报错段落即可
+ * （那几行总共不到 1KB），又不至于为长输出会话占内存。
+ */
+const OUTPUT_TAIL_LIMIT = 2048;
+
+/** 往尾部缓冲追加输出，超长时砍掉头部。 */
+function appendTail(
+  tails: Map<string, string>,
+  id: string,
+  data: string
+): void {
+  const next = (tails.get(id) ?? "") + data;
+  tails.set(
+    id,
+    next.length > OUTPUT_TAIL_LIMIT
+      ? next.slice(-OUTPUT_TAIL_LIMIT)
+      : next
+  );
+}
 
 export function useTerminalGlobalListeners(options: {
   openedRef: RefObject<OpenSession[]>;
@@ -84,6 +106,10 @@ export function useTerminalGlobalListeners(options: {
   } = options;
 
   const unlisteners = useRef<UnlistenFn[]>([]);
+  /** 各会话的输出尾部（指纹变更检测用，见 reconnect.isHostKeyError） */
+  const outputTailsRef = useRef(
+    new Map<string, string>()
+  );
   const documentShortcutHandler = useRef<
     ((event: KeyboardEvent) => void) | undefined
   >(undefined);
@@ -123,6 +149,12 @@ export function useTerminalGlobalListeners(options: {
                 ({ id }) => id === payload.id
               );
             if (!session) return;
+            // 指纹变更检测的样本：只存尾部，退出时查一次
+            appendTail(
+              outputTailsRef.current,
+              payload.id,
+              payload.data
+            );
             // 先让补全识别备用屏切换（vim/top 等全屏应用期间不弹建议）
             session.completion.observeOutput(
               payload.data
@@ -151,6 +183,22 @@ export function useTerminalGlobalListeners(options: {
             session.terminal.write(
               `\r\n\x1b[38;5;244m${tRef.current("terminal.exited")}\x1b[0m\r\n`
             );
+          }
+          // 密钥校验失败（指纹变更 / strict 下的未知主机）：ssh 也是 255
+          // 退出，重连五次结果必然相同 —— 不重连，直接把报错点破，
+          // 让用户知道要去核对指纹而不是等重连
+          const tail =
+            outputTailsRef.current.get(id) ?? "";
+          outputTailsRef.current.delete(id);
+          if (isHostKeyError(tail)) {
+            if (session) {
+              session.terminal.write(
+                `\r\n\x1b[38;5;203m[${tRef.current(
+                  "terminal.hostKeyError"
+                )}]\x1b[0m\r\n`
+              );
+            }
+            return;
           }
           // 只有 ssh 的连接错误（退出码 255）才自动重连：本地会话退出、
           // ssh 正常 exit 都是用户意图，就此收工

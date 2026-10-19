@@ -60,6 +60,8 @@ export function useTerminalSessions(options: {
   sshKeyPath: string;
   /** 是否读 ~/.ssh/config（关掉时后端传 -F） */
   useSshConfig: boolean;
+  /** 主机密钥策略（StrictHostKeyChecking 三档） */
+  hostKeyPolicy: string;
 }) {
   const {
     createTerminal,
@@ -76,7 +78,8 @@ export function useTerminalSessions(options: {
     onError,
     onSavePassword,
     sshKeyPath,
-    useSshConfig
+    useSshConfig,
+    hostKeyPolicy
   } = options;
 
   const [passwordRequest, setPasswordRequest] =
@@ -148,9 +151,10 @@ export function useTerminalSessions(options: {
         await invoke("terminal_start", {
           config: {
             ...session,
-            // 连接层全局设置：默认私钥与 ~/.ssh/config 开关（见 settings.ts）
+            // 连接层全局设置：私钥、config 开关与密钥策略（见 settings.ts）
             sshKeyPath,
             useSshConfig,
+            hostKeyPolicy,
             rows: current.terminal.rows,
             cols: current.terminal.cols
           }
@@ -190,7 +194,8 @@ export function useTerminalSessions(options: {
       setDisconnected,
       disconnectedRef,
       sshKeyPath,
-      useSshConfig
+      useSshConfig,
+      hostKeyPolicy
     ]
   );
 

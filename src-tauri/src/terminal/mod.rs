@@ -253,6 +253,9 @@ pub struct Config {
 	/// 是否读 ~/.ssh/config（设置页配置）。false 时传 -F 让 ssh 跳过；
 	/// 缺省（旧前端/本地会话）按 true 处理，与 ssh 自身默认一致。
 	use_ssh_config: Option<bool>,
+	/// 主机密钥策略（设置页配置）：ask / accept-new / strict。
+	/// 缺省按 accept-new（与此前硬编码行为一致）。
+	host_key_policy: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -534,7 +537,16 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 	command.args([
 		"-tt",
 		"-o",
-		"StrictHostKeyChecking=accept-new",
+		&format!(
+			"StrictHostKeyChecking={}",
+			// 非法值一律退回 accept-new：设置文件可能被手改，
+			// 拼出非法选项会让 ssh 整个拒启，比静默退回默认严重得多
+			match config.host_key_policy.as_deref() {
+				Some("ask") => "ask",
+				Some("strict") => "strict",
+				_ => "accept-new",
+			}
+		),
 		// 心跳：拔网线、VPN 掉线这类「静默断开」下，ssh 会一直等 TCP 超时，
 		// 几分钟都不退出，前端也就等不到 terminal-exit、无从触发自动重连。
 		// 每 15 秒探活、连续 3 次无响应即判定断开 ⇒ 最迟约 45 秒退出（255）。

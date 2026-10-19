@@ -57,3 +57,31 @@ export function shouldAutoReconnect(
     kind === "ssh" && code === SSH_ERROR_EXIT_CODE
   );
 }
+
+/**
+ * ssh 在主机指纹与 known_hosts 不一致时的报错特征（两种措辞都收）：
+ * - 「REMOTE HOST IDENTIFICATION HAS CHANGED!」= 指纹变更（潜在中间人攻击）
+ * - 「Host key verification failed」= strict 模式下新主机不在 known_hosts
+ *
+ * 这两种情况 ssh 同样以 255 退出，与网络断开无从区分 —— 但重连
+ * 五次的结果必然是同样报错，纯刷屏。靠这段特征文本把它们摘出来。
+ */
+const HOST_KEY_ERROR_MARKERS = [
+  "REMOTE HOST IDENTIFICATION HAS CHANGED",
+  "Host key verification failed"
+] as const;
+
+/**
+ * 这段 ssh 输出是否为密钥校验失败（指纹变更或 strict 下的未知主机）。
+ *
+ * 输入应为退出前的**尾部输出**（调用方负责累积）；大小写敏感以
+ * ssh 实际输出为准，不做宽松匹配 —— 误判的代价是把真正的断网
+ * 当成指纹问题不重连。
+ */
+export function isHostKeyError(
+  output: string
+): boolean {
+  return HOST_KEY_ERROR_MARKERS.some(marker =>
+    output.includes(marker)
+  );
+}

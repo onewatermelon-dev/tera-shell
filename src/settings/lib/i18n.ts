@@ -435,6 +435,8 @@ const zhCN = {
   "terminal.passwordHint":
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
+  "terminal.hostKeyError":
+    "主机密钥校验失败：指纹与 known_hosts 不一致（可能是服务器重装，也可能是中间人攻击）。请人工核对服务器指纹后再连接，本次未自动重连。",
   "terminal.fontSizeHint": "字号 {size} px",
   "terminal.reconnect.pending":
     "连接断开，{delay} 秒后自动重连（第 {attempt}/{max} 次）",
@@ -680,6 +682,12 @@ const zhCN = {
     "读取 ~/.ssh/config",
   "settings.sshConfig.desc":
     "让 ssh 读取用户配置里的 Host 别名、ProxyJump 等设置；关掉后一律直连主机地址。",
+  "settings.hostKey.title": "主机密钥策略",
+  "settings.hostKey.desc":
+    "SSH 首次连接时如何处理服务器指纹：新主机自动记住后，指纹再变化会拒绝连接并告警。",
+  "settings.hostKey.acceptNew": "新主机自动记住",
+  "settings.hostKey.ask": "每次询问",
+  "settings.hostKey.strict": "仅限已知主机",
   "settings.reduceMotion.title": "减少动效",
   "settings.reduceMotion.desc":
     "关闭标签名滚动、加载动画等持续动效；对晕动敏感或希望界面更安静时开启。",
@@ -1120,6 +1128,8 @@ const enUS: Record<MessageKey, string> = {
   "terminal.passwordHint":
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",
+  "terminal.hostKeyError":
+    "Host key verification failed: the fingerprint does not match known_hosts (server reinstall, or a possible man-in-the-middle attack). Verify the server fingerprint manually before reconnecting; auto-reconnect was skipped.",
   "terminal.fontSizeHint": "Font size {size} px",
   "terminal.reconnect.pending":
     "Connection lost, reconnecting in {delay}s (attempt {attempt}/{max})",
@@ -1375,6 +1385,12 @@ const enUS: Record<MessageKey, string> = {
     "Read ~/.ssh/config",
   "settings.sshConfig.desc":
     "Let ssh honor Host aliases, ProxyJump and other settings from your user config; turn off to always connect to the host address directly.",
+  "settings.hostKey.title": "Host key policy",
+  "settings.hostKey.desc":
+    "How SSH handles server fingerprints on first connect. Once a new host is pinned, a changed fingerprint is rejected with a warning.",
+  "settings.hostKey.acceptNew": "Trust new hosts",
+  "settings.hostKey.ask": "Ask every time",
+  "settings.hostKey.strict": "Known hosts only",
   "settings.reduceMotion.title": "Reduce motion",
   "settings.reduceMotion.desc":
     "Turn off continuous animations such as the scrolling tab name and loading indicator.",

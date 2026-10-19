@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isHostKeyError,
   MAX_RECONNECT_ATTEMPTS,
   reconnectDelay,
   RECONNECT_BASE_DELAY,
@@ -14,6 +15,33 @@ import {
  * 这两条逻辑决定了「会不会把用户敲 exit 的会话强行拉起来」和
  * 「重连会不会退化成高频重试」，是自动重连里最容易出错的部分。
  */
+describe("密钥校验失败识别", () => {
+  it("指纹变更与 strict 下的未知主机都识别", () => {
+    expect(
+      isHostKeyError(
+        "@\nWarning: Permanently added '[1.2.3.4]:22' (ED25519) to the list of known hosts.\n\n" +
+          "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n" +
+          "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n" +
+          "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
+      )
+    ).toBe(true);
+    expect(
+      isHostKeyError(
+        "root@1.2.3.100: Permission denied (publickey,password).\n"
+      )
+    ).toBe(false);
+  });
+
+  it("普通断网输出不误判（误判会把真断网当指纹问题不重连）", () => {
+    expect(
+      isHostKeyError(
+        "client_loop: send disconnect: Broken pipe\r\n"
+      )
+    ).toBe(false);
+    expect(isHostKeyError("")).toBe(false);
+  });
+});
+
 describe("自动重连策略", () => {
   it("只对 ssh 的连接错误码（255）重连", () => {
     expect(

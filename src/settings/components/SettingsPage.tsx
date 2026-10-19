@@ -37,6 +37,7 @@ import {
   type Translator
 } from "@/settings/lib/i18n";
 import {
+  clampHostKeyPolicy,
   clampLineHeight,
   firstFontOf,
   LINE_HEIGHT_STEP,
@@ -51,6 +52,7 @@ import {
   type AppSettings,
   type CursorInactiveStyle,
   type CursorStyle,
+  type HostKeyPolicy,
   type LanguageMode,
   type ThemeMode
 } from "@/settings/lib/settings";
@@ -148,6 +150,24 @@ const scrollbackOptions = (
     })
   }));
 };
+
+/** 主机密钥策略下拉：三档与 ssh 的 StrictHostKeyChecking 一一对应。 */
+const hostKeyPolicyOptions = (
+  t: Translator
+): SelectOption<HostKeyPolicy>[] => [
+  {
+    value: "accept-new",
+    label: t("settings.hostKey.acceptNew")
+  },
+  {
+    value: "ask",
+    label: t("settings.hostKey.ask")
+  },
+  {
+    value: "strict",
+    label: t("settings.hostKey.strict")
+  }
+];
 
 /** 失焦光标下拉：outline 是 xterm 默认，none 直接隐藏。 */
 const cursorInactiveOptions = (
@@ -252,6 +272,10 @@ export default function SettingsPage({
   );
   const cursorInactiveList = useMemo(
     () => cursorInactiveOptions(t),
+    [t]
+  );
+  const hostKeyPolicyList = useMemo(
+    () => hostKeyPolicyOptions(t),
     [t]
   );
   const cursorWidthList = useMemo(
@@ -536,6 +560,29 @@ export default function SettingsPage({
                   }
                   onChange={useSshConfig =>
                     onChange({ useSshConfig })
+                  }
+                />
+              }
+            />
+            <SettingsRow
+              title={t("settings.hostKey.title")}
+              description={t(
+                "settings.hostKey.desc"
+              )}
+              control={
+                <SettingsSelect
+                  value={settings.hostKeyPolicy}
+                  options={hostKeyPolicyList}
+                  ariaLabel={t(
+                    "settings.hostKey.title"
+                  )}
+                  onChange={hostKeyPolicy =>
+                    onChange({
+                      hostKeyPolicy:
+                        clampHostKeyPolicy(
+                          hostKeyPolicy
+                        )
+                    })
                   }
                 />
               }

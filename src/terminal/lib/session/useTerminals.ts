@@ -111,6 +111,7 @@ export function useTerminals(
     cursorBlink: appearance.cursorBlink,
     sshKeyPath: appearance.sshKeyPath,
     useSshConfig: appearance.useSshConfig,
+    hostKeyPolicy: appearance.hostKeyPolicy,
     onError
   });
 
@@ -323,7 +324,8 @@ export function useTerminals(
     onError,
     onSavePassword,
     sshKeyPath: appearance.sshKeyPath,
-    useSshConfig: appearance.useSshConfig
+    useSshConfig: appearance.useSshConfig,
+    hostKeyPolicy: appearance.hostKeyPolicy
   });
 
   // ---- 会话关闭与窗格拆分（树手术 + PTY 同步挂起），
