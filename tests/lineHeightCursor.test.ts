@@ -111,6 +111,9 @@ describe("loadSettings 的新字段", () => {
       "outline"
     );
     expect(settings.reduceMotion).toBe(false);
+    // 连接层：私钥留空（交给 ssh 默认）、配置读取默认开
+    expect(settings.sshKeyPath).toBe("");
+    expect(settings.useSshConfig).toBe(true);
   });
 
   it("合法值原样保留", () => {

@@ -34,6 +34,10 @@ type ReconnectOptions = {
   >;
   /** 重连成功后恢复的光标闪烁设置（断连时被强制关掉） */
   cursorBlink: boolean;
+  /** 默认私钥路径（全局设置，传给 ssh 的 -i）；重连也要带上，否则认证方式与首连不一致 */
+  sshKeyPath: string;
+  /** 是否读 ~/.ssh/config（关掉时后端传 -F） */
+  useSshConfig: boolean;
   onError: (reason: unknown) => void;
 };
 
@@ -54,6 +58,8 @@ export function useTerminalReconnect({
   disconnectedRef,
   setDisconnected,
   cursorBlink,
+  sshKeyPath,
+  useSshConfig,
   onError
 }: ReconnectOptions) {
   const t = useT();
@@ -101,6 +107,9 @@ export function useTerminalReconnect({
             port: session.port,
             username: session.username,
             password: session.password,
+            // 与首连同一套连接层设置：认证方式/配置文件读取不因重连而变
+            sshKeyPath,
+            useSshConfig,
             rows: session.terminal.rows,
             cols: session.terminal.cols
           }
@@ -141,6 +150,8 @@ export function useTerminalReconnect({
       onError,
       openedRef,
       setDisconnected,
+      sshKeyPath,
+      useSshConfig,
       t
     ]
   );

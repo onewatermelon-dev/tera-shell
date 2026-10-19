@@ -132,6 +132,20 @@ export type AppSettings = {
    * 公开仓库、也不要打进安装包。
    */
   proxyUrl: string;
+  /**
+   * 默认 SSH 私钥路径（传给 ssh 的 `-i`）。空字符串 = 不指定，
+   * 交给 ssh 自己走默认密钥与 agent。
+   *
+   * ⚠️ 是「默认」而非每会话：目前会话模型没有 keyPath 字段，全局统一。
+   */
+  sshKeyPath: string;
+  /**
+   * 是否读取 ~/.ssh/config（ProxyJump、Host 别名等都在里面）。
+   *
+   * 关掉时后端传 `-F /dev/null`（Windows 为 `-F NUL`）——
+   * ssh 默认行为就是读它，这个开关只能「关」不能指定别的文件。
+   */
+  useSshConfig: boolean;
   /** 系统通知总开关；关掉时下面三项都不生效 */
   notifyEnabled: boolean;
   /** 长命令跑完时通知 */
@@ -248,6 +262,9 @@ export const defaultSettings: AppSettings = {
   dataDir: "",
   proxyEnabled: false,
   proxyUrl: "",
+  sshKeyPath: "",
+  // 默认读：与 ssh 自身默认行为一致，旧数据也无此字段
+  useSshConfig: true,
   // 通知默认全关：系统通知会弹到桌面上去，属于「用户明确要求被打扰」
   // 的行为，不该由安装默认开启
   notifyEnabled: false,
@@ -368,6 +385,14 @@ export function loadSettings(): AppSettings {
         typeof parsed.proxyUrl === "string"
           ? parsed.proxyUrl.trim()
           : "",
+      // 私钥路径只 trim 不校验存在性：文件可能在另一台机器/尚未生成，
+      // 校验交给 ssh 自己报错（它会明确说 No such file）
+      sshKeyPath:
+        typeof parsed.sshKeyPath === "string"
+          ? parsed.sshKeyPath.trim()
+          : "",
+      // 默认读（旧数据缺字段 = true）
+      useSshConfig: parsed.useSshConfig !== false,
       // 通知：总开关默认关（弹到桌面上的行为不该由安装默认开启），
       // 三个分类开关默认开 —— 用户打开总开关时多半是三样都想要
       notifyEnabled:

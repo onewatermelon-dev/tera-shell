@@ -670,6 +670,16 @@ const zhCN = {
     "焦点切到其他窗格时的光标形态，便于分辨敲下的命令会进哪个终端。",
   "settings.cursorInactive.outline": "变淡描边",
   "settings.cursorInactive.none": "隐藏",
+  "settings.sshKey.title": "默认私钥",
+  "settings.sshKey.desc":
+    "SSH 连接默认使用的私钥文件（-i）；留空则交给 ssh 走默认密钥与 agent。仅对新建/重连的 SSH 会话生效。",
+  "settings.sshKey.pick": "选择文件",
+  "settings.sshKey.placeholder":
+    "留空使用 ssh 默认行为",
+  "settings.sshConfig.title":
+    "读取 ~/.ssh/config",
+  "settings.sshConfig.desc":
+    "让 ssh 读取用户配置里的 Host 别名、ProxyJump 等设置；关掉后一律直连主机地址。",
   "settings.reduceMotion.title": "减少动效",
   "settings.reduceMotion.desc":
     "关闭标签名滚动、加载动画等持续动效；对晕动敏感或希望界面更安静时开启。",
@@ -1355,6 +1365,16 @@ const enUS: Record<MessageKey, string> = {
   "settings.cursorInactive.outline":
     "Dim outline",
   "settings.cursorInactive.none": "Hidden",
+  "settings.sshKey.title": "Default private key",
+  "settings.sshKey.desc":
+    "Private key file (-i) used by SSH connections; leave empty to let ssh use its defaults and agent. Applies to new/reconnected SSH sessions.",
+  "settings.sshKey.pick": "Choose file",
+  "settings.sshKey.placeholder":
+    "Empty uses ssh defaults",
+  "settings.sshConfig.title":
+    "Read ~/.ssh/config",
+  "settings.sshConfig.desc":
+    "Let ssh honor Host aliases, ProxyJump and other settings from your user config; turn off to always connect to the host address directly.",
   "settings.reduceMotion.title": "Reduce motion",
   "settings.reduceMotion.desc":
     "Turn off continuous animations such as the scrolling tab name and loading indicator.",

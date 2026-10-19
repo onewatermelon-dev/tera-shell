@@ -109,6 +109,8 @@ export function useTerminals(
     disconnectedRef,
     setDisconnected,
     cursorBlink: appearance.cursorBlink,
+    sshKeyPath: appearance.sshKeyPath,
+    useSshConfig: appearance.useSshConfig,
     onError
   });
 
@@ -319,7 +321,9 @@ export function useTerminals(
     syncedSizes,
     schedulePtyResize,
     onError,
-    onSavePassword
+    onSavePassword,
+    sshKeyPath: appearance.sshKeyPath,
+    useSshConfig: appearance.useSshConfig
   });
 
   // ---- 会话关闭与窗格拆分（树手术 + PTY 同步挂起），

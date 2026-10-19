@@ -44,6 +44,8 @@ export type TerminalAppearance = Pick<
   | "lineHeight"
   | "webglRender"
   | "scrollback"
+  | "sshKeyPath"
+  | "useSshConfig"
 >;
 
 /** createTerminalInstance 的参数：createTerminal 原先闭包捕获的全部依赖。 */

@@ -22,6 +22,7 @@ import SettingsRow from "@/settings/components/SettingsRow";
 import Toggle from "@/shared/components/Toggle";
 import DataDirRow from "@/settings/components/DataDirRow";
 import ProxyRow from "@/settings/components/ProxyRow";
+import SshKeyRow from "@/settings/components/SshKeyRow";
 import NotifyRow from "@/settings/components/NotifyRow";
 import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
 import { resolveColorScheme } from "@/terminal/lib/pane/colorSchemes";
@@ -513,13 +514,39 @@ export default function SettingsPage({
                 />
               }
             />
-            <DataDirRow />
-            {/* 代理与通知都排在数据路径之后 */}
+            {/* 代理紧随减少动效（2026-10-19 用户要求） */}
             <ProxyRow
               settings={settings}
               onChange={onChange}
             />
+            <SettingsRow
+              title={t(
+                "settings.sshConfig.title"
+              )}
+              description={t(
+                "settings.sshConfig.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.sshConfig.title"
+                  )}
+                  isSelected={
+                    settings.useSshConfig
+                  }
+                  onChange={useSshConfig =>
+                    onChange({ useSshConfig })
+                  }
+                />
+              }
+            />
             <NotifyRow
+              settings={settings}
+              onChange={onChange}
+            />
+            {/* 数据路径与私钥排在最末：低频改动项，不占首屏 */}
+            <DataDirRow />
+            <SshKeyRow
               settings={settings}
               onChange={onChange}
             />

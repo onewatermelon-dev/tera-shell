@@ -56,6 +56,10 @@ export function useTerminalSessions(options: {
         encrypted: string
       ) => void)
     | undefined;
+  /** 默认私钥路径（全局设置，传给 ssh 的 -i）；空串不传 */
+  sshKeyPath: string;
+  /** 是否读 ~/.ssh/config（关掉时后端传 -F） */
+  useSshConfig: boolean;
 }) {
   const {
     createTerminal,
@@ -70,7 +74,9 @@ export function useTerminalSessions(options: {
     syncedSizes,
     schedulePtyResize,
     onError,
-    onSavePassword
+    onSavePassword,
+    sshKeyPath,
+    useSshConfig
   } = options;
 
   const [passwordRequest, setPasswordRequest] =
@@ -142,6 +148,9 @@ export function useTerminalSessions(options: {
         await invoke("terminal_start", {
           config: {
             ...session,
+            // 连接层全局设置：默认私钥与 ~/.ssh/config 开关（见 settings.ts）
+            sshKeyPath,
+            useSshConfig,
             rows: current.terminal.rows,
             cols: current.terminal.cols
           }
@@ -179,7 +188,9 @@ export function useTerminalSessions(options: {
       setOpened,
       openedRef,
       setDisconnected,
-      disconnectedRef
+      disconnectedRef,
+      sshKeyPath,
+      useSshConfig
     ]
   );
 

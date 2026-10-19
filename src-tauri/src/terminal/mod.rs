@@ -154,6 +154,10 @@ fn log_text(chunk: &str, log: &mut Log) -> String {
 #[path = "../../tests/unit/terminal_log.rs"]
 mod log_tests;
 
+#[cfg(test)]
+#[path = "../../tests/unit/terminal_command.rs"]
+mod command_tests;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogStatus {
@@ -243,6 +247,12 @@ pub struct Config {
 	/// 触发 ConPTY 整屏重绘抹掉前端欢迎横幅。缺省退回 30x100。
 	rows: Option<u16>,
 	cols: Option<u16>,
+	/// 默认私钥路径（设置页配置，传给 ssh 的 -i）；空/缺省不传。
+	/// ⚠️ 不校验存在性 —— 文件可能尚未生成，由 ssh 自己报 No such file。
+	key_path: Option<String>,
+	/// 是否读 ~/.ssh/config（设置页配置）。false 时传 -F 让 ssh 跳过；
+	/// 缺省（旧前端/本地会话）按 true 处理，与 ssh 自身默认一致。
+	use_ssh_config: Option<bool>,
 }
 
 #[derive(Clone, Serialize)]
@@ -507,6 +517,20 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 	// 这个变量 → 远端拿到 dumb → ls --color、彩色提示符全部自动关闭，
 	// 终端里只剩白字。显式声明 256 色，前端 xterm 按配色方案渲染
 	command.env("TERM", "xterm-256color");
+	// 默认私钥：只在有值时拼 -i，多密钥时 ssh 会先试它再试 agent 与默认密钥
+	if let Some(key) = config
+		.key_path
+		.as_ref()
+		.filter(|value| !value.trim().is_empty())
+	{
+		command.arg("-i");
+		command.arg(key);
+	}
+	// 关掉 ~/.ssh/config：传 -F 指向空设备（Windows 是 NUL），Host 别名、
+	// ProxyJump 等一律不读 —— 与 ssh 默认行为相反，所以只在显式关闭时拼
+	if config.use_ssh_config == Some(false) {
+		command.args(["-F", if cfg!(windows) { "NUL" } else { "/dev/null" }]);
+	}
 	command.args([
 		"-tt",
 		"-o",
