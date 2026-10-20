@@ -17,7 +17,10 @@
  * 模型只提供远程那一侧的路径。
  */
 import { invoke } from "@tauri-apps/api/core";
-import { resolvePassword } from "@/sftp/lib/sftpUtils";
+import {
+  execTargetOf,
+  type SshTarget
+} from "@/sessions/lib/sshTarget";
 import type { OpenSession } from "../session/terminalTypes";
 import {
   trimToolOutput,
@@ -36,20 +39,16 @@ function transferId(toolCallId: string): string {
   return `ai-${toolCallId}`;
 }
 
-/** 组装 sftp_* 命令要的连接参数（密码解成明文）。 */
+/**
+ * 组装 sftp_* 命令要的连接参数。
+ *
+ * 直接复用会话启动时解析好的目标：密码已解密，跳板链与私钥也一并带上
+ * （此前这里只传 host/port/账号/密码，跳板会话的传输会连不上）。
+ */
 async function connectionOf(
   session: OpenSession | undefined
-) {
-  return {
-    host: session?.host ?? "",
-    port: session?.port,
-    username: session?.username,
-    // ⚠️ 必须解密：session.password 存的是 DPAPI 密文，
-    // 直接透传会认证失败（AI 命令通道的老问题，传输这里不能再踩）
-    password: session?.password
-      ? await resolvePassword(session.password)
-      : null
-  };
+): Promise<SshTarget> {
+  return execTargetOf(session);
 }
 
 /** 本次传输成功时回填给模型的文本。 */

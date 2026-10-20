@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SshTarget } from "@/sessions/lib/sshTarget";
 
 /** 一次命令执行的产物。 */
 export type AiExecResult = {
@@ -19,12 +20,8 @@ export type AiExecResult = {
  * 从后端读循环里掐掉（关 exec 通道）。不带的命令取消不了。
  */
 export function aiRunCommand(
-  target: {
-    host: string;
-    port?: number;
-    username?: string;
-    password?: string;
-  },
+  /** 启动会话时解析好的连接目标（含跳板链、私钥与明文密码） */
+  target: SshTarget,
   command: string,
   /** 喂给命令 stdin 的内容（走数据流分包，不受命令串 ~16KB 包上限约束） */
   stdin?: string,

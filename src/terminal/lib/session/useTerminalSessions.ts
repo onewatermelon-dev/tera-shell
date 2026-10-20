@@ -19,6 +19,11 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
+import { resolveJumpChain } from "@/sessions/lib/jumpHost";
+import {
+  buildSshTarget,
+  type SshTarget
+} from "@/sessions/lib/sshTarget";
 import type { OpenSession } from "./terminalTypes";
 import type { PaneState } from "./paneGrid";
 import { waitForStableSize } from "./ptyResize";
@@ -27,7 +32,8 @@ export function useTerminalSessions(options: {
   /** 终端实例组装（门面持有：依赖 appearance/搜索/菜单等） */
   createTerminal: (
     session: SavedSession,
-    sourceSessionId: string
+    sourceSessionId: string,
+    execTarget: SshTarget
   ) => OpenSession;
   setOpened: Dispatch<
     SetStateAction<OpenSession[]>
@@ -62,6 +68,8 @@ export function useTerminalSessions(options: {
   useSshConfig: boolean;
   /** 主机密钥策略（StrictHostKeyChecking 三档） */
   hostKeyPolicy: string;
+  /** 全部已保存会话：解析跳板链用（见 jumpHost.ts） */
+  sessions: SavedSession[];
 }) {
   const {
     createTerminal,
@@ -79,7 +87,8 @@ export function useTerminalSessions(options: {
     onSavePassword,
     sshKeyPath,
     useSshConfig,
-    hostKeyPolicy
+    hostKeyPolicy,
+    sessions
   } = options;
 
   const [passwordRequest, setPasswordRequest] =
@@ -101,9 +110,22 @@ export function useTerminalSessions(options: {
       /** false 时不把新会话设为激活（拆分场景） */
       activate = true
     ) => {
+      // 先把跳板链与私钥解析好，再建终端：SFTP / AI 命令通道要用的
+      // 连接目标必须与终端会话同时就绪，不能等第一次 AI 调用再补。
+      // 密码解密是异步 IPC，放在挂载前只多几毫秒。
+      const execTarget = await buildSshTarget(
+        session,
+        sessions,
+        {
+          keyPath: sshKeyPath,
+          // 这里的密码已经是明文（由 open() 解密或用户在弹窗里输入）
+          password: session.password ?? null
+        }
+      );
       const current = createTerminal(
         session,
-        sourceSessionId
+        sourceSessionId,
+        execTarget
       );
       setOpened(prev => {
         const next = [...prev, current];
@@ -155,6 +177,11 @@ export function useTerminalSessions(options: {
             sshKeyPath,
             useSshConfig,
             hostKeyPolicy,
+            // 跳板链现场解析：规格跟着跳板会话的最新地址走
+            jump: resolveJumpChain(
+              session,
+              sessions
+            ),
             rows: current.terminal.rows,
             cols: current.terminal.cols
           }
@@ -195,7 +222,8 @@ export function useTerminalSessions(options: {
       disconnectedRef,
       sshKeyPath,
       useSshConfig,
-      hostKeyPolicy
+      hostKeyPolicy,
+      sessions
     ]
   );
 
@@ -245,6 +273,23 @@ export function useTerminalSessions(options: {
     },
     [startSession, activateTab, openedRef]
   );
+
+  /**
+   * 不走密码、直接用私钥 / ssh-agent 连接。
+   *
+   * 纯密钥登录的会话不该被密码框卡住：用户在设置里配了默认私钥，或
+   * 本机 ssh-agent 里已有可用身份时，从这里直接启动。不保存任何密码，
+   * 终端里的 ssh 会按自己的规则完成认证。
+   */
+  const useKeyAuth = useCallback(async () => {
+    const request = passwordRequest;
+    if (!request) return;
+    setPasswordRequest(null);
+    await startSession(
+      { ...request.session, password: undefined },
+      request.sourceSessionId
+    );
+  }, [passwordRequest, startSession]);
 
   const submitPassword = useCallback(
     async (password: string) => {
@@ -316,6 +361,7 @@ export function useTerminalSessions(options: {
   return {
     passwordRequest,
     submitPassword,
+    useKeyAuth,
     cancelPassword,
     startSession,
     open,

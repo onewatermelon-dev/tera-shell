@@ -256,6 +256,10 @@ pub struct Config {
 	/// 主机密钥策略（设置页配置）：ask / accept-new / strict。
 	/// 缺省按 accept-new（与此前硬编码行为一致）。
 	host_key_policy: Option<String>,
+	/// 跳板链（前端把 jumpHostId 引用链摊平后的 `-J` 规格，逗号分隔，
+	/// 首跳在前，如 `ops@10.0.0.1,root@10.0.0.2:2222`）。
+	/// 空/缺省不传 —— 会话没配跳板时与旧行为一致。
+	jump: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -533,6 +537,16 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 	// ProxyJump 等一律不读 —— 与 ssh 默认行为相反，所以只在显式关闭时拼
 	if config.use_ssh_config == Some(false) {
 		command.args(["-F", if cfg!(windows) { "NUL" } else { "/dev/null" }]);
+	}
+	// 跳板机：链式规格由前端解析（会话引用链可能多跳），这里只透传。
+	// 位置无所谓但必须在 target 之前 —— ssh 把非选项参数之后的一律当目标
+	if let Some(jump) = config
+		.jump
+		.as_ref()
+		.filter(|value| !value.trim().is_empty())
+	{
+		command.arg("-J");
+		command.arg(jump);
 	}
 	command.args([
 		"-tt",

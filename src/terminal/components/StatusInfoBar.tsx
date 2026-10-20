@@ -67,12 +67,7 @@ export default function StatusInfoBar({
     const tick = async () => {
       try {
         const result = await aiRunCommand(
-          {
-            host: session.host,
-            port: session.port,
-            username: session.username,
-            password: session.password
-          },
+          session.execTarget,
           STATUS_SCRIPT
         );
         if (cancelled) return;

@@ -19,6 +19,8 @@ use std::{
 use tauri::State;
 use tracing::info;
 
+use crate::ssh::{JumpHop, SshTarget};
+
 use super::pool::{SftpPool, obtain};
 
 /// 传输 / 远程操作的通用任务参数（连接信息 + 本地路径 + 远程路径）。
@@ -29,6 +31,12 @@ pub struct TransferJob {
 	pub(super) port: Option<u16>,
 	pub(super) username: Option<String>,
 	pub(super) password: Option<String>,
+	/// 跳板链（离客户端最近的一跳在前，前端已解开密码）。
+	#[serde(default)]
+	pub(super) jump: Vec<JumpHop>,
+	/// 设置里的默认私钥路径（与终端 `-i` 一致）。
+	#[serde(default)]
+	pub(super) key_path: Option<String>,
 	/// 本地文件路径（上传时为源文件，下载时为目标文件）
 	pub(super) local: String,
 	/// 远程文件路径（上传时为目标文件，下载时为源文件）
@@ -162,27 +170,18 @@ fn emit_transfer(
 	let _ = app.emit(TRANSFER_EVENT, event);
 }
 
-/// 解析传输任务里的连接信息，得到连接池的 key 与认证参数。
+/// 解析传输任务里的连接信息，得到与 SFTP / AI 共用的连接目标。
 pub(crate) fn transfer_target(
 	job: &TransferJob,
-) -> (String, String, u16, String, Option<String>) {
-	let host = job.host.trim().to_string();
-	let port = job.port.unwrap_or(22);
-	let username = job
-		.username
-		.as_deref()
-		.map(str::trim)
-		.filter(|value| !value.is_empty())
-		.unwrap_or("root")
-		.to_string();
-	let password = job
-		.password
-		.as_deref()
-		.map(str::trim)
-		.filter(|value| !value.is_empty())
-		.map(str::to_string);
-	let key = format!("{username}@{host}:{port}");
-	(key, host, port, username, password)
+) -> Result<SshTarget, String> {
+	SshTarget::new(
+		&job.host,
+		job.port,
+		job.username.as_deref(),
+		job.password.as_deref(),
+		job.key_path.as_deref(),
+		job.jump.clone(),
+	)
 }
 
 /// 单个传输任务的控制开关：前端通过命令翻转，传输循环每块检查一次。
@@ -703,16 +702,8 @@ impl<'a> TransferContext<'a> {
 	let cleanup_id = id.clone();
 	let result = tauri::async_runtime::spawn_blocking(
 		move || {
-			let (key, host, port, username, password) =
-				transfer_target(&job);
-			let connection = obtain(
-				&connections,
-				&key,
-				&host,
-				port,
-				&username,
-				password.as_deref(),
-			)?;
+			let target = transfer_target(&job)?;
+			let connection = obtain(&connections, &target)?;
 			let local = PathBuf::from(&job.local);
 			let remote = PathBuf::from(&job.remote);
 			// 先递归统计总量，目录也能给出准确的整体进度
@@ -754,16 +745,8 @@ pub async fn download(
 	let cleanup_id = id.clone();
 	let result = tauri::async_runtime::spawn_blocking(
 		move || {
-			let (key, host, port, username, password) =
-				transfer_target(&job);
-			let connection = obtain(
-				&connections,
-				&key,
-				&host,
-				port,
-				&username,
-				password.as_deref(),
-			)?;
+			let target = transfer_target(&job)?;
+			let connection = obtain(&connections, &target)?;
 			let local = PathBuf::from(&job.local);
 			let remote = PathBuf::from(&job.remote);
 			// 先递归统计总量，目录也能给出准确的整体进度

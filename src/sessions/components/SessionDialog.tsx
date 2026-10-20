@@ -22,6 +22,7 @@ import {
 } from "@/sessions/lib/sessionGroup";
 import type { SessionGroup } from "@/sessions/lib/sessionGroup";
 import ColorPicker from "@/sessions/components/ColorPicker";
+import SettingsSelect from "@/settings/components/SettingsSelect";
 import { useT } from "@/settings/lib/i18n";
 
 type Props = {
@@ -29,6 +30,11 @@ type Props = {
   session?: SavedSession | null;
   /** 已有分组，供下拉候选（新建会话时预选 initialGroupId 指定的分组）。 */
   groups: SessionGroup[];
+  /**
+   * 全部已保存会话：跳板机候选（只列其他 SSH 会话，见下方选择器）。
+   * 不存规格而存引用 —— 跳板地址改了，这里和连接时解析都自动跟上。
+   */
+  sessions: SavedSession[];
   /** 打开时预选的分组；为空则落在未分组。 */
   initialGroupId?: string;
   onClose: () => void;
@@ -46,6 +52,7 @@ export default function SessionDialog({
   open,
   session,
   groups,
+  sessions,
   initialGroupId,
   onClose,
   onSave
@@ -291,6 +298,62 @@ export default function SessionDialog({
                     placeholder="root"
                   />
                 </TextField>
+                {/**
+                 * 跳板机：其他 SSH 会话的下拉（存引用 id，连接时解析成 `-J` 链）。
+                 * 只排除自己 —— 成环（A 跳 B、B 跳 A）交给连接时的
+                 * resolveJumpChain 兕住，这里再算传递闭包不划算。
+                 * 本机会话（local）没有 ssh 端口，不能当跳板，一并排除。
+                 */}
+                {(() => {
+                  const candidates =
+                    sessions.filter(
+                      item =>
+                        item.kind === "ssh" &&
+                        item.id !== session?.id
+                    );
+                  if (!candidates.length)
+                    return null;
+                  return (
+                    <div className="jump-host-field">
+                      <span className="form-label">
+                        {t("session.jump.label")}
+                      </span>
+                      <SettingsSelect
+                        value={
+                          form.jumpHostId ?? ""
+                        }
+                        options={[
+                          {
+                            value: "",
+                            label: t(
+                              "session.jump.none"
+                            )
+                          },
+                          ...candidates.map(
+                            item => ({
+                              value: item.id,
+                              label: `${item.name}（${item.host}）`
+                            })
+                          )
+                        ]}
+                        ariaLabel={t(
+                          "session.jump.label"
+                        )}
+                        onChange={jumpHostId =>
+                          setForm({
+                            ...form,
+                            jumpHostId:
+                              jumpHostId ||
+                              undefined
+                          })
+                        }
+                      />
+                      <p className="dialog-hint">
+                        {t("session.jump.desc")}
+                      </p>
+                    </div>
+                  );
+                })()}
                 {/**
                  * 分组选择：可输入的 TextField + HeroUI Dropdown 候选菜单。
                  *

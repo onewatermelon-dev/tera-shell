@@ -138,12 +138,7 @@ export default function SystemInfoDrawer({
   const fetchInfo = useCallback(
     () =>
       aiRunCommand(
-        {
-          host: session.host,
-          port: session.port,
-          username: session.username,
-          password: session.password
-        },
+        session.execTarget,
         SYS_SCRIPT
       ).then(result =>
         parseSysInfo(result.stdout)

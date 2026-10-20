@@ -8,6 +8,8 @@ pub mod icons;
 /// 基础设施（日志、凭据加解密）
 pub mod infra;
 pub mod sftp;
+/// SSH 连接底座：SFTP 与 AI exec 共用（跳板链 / 私钥 / 连接目标）
+pub mod ssh;
 pub mod terminal;
 /// 会话导入/导出的文件搬运（格式逻辑在前端，这里只管读写与对话框）
 pub mod transfer;

@@ -2,13 +2,12 @@
 //!
 //! 缓存的是已打开的 `Sftp` 通道与 uid/gid → 名称映射；网络 IO 一律在
 //! 不持有池锁的情况下进行，避免一个慢连接阻塞其它会话。
-//! `establish_session` 与 AI 命令执行共用（认证策略一致）。
+//! 连接目标（含跳板链 / 私钥）与认证在 `crate::ssh`，与 AI 命令执行共用。
 
-use ssh2::{KeyboardInteractivePrompt, Prompt, Session, Sftp};
+use ssh2::{Session, Sftp};
 use std::{
 	collections::HashMap,
 	io::Read,
-	net::{TcpStream, ToSocketAddrs},
 	path::Path,
 	sync::{
 		Arc, Mutex,
@@ -16,15 +15,11 @@ use std::{
 	},
 	time::{Duration, Instant},
 };
-use tracing::{info, warn};
+use tracing::info;
+
+use crate::ssh::{SshTarget, establish_session};
 
 use super::browse::SftpListing;
-
-/// 建立 TCP 连接的超时，避免网络不可达时长时间无响应。
-pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// 单次会话操作（握手 / 认证 / 读目录）的超时，防止界面一直等。
-pub(crate) const SESSION_TIMEOUT_MS: u32 = 20_000;
 
 /// 目录缓存有效期。跨公网的 readdir 一次就要一个 RTT（几百毫秒起），
 /// 短时间内重复访问（返回上级、来回切换）直接命中缓存。
@@ -73,47 +68,23 @@ pub struct SftpPool {
 	pub(super) generation: Arc<AtomicU64>,
 }
 
-/// keyboard-interactive 认证的答题器：把保存的密码填给每一个提问。
-///
-/// 服务器通常只问一次 "Password:"，但某些配置（如带二步验证）会问多次；
-/// 这里对每个提问都回答同一个密码，认证失败时由上层给出错误提示。
-pub(crate) struct PasswordPrompter {
-	pub(crate) password: String,
-}
-
-impl KeyboardInteractivePrompt for PasswordPrompter {
-	fn prompt<'a>(
-		&mut self,
-		_username: &str,
-		_instructions: &str,
-		prompts: &[Prompt<'a>],
-	) -> Vec<String> {
-		prompts
-			.iter()
-			.map(|_| self.password.clone())
-			.collect()
-	}
-}
-
 /// 取缓存连接；没有缓存时新建并登记。
 ///
 /// 网络 IO 一律在**不持有 connections 锁**的情况下进行，避免一个慢连接
-/// 阻塞其它会话。
+/// 阻塞其它会话。`target.key()` 已包含跳板链与私钥路径，直连与经跳板的
+/// 同名目标不会互相命中。
 pub(crate) fn obtain(
 	connections: &Arc<Mutex<HashMap<String, Arc<Connection>>>>,
-	key: &str,
-	host: &str,
-	port: u16,
-	username: &str,
-	password: Option<&str>,
+	target: &SshTarget,
 ) -> Result<Arc<Connection>, String> {
-	if let Some(connection) = cached(connections, key) {
-		info!(key, "复用缓存的 SFTP 连接");
+	let key = target.key();
+	if let Some(connection) = cached(connections, &key) {
+		info!(%key, "复用缓存的 SFTP 连接");
 		return Ok(connection);
 	}
-	info!(key, "新建 SFTP 连接");
-	let connection = connect(host, port, username, password)?;
-	remember(connections, key, connection.clone());
+	info!(%key, "新建 SFTP 连接");
+	let connection = connect(target)?;
+	remember(connections, &key, connection.clone());
 	Ok(connection)
 }
 
@@ -157,14 +128,12 @@ pub(super) fn discard(
 ///
 /// 局部 `Session` 在函数返回时被丢弃，但 `Sftp` 持有其内部
 /// `Arc<Mutex<SessionInner>>`，连接会一直存活到该 `Sftp` 被丢弃。
+/// 经跳板时，泵线程持有通道、通道持有跳板会话，生命周期同样跟着这条
+/// 连接走。
 pub(super) fn connect(
-	host: &str,
-	port: u16,
-	username: &str,
-	password: Option<&str>,
+	target: &SshTarget,
 ) -> Result<Arc<Connection>, String> {
-	let session =
-		establish_session(host, port, username, password)?;
+	let session = establish_session(target)?;
 	// 通道只开一次并随连接缓存下来，后续浏览不再重复协商
 	let sftp = session
 		.sftp()
@@ -173,9 +142,8 @@ pub(super) fn connect(
 	let users = read_id_map(&sftp, "/etc/passwd");
 	let groups = read_id_map(&sftp, "/etc/group");
 	info!(
-		host = %host,
-		port,
-		username = %username,
+		target = %target.describe(),
+		jumps = target.jump.len(),
 		users = users.len(),
 		groups = groups.len(),
 		"SFTP 认证通过并已打开通道"
@@ -186,83 +154,6 @@ pub(super) fn connect(
 		users,
 		groups,
 	}))
-}
-
-/// 建立一条**已认证**的 SSH 会话（TCP + 握手 + 认证），不打开任何通道。
-///
-/// SFTP 与 AI 命令执行共用：认证策略一致 —— 有保存密码时先走 password
-/// 方法，被拒后用 keyboard-interactive 重试（不少服务器只开后者）；没有
-/// 密码则回退 ssh-agent。密码只在内存中使用，不进日志。
-pub(crate) fn establish_session(
-	host: &str,
-	port: u16,
-	username: &str,
-	password: Option<&str>,
-) -> Result<Session, String> {
-	let address = (host, port)
-		.to_socket_addrs()
-		.map_err(|error| {
-			format!("解析 {host}:{port} 失败：{error}")
-		})?
-		.next()
-		.ok_or_else(|| format!("无法解析主机 {host}"))?;
-	let tcp = TcpStream::connect_timeout(
-		&address,
-		CONNECT_TIMEOUT,
-	)
-	.map_err(|error| {
-		format!("连接 {host}:{port} 失败：{error}")
-	})?;
-	// 小包往返为主的交互，关掉 Nagle 降低延迟
-	let _ = tcp.set_nodelay(true);
-
-	let mut session = Session::new().map_err(|error| error.to_string())?;
-	session.set_tcp_stream(tcp);
-	session.set_timeout(SESSION_TIMEOUT_MS);
-	session
-		.handshake()
-		.map_err(|error| format!("SSH 握手失败：{error}"))?;
-
-	let authenticated = match password {
-		Some(password) => {
-			let mut ok = session
-				.userauth_password(username, password)
-				.is_ok()
-				&& session.authenticated();
-			if !ok {
-				warn!(
-					host = %host,
-					"password 认证被拒，改用 keyboard-interactive 重试"
-				);
-				let mut prompter = PasswordPrompter {
-					password: password.to_string(),
-				};
-				ok = session
-					.userauth_keyboard_interactive(
-						username,
-						&mut prompter,
-					)
-					.is_ok()
-					&& session.authenticated();
-			}
-			ok
-		}
-		None => {
-			session.userauth_agent(username).is_ok()
-				&& session.authenticated()
-		}
-	};
-	if !authenticated {
-		return Err(match password {
-			Some(_) => format!(
-				"SSH 认证失败（{username}@{host}:{port}）：密码被拒绝（已尝试 password 与 keyboard-interactive）"
-			),
-			None => format!(
-				"SSH 认证失败（{username}@{host}:{port}）：该会话没有保存密码，ssh-agent 也未能通过认证。请在会话设置里填写并保存密码后重试"
-			),
-		});
-	}
-	Ok(session)
 }
 
 /// 读取 `/etc/passwd` 或 `/etc/group`，解析出「数字 id → 名称」映射。

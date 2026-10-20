@@ -9,6 +9,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/sessions/lib/session";
+import type { SshTarget } from "@/sessions/lib/sshTarget";
 import type { AppSettings } from "@/settings/lib/settings";
 import {
   DEFAULT_FONT_SIZE,
@@ -52,6 +53,8 @@ export type TerminalAppearance = Pick<
 /** createTerminalInstance 的参数：createTerminal 原先闭包捕获的全部依赖。 */
 export interface CreateTerminalOptions {
   appearance: TerminalAppearance;
+  /** SFTP / AI 命令用的连接目标（跳板链 + 私钥 + 明文密码） */
+  execTarget: SshTarget;
   onError: (reason: unknown) => void;
   onFontSizeChange: (fontSize: number) => void;
   /** 会话是否已断开（输入管线用） */
@@ -162,6 +165,7 @@ export function createTerminalInstance(
     session,
     {
       onError,
+      execTarget: options.execTarget,
       commandCompletion:
         appearance.commandCompletion,
       isDisconnected,
@@ -241,7 +245,8 @@ export function createTerminalInstance(
     completion,
     element,
     mounted: false,
-    sourceSessionId
+    sourceSessionId,
+    execTarget: options.execTarget
   };
 }
 

@@ -57,12 +57,7 @@ export default function ProcessInfoDrawer({
   const fetchProcs = useCallback(
     () =>
       aiRunCommand(
-        {
-          host: session.host,
-          port: session.port,
-          username: session.username,
-          password: session.password
-        },
+        session.execTarget,
         PROC_SCRIPT
       ).then(result =>
         parseProcesses(result.stdout)

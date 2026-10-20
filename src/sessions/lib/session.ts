@@ -13,6 +13,14 @@ export type SavedSession = {
   groupId?: string;
   /** 颜色标记，用于侧栏色条快速区分环境。 */
   color?: ColorTag;
+  /**
+   * 跳板机：指向另一个已保存 SSH 会话的 id，连接时经它 ProxyJump
+   * （ssh -J）。多跳靠中间会话自己的 jumpHostId 串联，见 jumpHost.ts。
+   *
+   * 存 id 而非规格字符串：跳板的地址/端口/密码改了，这里自动跟上。
+   * ⚠️ 不参与导出/导入 —— 导出文件不带 id（重导会重新生成），引用必然悬空。
+   */
+  jumpHostId?: string;
 };
 
 export const localSession: SavedSession = {

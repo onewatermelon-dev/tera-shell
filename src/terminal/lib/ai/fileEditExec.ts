@@ -9,6 +9,7 @@
  * 不存在「读和写交错」的半成品状态。
  */
 import { aiRunCommand } from "./aiExec";
+import { execTargetOf } from "@/sessions/lib/sshTarget";
 import {
   commandInDirectory,
   directoryFromPrompt,
@@ -29,12 +30,7 @@ export async function readRemoteFileText(
       "无法识别当前终端目录，请在终端提示符就绪后重试"
     );
   const result = await aiRunCommand(
-    {
-      host: session?.host ?? "",
-      port: session?.port,
-      username: session?.username,
-      password: session?.password
-    },
+    execTargetOf(session),
     commandInDirectory(
       directory,
       `cat -- ${shellQuote(path)}`
@@ -66,12 +62,7 @@ export async function writeRemoteFileText(
       "无法识别当前终端目录，请在终端提示符就绪后重试"
     );
   const result = await aiRunCommand(
-    {
-      host: session?.host ?? "",
-      port: session?.port,
-      username: session?.username,
-      password: session?.password
-    },
+    execTargetOf(session),
     commandInDirectory(
       directory,
       `cat > ${shellQuote(path)}`

@@ -2,7 +2,7 @@
 //! 外部（`lib.rs` 命令注册、`ai.rs`、`open.rs` / `rename.rs`）的
 //! import 路径与公开 API 保持不变。
 //!
-//! - `pool`：连接池与会话建立（`SftpPool` / `obtain` / `establish_session`）
+//! - `pool`：连接池与会话建立（`SftpPool` / `obtain`；连接底座在 `ssh` 模块）
 //! - `browse`：目录浏览与缓存（`sftp_list`）
 //! - `transfer`：上传下载与传输控制（进度 / 暂停 / 取消）
 //! - `remote_ops`：远程文件操作与 shell 命令（新建 / 删除 / 权限 / 归档 / 用量）
@@ -28,5 +28,5 @@ pub use transfer::{
 };
 // 只在本 crate 内使用的内部件（`ai.rs` 借会话、`open.rs` / `rename.rs`
 // 借连接池与任务解析）：提权后经这里再导出，`crate::sftp::` 根路径不变。
-pub(crate) use pool::{Connection, establish_session, obtain};
+pub(crate) use pool::{Connection, obtain};
 pub(crate) use transfer::transfer_target;

@@ -137,6 +137,8 @@ export default function App() {
     },
     appSettings.settings,
     setTerminalFontSize,
+    // 跳板链解析的数据源：会话列表变化时重连/新连都拿最新值
+    sessionStore.sessions,
     notifications.notifyCommand
   );
 
@@ -457,6 +459,7 @@ export default function App() {
       <AppDialogs
         dialogs={dialogs}
         groups={groups}
+        sessions={sessionStore.sessions}
         t={t}
         passwordRequest={
           terminals.passwordRequest
@@ -464,6 +467,7 @@ export default function App() {
         onSubmitPassword={
           terminals.submitPassword
         }
+        onUseKeyAuth={terminals.useKeyAuth}
         onCancelPassword={
           terminals.cancelPassword
         }

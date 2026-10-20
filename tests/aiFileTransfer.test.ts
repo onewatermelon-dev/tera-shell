@@ -218,13 +218,15 @@ describe("AI 文件上传 / 下载", () => {
     expect(src).toContain("fs_pick_save_path");
   });
 
-  it("传输前必须解密密码（session.password 是 DPAPI 密文）", async () => {
+  it("传输必须使用已解密并含跳板链的连接目标", async () => {
     const src = (
       await import("@/terminal/lib/ai/fileTransfer.ts?raw")
     ).default;
-    // 直接透传密文会认证失败 —— cardExec 里还留着这个坑，
-    // 传输这里不能跟着抄
-    expect(src).toContain("resolvePassword");
+    // 连接目标在会话启动时由 buildSshTarget 解析（密码已解密、
+    // 跳板链与私钥一并带上）。这里直接透传 session.password 会认证失败，
+    // 也拿不到跳板 / 私钥信息。
+    expect(src).toContain("execTargetOf");
+    expect(src).not.toContain("session.password");
   });
 
   it("系统提示词说明了两个传输工具与绝对路径约束", () => {

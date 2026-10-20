@@ -4,6 +4,7 @@
 //! 一个 RTT 都不用花，未命中才走网络并顺带预热子目录。
 
 use crate::icons;
+use crate::ssh::{JumpHop, SshTarget};
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
@@ -33,6 +34,12 @@ pub struct SftpRequest {
 	port: Option<u16>,
 	username: Option<String>,
 	password: Option<String>,
+	/// 跳板链（离客户端最近的一跳在前，前端已解开密码）。
+	#[serde(default)]
+	jump: Vec<JumpHop>,
+	/// 设置里的默认私钥路径（与终端 `-i` 一致）。
+	#[serde(default)]
+	key_path: Option<String>,
 	/// 要列出的远程目录；留空表示会话默认目录。
 	path: Option<String>,
 	/// 手动刷新：跳过目录缓存，强制重新读取。
@@ -102,18 +109,14 @@ fn browse(
 	generation: &Arc<AtomicU64>,
 	request: SftpRequest,
 ) -> Result<SftpListing, String> {
-	let host = request.host.trim().to_string();
-	if host.is_empty() {
-		return Err("会话缺少主机地址".into());
-	}
-	let port = request.port.unwrap_or(22);
-	let username = request
-		.username
-		.as_deref()
-		.map(str::trim)
-		.filter(|value| !value.is_empty())
-		.unwrap_or("root")
-		.to_string();
+	let target = SshTarget::new(
+		&request.host,
+		request.port,
+		request.username.as_deref(),
+		request.password.as_deref(),
+		request.key_path.as_deref(),
+		request.jump.clone(),
+	)?;
 	let remote = request
 		.path
 		.as_deref()
@@ -121,22 +124,15 @@ fn browse(
 		.filter(|value| !value.is_empty())
 		.unwrap_or(".")
 		.to_string();
-	let password = request
-		.password
-		.as_deref()
-		.map(str::trim)
-		.filter(|value| !value.is_empty())
-		.map(str::to_string);
 
 	// 用户发起了新浏览：序号自增会让正在跑的预取立刻让路
 	let current = generation.fetch_add(1, Ordering::SeqCst) + 1;
-	let key = format!("{username}@{host}:{port}");
+	let key = target.key();
 	let cache_key = format!("{key}|{remote}");
 	// 只记录连接目标与路径，密码绝不进日志
 	info!(
-		host = %host,
-		port,
-		username = %username,
+		target = %target.describe(),
+		jumps = target.jump.len(),
 		path = %remote,
 		refresh = request.refresh,
 		"SFTP 目录请求"
@@ -152,14 +148,7 @@ fn browse(
 	}
 
 	let started = Instant::now();
-	let connection = obtain(
-		connections,
-		&key,
-		&host,
-		port,
-		&username,
-		password.as_deref(),
-	)?;
+	let connection = obtain(connections, &target)?;
 	// 取连接耗时：命中缓存时接近 0；需要新建时 = TCP + 握手 + 认证 + 开通道
 	let obtain_ms = started.elapsed().as_millis();
 
@@ -167,14 +156,9 @@ fn browse(
 		Ok(listing) => listing,
 		Err(error) => {
 			// 缓存连接可能已被服务器断开：丢弃后重连一次再试
-			warn!(host = %host, "SFTP 浏览失败，重连后重试：{error}");
+			warn!(target = %target.describe(), "SFTP 浏览失败，重连后重试：{error}");
 			discard(connections, &key);
-			let connection = connect(
-				&host,
-				port,
-				&username,
-				password.as_deref(),
-			)?;
+			let connection = connect(&target)?;
 			let listing = read_dir(&connection, &remote)?;
 			remember(connections, &key, connection.clone());
 			store_dir(directories, &cache_key, listing.clone());
@@ -190,7 +174,7 @@ fn browse(
 		}
 	};
 	info!(
-		host = %host,
+		target = %target.describe(),
 		obtain_ms,
 		total_ms = started.elapsed().as_millis(),
 		entries = listing.entries.len(),

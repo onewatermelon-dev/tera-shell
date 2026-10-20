@@ -10,6 +10,7 @@
 import type { Terminal } from "@xterm/xterm";
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
+import type { SshTarget } from "@/sessions/lib/sshTarget";
 import { aiRunCommand } from "@/terminal/lib/ai/aiExec";
 import { explainCommand } from "@/terminal/lib/ai/aiExplain";
 import {
@@ -63,6 +64,8 @@ export function attachTerminalInput(
   session: SavedSession,
   options: {
     onError: (reason: unknown) => void;
+    /** SFTP / AI 命令用的连接目标（启动时已解析跳板链与私钥） */
+    execTarget: SshTarget;
     commandCompletion: boolean;
     isDisconnected: () => boolean;
     /**
@@ -77,6 +80,7 @@ export function attachTerminalInput(
 ) {
   const {
     onError,
+    execTarget,
     commandCompletion,
     isDisconnected,
     onCommandSubmitted
@@ -106,12 +110,6 @@ export function attachTerminalInput(
   // pts 注入与 exec 共用：SSH 会话的 exec 目标 + 找该用户最新 pts 的
   // 脚本（cat 高亮、/? 解释、vim 改写都用这套回环）
   const ptsFind = `p=$(ps -u "$(whoami)" -o tty= --sort=start_time | grep pts | tail -1)`;
-  const execTarget = {
-    host: session.host,
-    port: session.port,
-    username: session.username,
-    password: session.password
-  };
   terminal.onData(data => {
     // 会话断开后 PTY 可能已被移除，继续向后端写只会收到
     // "终端会话不存在"的错误气泡 —— 断连的终端敲键本就无意义。

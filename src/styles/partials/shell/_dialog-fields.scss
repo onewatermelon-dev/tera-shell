@@ -55,3 +55,15 @@
   height: 6px;
   border-radius: 50%;
 }
+
+// 跳板机选择：标签 + 下拉 + 一句说明，纵向堆叠。
+// 下拉直接复用全局的 .settings-select（设置页同款），不再另起一套样式。
+.jump-host-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .dialog-hint {
+    margin: 0;
+  }
+}

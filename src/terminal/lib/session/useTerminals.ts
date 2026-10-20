@@ -28,6 +28,7 @@ import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { useTerminalSearch } from "@/terminal/lib/search/useTerminalSearch";
 import { useTerminalReconnect } from "./useTerminalReconnect";
 import type { OpenSession } from "./terminalTypes";
+import type { SshTarget } from "@/sessions/lib/sshTarget";
 import {
   usePaneGrid,
   type PaneState
@@ -68,6 +69,12 @@ export function useTerminals(
    * 同时外观 effect 会把新字号推给所有已打开的终端。
    */
   onFontSizeChange: (fontSize: number) => void,
+  /**
+   * 全部已保存会话：解析跳板机引用链（jumpHostId → `-J` 规格）用。
+   * 启动/重连时现场解析而不是存规格字符串 —— 跳板的地址/端口改了，
+   * 下次连接自动跟上。
+   */
+  sessions: SavedSession[],
   /** 长命令跑完时上报（系统通知用）；见 useNotifications */
   onLongCommand?: (
     command: string,
@@ -112,6 +119,7 @@ export function useTerminals(
     sshKeyPath: appearance.sshKeyPath,
     useSshConfig: appearance.useSshConfig,
     hostKeyPolicy: appearance.hostKeyPolicy,
+    sessions,
     onError
   });
 
@@ -266,13 +274,15 @@ export function useTerminals(
   const createTerminal = useCallback(
     (
       session: SavedSession,
-      sourceSessionId: string
+      sourceSessionId: string,
+      execTarget: SshTarget
     ): OpenSession =>
       createTerminalInstance(
         session,
         sourceSessionId,
         {
           appearance,
+          execTarget,
           onError,
           onFontSizeChange,
           isDisconnected: () =>
@@ -304,6 +314,7 @@ export function useTerminals(
   const {
     passwordRequest,
     submitPassword,
+    useKeyAuth,
     cancelPassword,
     startSession,
     open,
@@ -325,7 +336,8 @@ export function useTerminals(
     onSavePassword,
     sshKeyPath: appearance.sshKeyPath,
     useSshConfig: appearance.useSshConfig,
-    hostKeyPolicy: appearance.hostKeyPolicy
+    hostKeyPolicy: appearance.hostKeyPolicy,
+    sessions
   });
 
   // ---- 会话关闭与窗格拆分（树手术 + PTY 同步挂起），
@@ -405,6 +417,7 @@ export function useTerminals(
     reorderTab,
     passwordRequest,
     submitPassword,
+    useKeyAuth,
     cancelPassword,
     // 查找相关的状态与操作都来自 useTerminalSearch
     searchOpen: search.searchOpen,

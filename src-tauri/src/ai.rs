@@ -24,7 +24,7 @@ use tokio::sync::oneshot;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::sftp::establish_session;
+use crate::ssh::{JumpHop, SshTarget, establish_session};
 
 /// 单条 AI 命令的超时：诊断类命令几秒内结束，长命令以 60 秒为限。
 /// ponytail: 超时后通道作废（连接随之丢弃重连），不支持长时间驻留任务。
@@ -99,6 +99,8 @@ impl ExecPool {
 /// AI 命令的执行目标与命令本身。
 ///
 /// 密码由前端用后端 `decrypt` 解开后明文传入，只在内存中使用，不写日志。
+/// `jump` 是前端解析好的跳板链（离客户端最近的一跳在前），`key_path`
+/// 是设置里的默认私钥 —— 与终端 `ssh -J` / `-i` 的行为对齐。
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecTarget {
@@ -106,6 +108,10 @@ pub struct ExecTarget {
 	port: Option<u16>,
 	username: Option<String>,
 	password: Option<String>,
+	#[serde(default)]
+	jump: Vec<JumpHop>,
+	#[serde(default)]
+	key_path: Option<String>,
 	/// 要执行的命令，在远端登录 shell 下运行（等价 `shell -c "命令"`）。
 	command: String,
 	/// 可选：喂给命令 stdin 的内容（exec 通道数据流，不受 channel request
@@ -208,43 +214,32 @@ fn execute(
 	cancel: &Arc<AtomicBool>,
 	target: ExecTarget,
 ) -> Result<ExecOutcome, ExecError> {
-	let host = target.host.trim().to_string();
-	if host.is_empty() {
-		return Err(ExecError::Failed(
-			"会话缺少主机地址".into()
-		));
-	}
-	let port = target.port.unwrap_or(22);
-	let username = target
-		.username
-		.as_deref()
-		.map(str::trim)
-		.filter(|value| !value.is_empty())
-		.unwrap_or("root")
-		.to_string();
-	let password = target
-		.password
-		.as_deref()
-		.map(str::trim)
-		.filter(|value| !value.is_empty())
-		.map(str::to_string);
+	// 归一化、跳板链与私钥统一收口在 SshTarget（与 SFTP 共用）；
+	// 连接池 key 也由它生成，直连 / 跳板 / 不同私钥不会互相命中
+	let ssh = SshTarget::new(
+		&target.host,
+		target.port,
+		target.username.as_deref(),
+		target.password.as_deref(),
+		target.key_path.as_deref(),
+		target.jump.clone(),
+	)
+	.map_err(ExecError::Failed)?;
 	let command = target.command;
 	if command.trim().is_empty() {
 		return Err(ExecError::Failed("命令为空".into()));
 	}
-	let key = format!("{username}@{host}:{port}");
 	// 只记目标与命令文本，密码绝不进日志
-	info!(key = %key, command = %command, "AI 命令执行请求");
+	info!(
+		target = %ssh.describe(),
+		jumps = ssh.jump.len(),
+		command = %command,
+		"AI 命令执行请求"
+	);
+	let key = ssh.key();
 
-	let session = obtain(
-		sessions,
-		&key,
-		&host,
-		port,
-		&username,
-		password.as_deref(),
-	)
-	.map_err(ExecError::Failed)?;
+	let session = obtain(sessions, &ssh)
+		.map_err(ExecError::Failed)?;
 	match run_once(
 		&session,
 		&command,
@@ -273,15 +268,9 @@ fn execute(
 				.lock()
 				.unwrap_or_else(|error| error.into_inner())
 				.remove(&key);
-			let session = obtain(
-				sessions,
-				&key,
-				&host,
-				port,
-				&username,
-				password.as_deref(),
-			)
-			.map_err(ExecError::Failed)?;
+			// 连接被服务器掐断：丢弃后重连一次（跳板链会整条重建）
+			let session = obtain(sessions, &ssh)
+				.map_err(ExecError::Failed)?;
 			run_once(
 				&session,
 				&command,
@@ -295,29 +284,26 @@ fn execute(
 /// 取缓存会话；没有缓存时新建并登记。
 fn obtain(
 	sessions: &Arc<Mutex<HashMap<String, Arc<Mutex<Session>>>>>,
-	key: &str,
-	host: &str,
-	port: u16,
-	username: &str,
-	password: Option<&str>,
+	target: &SshTarget,
 ) -> Result<Arc<Mutex<Session>>, String> {
+	let key = target.key();
 	if let Some(session) = sessions
 		.lock()
 		.unwrap_or_else(|error| error.into_inner())
-		.get(key)
+		.get(&key)
 		.cloned()
 	{
-		info!(key, "复用缓存的 AI exec 连接");
+		info!(%key, "复用缓存的 AI exec 连接");
 		return Ok(session);
 	}
-	info!(key, "新建 AI exec 连接");
+	info!(%key, "新建 AI exec 连接");
 	let session = Arc::new(Mutex::new(establish_session(
-		host, port, username, password,
+		target,
 	)?));
 	sessions
 		.lock()
 		.unwrap_or_else(|error| error.into_inner())
-		.entry(key.to_string())
+		.entry(key)
 		.or_insert(session.clone());
 	Ok(session)
 }

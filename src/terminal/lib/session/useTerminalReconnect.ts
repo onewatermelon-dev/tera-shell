@@ -9,6 +9,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Terminal } from "@xterm/xterm";
 import { useT } from "@/settings/lib/i18n";
 import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
+import type { SavedSession } from "@/sessions/lib/session";
+import { resolveJumpChain } from "@/sessions/lib/jumpHost";
 import {
   MAX_RECONNECT_ATTEMPTS,
   reconnectDelay,
@@ -40,6 +42,8 @@ type ReconnectOptions = {
   useSshConfig: boolean;
   /** 主机密钥策略（StrictHostKeyChecking 三档） */
   hostKeyPolicy: string;
+  /** 全部已保存会话：解析跳板链用（与首连同一套解析，链不能因重连而变） */
+  sessions: SavedSession[];
   onError: (reason: unknown) => void;
 };
 
@@ -63,6 +67,7 @@ export function useTerminalReconnect({
   sshKeyPath,
   useSshConfig,
   hostKeyPolicy,
+  sessions,
   onError
 }: ReconnectOptions) {
   const t = useT();
@@ -114,6 +119,10 @@ export function useTerminalReconnect({
             sshKeyPath,
             useSshConfig,
             hostKeyPolicy,
+            jump: resolveJumpChain(
+              session,
+              sessions
+            ),
             rows: session.terminal.rows,
             cols: session.terminal.cols
           }
@@ -157,6 +166,7 @@ export function useTerminalReconnect({
       sshKeyPath,
       useSshConfig,
       hostKeyPolicy,
+      sessions,
       t
     ]
   );

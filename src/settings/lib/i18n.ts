@@ -328,6 +328,10 @@ const zhCN = {
   "session.port": "端口",
   "session.username": "用户名",
   "session.password": "修改密码",
+  "session.jump.label": "跳板机",
+  "session.jump.none": "不使用跳板",
+  "session.jump.desc":
+    "连接时先经所选会话登录（ssh -J），选中会话自身还可再配跳板形成多跳。",
   "session.passwordPlaceholder": "留空保持原密码",
   "session.authHint":
     "身份验证由系统 SSH 处理，支持已有密钥和 ssh-agent。",
@@ -1014,6 +1018,10 @@ const enUS: Record<MessageKey, string> = {
   "session.port": "Port",
   "session.username": "Username",
   "session.password": "Change password",
+  "session.jump.label": "Jump host",
+  "session.jump.none": "No jump host",
+  "session.jump.desc":
+    "Connect through the selected session first (ssh -J); the jump session itself can also have one for multi-hop chains.",
   "session.passwordPlaceholder":
     "Leave empty to keep the current password",
   "session.authHint":

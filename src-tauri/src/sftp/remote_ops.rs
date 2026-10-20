@@ -30,16 +30,8 @@ pub async fn make_remote_dir(
 ) -> Result<(), String> {
 	let connections = pool.connections.clone();
 	tauri::async_runtime::spawn_blocking(move || {
-		let (key, host, port, username, password) =
-			transfer_target(&job);
-		let connection = obtain(
-			&connections,
-			&key,
-			&host,
-			port,
-			&username,
-			password.as_deref(),
-		)?;
+		let target = transfer_target(&job)?;
+		let connection = obtain(&connections, &target)?;
 		connection
 			.sftp
 			.mkdir(Path::new(&job.remote), 0o755)
@@ -103,16 +95,8 @@ pub async fn remove_remote_path(
 	let cleanup_id = id.clone();
 	let result = tauri::async_runtime::spawn_blocking(
 		move || {
-			let (key, host, port, username, password) =
-				transfer_target(&job);
-			let connection = obtain(
-				&connections,
-				&key,
-				&host,
-				port,
-				&username,
-				password.as_deref(),
-			)?;
+			let target = transfer_target(&job)?;
+			let connection = obtain(&connections, &target)?;
 			let remote = Path::new(&job.remote);
 			// 先算总量，删除进度才有分母
 			let total = measure_remote(&connection.sftp, remote);
@@ -148,16 +132,8 @@ pub async fn create_remote_file(
 ) -> Result<(), String> {
 	let connections = pool.connections.clone();
 	tauri::async_runtime::spawn_blocking(move || {
-		let (key, host, port, username, password) =
-			transfer_target(&job);
-		let connection = obtain(
-			&connections,
-			&key,
-			&host,
-			port,
-			&username,
-			password.as_deref(),
-		)?;
+		let target = transfer_target(&job)?;
+		let connection = obtain(&connections, &target)?;
 		// sftp.create 会按 O_WRONLY|O_CREAT|O_TRUNC 打开，立即关闭即为空文件
 		connection
 			.sftp
@@ -185,16 +161,8 @@ pub async fn chmod(
 ) -> Result<(), String> {
 	let connections = pool.connections.clone();
 	tauri::async_runtime::spawn_blocking(move || {
-		let (key, host, port, username, password) =
-			transfer_target(&job);
-		let connection = obtain(
-			&connections,
-			&key,
-			&host,
-			port,
-			&username,
-			password.as_deref(),
-		)?;
+		let target = transfer_target(&job)?;
+		let connection = obtain(&connections, &target)?;
 		// ssh2 没有单独的 chmod：构造一份只带 perm 的 FileStat，
 		// 交给 setstat 下发（其余字段留 None，不会被改动）
 		let stat = ssh2::FileStat {
@@ -308,18 +276,10 @@ pub async fn disk_usage(
 	job: TransferJob,
 ) -> Result<RemoteDiskUsage, String> {
 	let connections = pool.connections.clone();
-	let (key, host, port, username, password) =
-		transfer_target(&job);
+	let ssh_target = transfer_target(&job)?;
 	let remote = job.remote.clone();
 	tauri::async_runtime::spawn_blocking(move || {
-		let connection = obtain(
-			&connections,
-			&key,
-			&host,
-			port,
-			&username,
-			password.as_deref(),
-		)?;
+		let connection = obtain(&connections, &ssh_target)?;
 		let quoted = shell_quote(&remote);
 		let (df_output, _, _) = exec_output(
 			&connection.session,
@@ -361,17 +321,9 @@ pub async fn archive(
 	target: String,
 ) -> Result<(), String> {
 	let connections = pool.connections.clone();
-	let (key, host, port, username, password) =
-		transfer_target(&job);
+	let ssh_target = transfer_target(&job)?;
 	tauri::async_runtime::spawn_blocking(move || {
-		let connection = obtain(
-			&connections,
-			&key,
-			&host,
-			port,
-			&username,
-			password.as_deref(),
-		)?;
+		let connection = obtain(&connections, &ssh_target)?;
 		let command = match mode.as_str() {
 			"compress" => {
 				if paths.is_empty() {
@@ -476,17 +428,9 @@ pub async fn remote_fs(
 	target_dir: String,
 ) -> Result<(), String> {
 	let connections = pool.connections.clone();
-	let (key, host, port, username, password) =
-		transfer_target(&job);
+	let ssh_target = transfer_target(&job)?;
 	tauri::async_runtime::spawn_blocking(move || {
-		let connection = obtain(
-			&connections,
-			&key,
-			&host,
-			port,
-			&username,
-			password.as_deref(),
-		)?;
+		let connection = obtain(&connections, &ssh_target)?;
 		let operation = match mode.as_str() {
 			"copy" => "cp -a",
 			"move" => "mv",

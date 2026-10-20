@@ -64,12 +64,7 @@ export default function NetworkInfoDrawer({
   const fetchNet = useCallback(
     () =>
       aiRunCommand(
-        {
-          host: session.host,
-          port: session.port,
-          username: session.username,
-          password: session.password
-        },
+        session.execTarget,
         NET_SCRIPT
       ).then(result =>
         parseNetInfo(result.stdout)

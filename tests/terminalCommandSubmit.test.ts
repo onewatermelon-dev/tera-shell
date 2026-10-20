@@ -100,6 +100,16 @@ const sshSession = {
   password: ""
 } as never;
 
+/** 输入管线里 AI 命令要用的连接目标；这些用例只走 PTY 路径。 */
+const execTarget = {
+  host: "h",
+  port: 22,
+  username: "u",
+  password: null,
+  keyPath: "",
+  jump: []
+};
+
 describe("命令提交回调", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -117,6 +127,7 @@ describe("命令提交回调", () => {
       sshSession,
       {
         onError: vi.fn(),
+        execTarget,
         commandCompletion: false,
         isDisconnected: () => false,
         onCommandSubmitted: command =>
@@ -147,6 +158,7 @@ describe("命令提交回调", () => {
       sshSession,
       {
         onError: vi.fn(),
+        execTarget,
         commandCompletion: false,
         isDisconnected: () => false,
         onCommandSubmitted: c => submitted.push(c)
@@ -170,6 +182,7 @@ describe("命令提交回调", () => {
       sshSession,
       {
         onError: vi.fn(),
+        execTarget,
         commandCompletion: false,
         isDisconnected: () => false,
         onCommandSubmitted: c => submitted.push(c)
@@ -195,6 +208,7 @@ describe("命令提交回调", () => {
       sshSession,
       {
         onError: vi.fn(),
+        execTarget,
         commandCompletion: false,
         isDisconnected: () => false,
         onCommandSubmitted: c => submitted.push(c)
@@ -214,6 +228,7 @@ describe("命令提交回调", () => {
         sshSession,
         {
           onError: vi.fn(),
+          execTarget,
           commandCompletion: false,
           isDisconnected: () => false
         }
@@ -234,6 +249,7 @@ describe("命令提交回调", () => {
       sshSession,
       {
         onError: vi.fn(),
+        execTarget,
         commandCompletion: false,
         isDisconnected: () => true,
         onCommandSubmitted: c => submitted.push(c)

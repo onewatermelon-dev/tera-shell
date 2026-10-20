@@ -13,12 +13,20 @@ import {
 type Props = {
   session: SavedSession;
   onSubmit: (password: string) => void;
+  /**
+   * 不走密码，直接用私钥 / ssh-agent 连接。
+   *
+   * 纯密钥登录的会话不该被这个密码框卡死：设置里配了默认私钥，或
+   * 本机 agent 里已有可用身份时，用户需要一条显式的绕行路径。
+   */
+  onUseKey?: () => void;
   onCancel: () => void;
 };
 
 export default function PasswordDialog({
   session,
   onSubmit,
+  onUseKey,
   onCancel
 }: Props) {
   const [password, setPassword] = useState("");
@@ -75,6 +83,16 @@ export default function PasswordDialog({
                   系统凭据加密后保存在本机，
                   下次连接无需再次输入。
                 </Typography.Paragraph>
+                {onUseKey && (
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    size="sm"
+                    onPress={onUseKey}
+                  >
+                    使用私钥 / ssh-agent 连接
+                  </Button>
+                )}
               </Modal.Body>
               <Modal.Footer>
                 <Button

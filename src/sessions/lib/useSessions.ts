@@ -23,7 +23,7 @@ import {
  * 旧数据没有这两个字段，统一补成空串（= 未分组、无颜色），
  * 免得下游到处判undefined。
  */
-function loadSessions(): SavedSession[] {
+export function loadSessions(): SavedSession[] {
   try {
     const sessions = JSON.parse(
       readData(DataName.sessions) || "null"

@@ -23,9 +23,13 @@ type PasswordRequest = {
 type Props = {
   dialogs: ReturnType<typeof useAppDialogs>;
   groups: SessionGroup[];
+  /** 全部已保存会话：会话弹窗的跳板机候选 */
+  sessions: SavedSession[];
   t: Translator;
   passwordRequest: PasswordRequest | null;
   onSubmitPassword: (password: string) => void;
+  /** 纯密钥 / agent 登录：绕过密码框直接启动 */
+  onUseKeyAuth: () => void;
   onCancelPassword: () => void;
   macroOpen: boolean;
   editingMacro: TerminalMacro | null;
@@ -51,9 +55,11 @@ type Props = {
 export default function AppDialogs({
   dialogs,
   groups,
+  sessions,
   t,
   passwordRequest,
   onSubmitPassword,
+  onUseKeyAuth,
   onCancelPassword,
   macroOpen,
   editingMacro,
@@ -75,6 +81,7 @@ export default function AppDialogs({
         open={dialogs.dialogOpen}
         session={dialogs.editingSession}
         groups={groups}
+        sessions={sessions}
         initialGroupId={dialogs.newSessionGroup}
         onClose={() =>
           dialogs.setDialogOpen(false)
@@ -173,6 +180,7 @@ export default function AppDialogs({
           key={passwordRequest.session.id}
           session={passwordRequest.session}
           onSubmit={onSubmitPassword}
+          onUseKey={onUseKeyAuth}
           onCancel={onCancelPassword}
         />
       )}

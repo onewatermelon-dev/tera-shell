@@ -114,16 +114,8 @@ pub async fn edit_remote(
 	let stops = watchers.stops.clone();
 	let remote = job.remote.clone();
 	tauri::async_runtime::spawn_blocking(move || {
-		let (key, host, port, username, password) =
-			transfer_target(&job);
-		let connection = obtain(
-			&connections,
-			&key,
-			&host,
-			port,
-			&username,
-			password.as_deref(),
-		)?;
+		let ssh_target = transfer_target(&job)?;
+		let connection = obtain(&connections, &ssh_target)?;
 
 		// 1. 落到应用家目录据点的 tmp/：与日志同为本机运行产物，锚在
 		//    ~/.tera-shell 下（副本含远端文件内容，不该散落在系统 TEMP）
@@ -181,6 +173,8 @@ pub async fn edit_remote(
 		// 3. 后台盯着临时文件，保存即回传
 		let watch_remote = remote.clone();
 		let watch_connections = connections.clone();
+		// 连接目标要跟着监视线程走：跳板链与私钥都在里面
+		let watch_target = ssh_target.clone();
 		let local_path: PathBuf = local.clone();
 		thread::spawn(move || {
 			let mut last = modified(&local_path);
@@ -195,14 +189,7 @@ pub async fn edit_remote(
 				}
 				last = current;
 				// 编辑器可能中途重写文件，每次都重新取一次连接
-				match obtain(
-					&watch_connections,
-					&key,
-					&host,
-					port,
-					&username,
-					password.as_deref(),
-				) {
+				match obtain(&watch_connections, &watch_target) {
 					Ok(connection) => {
 						match upload_back(
 							&connection,

@@ -13,6 +13,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Terminal } from "@xterm/xterm";
 import { aiRunCommand } from "./aiExec";
+import { execTargetOf } from "@/sessions/lib/sshTarget";
 import type { OpenSession } from "../session/terminalTypes";
 import {
   parseWrappedOutput,
@@ -122,12 +123,7 @@ export async function executeToolCard(
       // 包装命令：先取主机名与当前目录，用于合成终端风格的提示符行，
       // 让执行结果与终端里看到的形态一致（含 `user@host:cwd# 命令`）
       const result = await aiRunCommand(
-        {
-          host: session?.host ?? "",
-          port: session?.port,
-          username: session?.username,
-          password: session?.password
-        },
+        execTargetOf(session),
         commandInDirectory(
           directory,
           `hostname; pwd; echo ---; ${call.command}`

@@ -20,6 +20,7 @@ fn ssh_config(key_path: Option<&str>, use_ssh_config: Option<bool>) -> Config {
 		key_path: key_path.map(Into::into),
 		use_ssh_config,
 		host_key_policy: None,
+		jump: None,
 	}
 }
 
@@ -115,6 +116,38 @@ fn 密钥策略缺省与非法值退回默认档() {
 		assert!(
 			joined.contains(&"StrictHostKeyChecking=accept-new"),
 			"policy={policy:?} 应退回 accept-new"
+		);
+	}
+}
+
+#[test]
+fn 跳板链拼跳转参数且在目标之前() {
+	let mut config = ssh_config(None, None);
+	config.jump = Some("ops@10.0.0.1,root@10.0.0.2:2222".into());
+	let command = command(&config).unwrap();
+	let joined: Vec<&str> = command
+		.get_argv()
+		.iter()
+		.filter_map(|arg| arg.to_str())
+		.collect();
+	let jump_at = joined.iter().position(|arg| *arg == "-J").unwrap();
+	assert_eq!(joined[jump_at + 1], "ops@10.0.0.1,root@10.0.0.2:2222");
+	let target_at = joined.iter().position(|arg| *arg == "root@example.com").unwrap();
+	assert!(
+		jump_at < target_at,
+		"-J 必须在目标之前，否则 ssh 把它当目标后的参数拒绝"
+	);
+}
+
+#[test]
+fn 无跳板或空白规格不拼跳转参数() {
+	for jump in [None, Some(""), Some("   ")] {
+		let mut config = ssh_config(None, None);
+		config.jump = jump.map(Into::into);
+		let command = command(&config).unwrap();
+		assert!(
+			!command.get_argv().iter().any(|arg| arg == "-J"),
+			"jump={jump:?} 时不应出现 -J"
 		);
 	}
 }

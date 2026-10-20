@@ -7,11 +7,11 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
 import {
-  resolvePassword,
   type PaneEntry,
   type PaneListing,
   type RemoteDiskUsage
 } from "@/sftp/lib/sftpUtils";
+import { buildRemoteConnection } from "@/sftp/lib/sftpConnection";
 
 /**
  * 两侧目录的浏览状态与导航动作。
@@ -79,18 +79,14 @@ export function useSftpNavigation(
       setRemoteError("");
       setRemoteBusy(true);
       try {
-        // 密码解成明文过一次 IPC，后端只在内存里用，不写日志/落盘
-        const password = target.password
-          ? await resolvePassword(target.password)
-          : undefined;
+        // 跳板链 / 私钥 / 解密后的密码统一由 buildRemoteConnection 组装
+        const connection =
+          await buildRemoteConnection(target);
         const listing = await invoke<PaneListing>(
           "sftp_list",
           {
             request: {
-              host: target.host,
-              port: target.port,
-              username: target.username,
-              password,
+              ...connection,
               path: path ?? null,
               refresh
             }
@@ -104,10 +100,7 @@ export function useSftpNavigation(
           "sftp_disk_usage",
           {
             job: {
-              host: target.host,
-              port: target.port,
-              username: target.username,
-              password,
+              ...connection,
               local: "",
               remote: listing.path
             }
