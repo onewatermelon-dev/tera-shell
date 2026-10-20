@@ -159,6 +159,8 @@ export function useTerminalGlobalListeners(options: {
             session.completion.observeOutput(
               payload.data
             );
+            // OSC 133 标记由终端自己的 parser 回调接住（见 shellIntegration），
+            // 写进终端即可 —— 不需要在这里切分流
             session.terminal.write(payload.data);
           }
         ),

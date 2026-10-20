@@ -9,11 +9,11 @@
  * 预测源一样）；② 没敲空格时用内置常用命令字典补首个词。
  * 历史在回车时记录，随应用数据落盘（`command_history.json`）。
  *
- * 客户端无法确知"现在是否在提示符处"，用两个启发式兜底：
+ * 「现在是否在提示符处」与「提示符在哪儿结束」两个问题，有 shell 集成
+ * （OSC 133）时由远端钩子的 B/C 标记直接回答；装不上钩子的会话退回
+ * 两个启发式：
  * - 输出里出现备用屏切换序列（vim/top 等全屏应用）期间不出建议；
  * - 只有光标停在输入内容末尾、且 stripPrompt 能剥出命令时才弹。
- * ponytail: 没有 shell 集成（OSC 133）时以上启发式偶有误弹/漏弹，
- * 接入远端 shell 钩子后可整段替换。
  */
 
 import type {
@@ -27,6 +27,7 @@ import {
   writeData
 } from "@/settings/lib/storage";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
+import type { ShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
 
 /** 历史上限：超出后丢最旧的（和 bash HISTSIZE 一个思路）。 */
 const HISTORY_LIMIT = 500;
@@ -228,6 +229,11 @@ export interface CompletionHooks {
   isInputBlocked(): boolean;
   /** 挂载时的开关初值（设置里的命令补全开关），缺省开。 */
   enabled?: boolean;
+  /**
+   * shell 集成（OSC 133）。可用时「是否在提示符处」与输入起点都由
+   * 远端钩子给出，不再需要 stripPrompt 猜提示符。
+   */
+  integration?: ShellIntegration;
 }
 
 /** 补全控制器：由会话在输出与键盘事件里驱动。 */
@@ -327,6 +333,31 @@ export function attachCommandCompletion(
   };
 
   /**
+   * 取当前输入行（剥掉提示符之后的命令文本）。
+   *
+   * 有 shell 集成时用 B 标记定位输入起点 —— 提示符长什么样、几行、
+   * 带不带颜色都不影响；且 `atPrompt` 为假（命令正在跑、全屏应用里）
+   * 直接返回空串，比猜可靠。没有集成时退回 stripPrompt 的老路子。
+   */
+  const currentInput = (): string => {
+    const integration = hooks.integration;
+    if (integration?.available) {
+      return integration.atPrompt
+        ? integration.readInput()
+        : "";
+    }
+    const buffer = terminal.buffer.active;
+    const line = buffer.getLine(
+      buffer.baseY + buffer.cursorY
+    );
+    return stripPrompt(
+      (
+        line?.translateToString(false) ?? ""
+      ).trimEnd()
+    );
+  };
+
+  /**
    * 重算建议：从缓冲区读光标行 → 剥提示符得当前输入 → 匹配建议。
    * 任何一步不成立（行中改字、空输入、备用屏、输入封锁）都收起。
    */
@@ -355,7 +386,7 @@ export function attachCommandCompletion(
       hideGhost();
       return;
     }
-    const input = stripPrompt(visible);
+    const input = currentInput();
     if (!input || dismissedFor === input) {
       suggestion = null;
       hideGhost();
@@ -405,7 +436,7 @@ export function attachCommandCompletion(
     ).trimEnd();
     if (buffer.cursorX < visible.length)
       return false;
-    const input = stripPrompt(visible);
+    const input = currentInput();
     // 键入与建议之间有回显延迟，输入若已对不上就放弃接管
     if (!input || !suggestion.startsWith(input)) {
       suggestion = null;

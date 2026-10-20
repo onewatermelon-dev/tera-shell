@@ -27,6 +27,7 @@ import {
 import type { OpenSession } from "./terminalTypes";
 import type { PaneState } from "./paneGrid";
 import { waitForStableSize } from "./ptyResize";
+import { ensureShellIntegration } from "@/terminal/lib/shellIntegration/deploy";
 
 export function useTerminalSessions(options: {
   /** 终端实例组装（门面持有：依赖 appearance/搜索/菜单等） */
@@ -122,6 +123,18 @@ export function useTerminalSessions(options: {
           password: session.password ?? null
         }
       );
+      // 远端 shell 集成（OSC 133）的钩子：**尽早发起、绝不等待**。
+      //
+      // 钩子只有在本条连接握手之前装好才生效，而部署要额外走一次 ssh2
+      // 连接。抢在 createTerminal / 等尺寸（几百毫秒）前面发起，网络快时
+      // 能赶上；赶不上就下次连接生效 —— 所有消费方都有启发式兜底。
+      //
+      // ⚠️ 绝不能 await：终端能用是第一位的，部署路径（认证、hostkey、
+      // 超时）任何一处出问题都不该让用户对着空白终端干等。
+      const shellIntegration =
+        session.kind === "ssh"
+          ? ensureShellIntegration(execTarget)
+          : Promise.resolve(false);
       const current = createTerminal(
         session,
         sourceSessionId,
@@ -169,6 +182,27 @@ export function useTerminalSessions(options: {
       // 稳定后再 fit 一次：下面交给后端的行列数必须是最终值，
       // 否则 PTY 一生下来就与实际不符，紧接着的 resize 又要重绘
       current.fit.fit();
+      // 部署**完全不参与建连时序**：只发起，不等待。
+      //
+      // 理由：终端能用是第一位的。远端钩子只有在本条连接握手之前装好才
+      // 生效，而部署要额外走一次 ssh2 连接 —— 等它就意味着用户对着空白
+      // 终端干等，一旦部署路径（认证、hostkey、超时）有任何问题，终端就
+      // 起不来。抢在 terminal_start 前面发起，网络快时能赶上；赶不上就
+      // 下次连接生效，这中间所有消费方都有启发式兜底。
+      void shellIntegration
+        .then(installed => {
+          console.info(
+            `[shell-integration] 会话 ${session.id} 部署${
+              installed ? "完成" : "跳过/失败"
+            }（若晚于 shell 启动，下次连接生效）`
+          );
+        })
+        .catch(reason => {
+          console.warn(
+            "[shell-integration] 部署流程异常，已忽略",
+            reason
+          );
+        });
       try {
         await invoke("terminal_start", {
           config: {

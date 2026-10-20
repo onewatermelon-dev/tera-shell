@@ -7,13 +7,15 @@
  * 恰恰是用户最不需要提醒的时刻；切换出去忘了回来时，它才真正有用。
  * 代价是「守着看」就收不到 —— 但那种情况下用户本来就知道结果。
  *
- * ## 为什么长命令用「静默判定」而不是 shell 集成
+ * ## 为什么长命令优先用 shell 集成、静默判定只做兜底
  *
- * 精确的命令边界需要 OSC 133（shell integration），代价是用户得在
- * bash/zsh 里 source 一段脚本、改 `.bashrc`。本项目是 SSH 客户端，
- * 远端环境千差万别，为一个通知功能要求用户改 shell 配置不划算。
+ * 精确的命令边界需要 OSC 133（shell integration）。早先的判断是「要求
+ * 用户改 .bashrc 不划算」—— 但 tera-shell 现在会**自动部署**远端钩子
+ * （见 terminal/lib/shellIntegration），用户不用动手：装好之后 `D` 标记
+ * 给出权威结束点与退出码，连 0 输出的命令都能准确收尾。
  *
- * 折中：按回车开始计时，之后**终端静默一段时间视为命令结束**。
+ * 静默判定保留为兜底：没装成钩子的会话（home 只读、非 bash/zsh、远端
+ * 主动禁用）仍按「回车开始 → 终端静默一段时间视为结束」工作。
  * 绝大多数命令（编译、npm install、git clone）跑完后会立刻吐出提示符，
  * 静默判定与真实边界几乎一致；少数会静默等待输入的命令
  * （如 `less`、确认提示）会提前判结束 —— 代价只是通知早了几秒，
@@ -182,6 +184,28 @@ export class CommandTimer {
     this.running = false;
     this.startedAt = 0;
     this.sawOutput = false;
+  }
+
+  /**
+   * 由外部证据（OSC 133 的 `D` 标记）确认命令已结束，立即收尾。
+   *
+   * 与静默判定的关键差别：**不受「必须先有输出」限制**。静默判定拿
+   * `sleep 60`、等待输入的脚本没辙（一直不出声就不敢判结束），而 `D`
+   * 是远端 shell 亲口说的「命令进程已退出」，哪怕是 0 输出的命令也成立。
+   *
+   * 没有在监控中的命令时是空操作（例如用户在提示符直接按了回车）。
+   */
+  finishNow(): void {
+    this.cancelSilence();
+    if (!this.running) return;
+    const elapsed = Date.now() - this.startedAt;
+    this.running = false;
+    this.startedAt = 0;
+    this.sawOutput = false;
+    console.debug(
+      `[notify] 命令结束（D 标记，${elapsed}ms）`
+    );
+    this.onFinish(elapsed);
   }
 
   private finish = (): void => {

@@ -20,6 +20,7 @@ import {
   VIM_SCHEME_SETUP
 } from "@/terminal/lib/catView";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
+import type { ShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
 import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
 import {
   effectiveShortcuts,
@@ -76,6 +77,11 @@ export function attachTerminalInput(
     onCommandSubmitted?: (
       command: string
     ) => void;
+    /**
+     * shell 集成（OSC 133）：可用时输入起点与命令文本都由远端钩子给出，
+     * 不再用 stripPrompt 猜提示符。见 terminal/lib/shellIntegration。
+     */
+    integration?: ShellIntegration;
   }
 ) {
   const {
@@ -83,7 +89,8 @@ export function attachTerminalInput(
     execTarget,
     commandCompletion,
     isDisconnected,
-    onCommandSubmitted
+    onCommandSubmitted,
+    integration
   } = options;
   // 解释流程进行中吞掉键盘输入：期间终端坐标由流程接管，
   // 敲字会被远端回显进正在画的解释块里造成叠加
@@ -104,7 +111,8 @@ export function attachTerminalInput(
       },
       isInputBlocked: () =>
         isDisconnected() || explaining || viewing,
-      enabled: commandCompletion
+      enabled: commandCompletion,
+      integration
     }
   );
   // pts 注入与 exec 共用：SSH 会话的 exec 目标 + 找该用户最新 pts 的
@@ -132,10 +140,21 @@ export function attachTerminalInput(
       const line = buffer.getLine(
         buffer.baseY + buffer.cursorY
       );
-      command =
-        stripPrompt(
-          line?.translateToString(true) ?? ""
-        ) || null;
+      // 命令文本三个来源（可靠性从高到低）：
+      // - 已过 C 标记：直接用 C 那一刻抓到的命令行（含 Tab 补全展开）；
+      // - 停在提示符处：从 B 标记的输入起点读到光标 —— 提示符长什么样
+      //   都不影响，也不会把彩色/多行 PS1 啃掉一半；
+      // - 没有集成：退回 stripPrompt（拿 `> $ #` 猜提示符结尾）。
+      const inputText = integration?.available
+        ? integration.atPrompt
+          ? integration.readInput()
+          : (integration.lastCommand() ?? "")
+        : stripPrompt(
+            line?.translateToString(true) ?? ""
+          );
+      command = inputText.trim()
+        ? inputText
+        : null;
       // 快捷命令解释：SSH 会话里「命令/?」回车 → 本地拦截 Enter、
       // Ctrl+U 清掉远端输入缓冲（不执行），解释攒完后从远端写进
       // 本会话的 pts —— 输出流经 ConPTY 进它自己的屏幕缓冲，
@@ -147,8 +166,14 @@ export function attachTerminalInput(
       const cut = rawLine.lastIndexOf(trimmed);
       const prompt =
         cut > 0 ? rawLine.slice(0, cut) : "";
-      // 记录命令历史供补全建议（/? 解释不是要执行的命令，不入历史）
-      if (command && !trimmed.endsWith("/?")) {
+      // 记录命令历史供补全建议（/? 解释不是要执行的命令，不入历史）。
+      // 有 shell 集成时改在 C 标记处记录：那时的文本含 Tab 补全展开后的
+      // 最终形态，比回车瞬间的缓冲区更准（见 terminalCreate 的接线）。
+      if (
+        command &&
+        !trimmed.endsWith("/?") &&
+        !integration?.available
+      ) {
         completion.pushHistory(command);
       }
       if (
@@ -281,6 +306,9 @@ export function attachTerminalInput(
                 )
                 .finally(() => {
                   explaining = false;
+                  // 注入的提示符是纯文本、没有 A/B 标记，B 记下的输入
+                  // 起点已经对不上光标了 —— 丢掉它，等远端下一次 B 重定位
+                  integration?.reset();
                 });
             });
         }
@@ -379,6 +407,9 @@ export function attachTerminalInput(
             })
             .finally(() => {
               viewing = false;
+              // 同上：cat 拦截往屏幕上注入了代码与假提示符，
+              // 输入起点已失效，等远端下一次 B 重新定位
+              integration?.reset();
             });
           return;
         }

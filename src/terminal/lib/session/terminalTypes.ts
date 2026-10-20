@@ -4,6 +4,7 @@ import type { SearchAddon } from "@xterm/addon-search";
 import type { SavedSession } from "@/sessions/lib/session";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
 import type { CompletionController } from "@/terminal/lib/commandCompletion";
+import type { ShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
 
 /** 已打开的终端会话：会话定义 + 运行时实例与挂载状态。 */
 export type OpenSession = SavedSession & {
@@ -12,6 +13,11 @@ export type OpenSession = SavedSession & {
   search: SearchAddon;
   /** 命令补全控制器（PSReadLine 内联预测风格，见 commandCompletion） */
   completion: CompletionController;
+  /**
+   * shell 集成（OSC 133）：远端钩子的命令边界。
+   * `available` 为 false 时（没装成钩子）各处自动退回启发式。
+   */
+  integration: ShellIntegration;
   element: HTMLDivElement;
   /** 是否已经 open() 到 DOM（xterm 只允许打开一次） */
   mounted: boolean;

@@ -21,6 +21,8 @@ import { setWebglEnabled } from "@/terminal/lib/webglRenderer";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { attachFontZoom } from "@/terminal/lib/fontZoom";
 import { CommandTimer } from "@/lib/notify";
+import type { CompletionController } from "@/terminal/lib/commandCompletion";
+import { attachShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
 import {
   resolveColorScheme,
   toXtermTheme
@@ -146,9 +148,8 @@ export function createTerminalInstance(
   );
   registerTerminalLinks(terminal, onError);
   renderTextOnlySelection(terminal, element);
-  // 长命令计时器：命令提交时开始，终端静默 SILENCE_WINDOW_MS 视为
-  // 结束。挂 onWriteParsed 而不是改三处 terminal.write —— 它覆盖
-  // 所有写入路径（后端输出、重连补写、pts 注入），漏一条就会误判
+  // 长命令计时器：命令提交时开始。结束点有两个来源，见下面的
+  // onWriteParsed 注册与 shell 集成的 D 标记。
   const commandTimer = new CommandTimer(
     elapsedMs =>
       onLongCommand?.(
@@ -156,11 +157,36 @@ export function createTerminalInstance(
         elapsedMs
       )
   );
-  terminal.onWriteParsed(() =>
-    commandTimer.poke()
+  // shell 集成（OSC 133）：远端钩子给出的命令边界比启发式准得多 ——
+  // 输入起点（B）、命令文本（C）、精确结束与退出码（D）全都用它。
+  // 装不上钩子的会话 available 恒为 false，各处自动退回老路径。
+  //
+  // ⚠️ 回调里用到 completion，而它要等 attachTerminalInput 返回才有：
+  // 标记最早也要等远端第一批输出才到，那时赋值已经完成，用闭包推迟读取。
+  let completion: CompletionController | null =
+    null;
+  const integration = attachShellIntegration(
+    terminal,
+    {
+      onCommandStart: command => {
+        if (!command) return;
+        // C 标记是命令文本最可靠的来源（含 Tab 补全展开后的最终形态），
+        // 长命令通知的正文与补全历史都用它
+        lastCommand.current = command;
+        completion?.pushHistory(command);
+      },
+      onCommandEnd: () => commandTimer.finishNow()
+    }
   );
+  // 静默判定只在**没有** shell 集成时兜底。有集成还照旧 poke 的话，
+  // `npm install` 中途一段超过 1.5 秒的无输出间隙就会被判成「命令结束」，
+  // 弹出一条还没跑完的通知 —— 比没有通知更糟。集成可用时一律等 D 标记。
+  terminal.onWriteParsed(() => {
+    if (integration.available) return;
+    commandTimer.poke();
+  });
   // 输入管线：补全 + /? 解释 + vim 配色 + cat 高亮（见 terminalInput）
-  const { completion } = attachTerminalInput(
+  const input = attachTerminalInput(
     terminal,
     session,
     {
@@ -169,18 +195,20 @@ export function createTerminalInstance(
       commandCompletion:
         appearance.commandCompletion,
       isDisconnected,
+      integration,
       onCommandSubmitted: command => {
         lastCommand.current = command;
         commandTimer.start();
       }
     }
   );
+  completion = input.completion;
   terminal.attachCustomKeyEventHandler(event => {
     // 补全接管（ghost 显示中 →/Ctrl+→）：放在 ctrl 分支前面，
     // Ctrl+→ 才不会被当普通按键放行
     if (
       event.type === "keydown" &&
-      completion.consumeKeydown(event)
+      input.completion.consumeKeydown(event)
     ) {
       event.preventDefault();
       return false;
@@ -242,7 +270,8 @@ export function createTerminalInstance(
     terminal,
     fit,
     search: searchAddon,
-    completion,
+    completion: input.completion,
+    integration,
     element,
     mounted: false,
     sourceSessionId,

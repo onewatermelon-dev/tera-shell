@@ -24,7 +24,12 @@ export const DataName = {
   commandHistory: "command_history",
   aiPrefs: "ai_prefs",
   /** SFTP 目录书签（按栏与主机维度收藏），见 sftp/lib/sftpBookmarks.ts */
-  sftpBookmarks: "sftp_bookmarks"
+  sftpBookmarks: "sftp_bookmarks",
+  /**
+   * 远端 shell 集成（OSC 133）的部署记录：`user@host:port` → 钩子版本。
+   * 见 terminal/lib/shellIntegration/deploy.ts
+   */
+  shellIntegration: "shell_integration"
 } as const;
 
 /**
