@@ -112,6 +112,10 @@ pub struct ExecTarget {
 	jump: Vec<JumpHop>,
 	#[serde(default)]
 	key_path: Option<String>,
+	/// 主机密钥校验策略（设置页 `hostKeyPolicy`）：accept-new / ask /
+	/// strict。缺省 accept-new —— 与终端 ssh 的缺省行为一致。
+	#[serde(default)]
+	host_key_policy: Option<String>,
 	/// 要执行的命令，在远端登录 shell 下运行（等价 `shell -c "命令"`）。
 	command: String,
 	/// 可选：喂给命令 stdin 的内容（exec 通道数据流，不受 channel request
@@ -224,7 +228,8 @@ fn execute(
 		target.key_path.as_deref(),
 		target.jump.clone(),
 	)
-	.map_err(ExecError::Failed)?;
+	.map_err(ExecError::Failed)?
+	.with_host_key_policy(target.host_key_policy.as_deref());
 	let command = target.command;
 	if command.trim().is_empty() {
 		return Err(ExecError::Failed("命令为空".into()));

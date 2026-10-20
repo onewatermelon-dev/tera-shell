@@ -20,8 +20,18 @@
 //! libssh2 的同一个 `Session` 不能让两个线程同时阻塞读写 —— 一个线程堵在
 //! `channel_read` 上会一直占着会话锁，另一个方向的写就永远发不出去。
 //!
-//! ⚠️ 本轮没有做 known_hosts 校验：与既有 SFTP / AI 通道一致，先保持
-//! 行为不变；主机密钥校验应作为独立改动补上。
+//! ## 主机密钥校验
+//!
+//! 握手之后、认证之前统一走 `hostkey::verify_host_key`（见 `hostkey`
+//! 模块的说明）。跳板链上**每一跳**都要验：只验目标不验跳板，等于把
+//! 中间人挡在最后一米、放开前面整条路。
+//!
+//! 校验顺序是「握手 → 验指纹 → 认证」，握手阶段不发送任何凭据，所以
+//! 指纹不对时密码与私钥签名都还没出过本机。
+
+mod hostkey;
+
+pub use hostkey::HostKeyPolicy;
 
 use ssh2::{Channel, KeyboardInteractivePrompt, Prompt, Session};
 use std::{
@@ -105,6 +115,12 @@ pub struct SshTarget {
 	pub password: Option<String>,
 	pub key_path: Option<String>,
 	pub jump: Vec<JumpHop>,
+	/// 主机密钥校验策略（设置页 `hostKeyPolicy`）。
+	///
+	/// 缺省 `accept-new`，与终端 `ssh` 的缺省行为一致。由
+	/// `with_host_key_policy` 设置，不参与 `key()` —— 同一个已验证目标
+	/// 换策略时复用连接是安全的。
+	pub host_key_policy: HostKeyPolicy,
 }
 
 impl SshTarget {
@@ -140,7 +156,20 @@ impl SshTarget {
 			password: normalize_password(password),
 			key_path: normalize_key_path(key_path),
 			jump,
+			host_key_policy: HostKeyPolicy::default(),
 		})
+	}
+
+	/// 设置主机密钥校验策略（设置页 `hostKeyPolicy`）。
+	///
+	/// 缺省 `accept-new`；未知值也回落到它，避免前端新增档位把旧后端
+	/// 变成「全部拒绝」。构造完再链式设置，`new` 的签名保持不变。
+	pub fn with_host_key_policy(
+		mut self,
+		policy: Option<&str>
+	) -> Self {
+		self.host_key_policy = HostKeyPolicy::parse(policy);
+		self
 	}
 
 	/// 连接池缓存键：目标 + 跳板链 + 私钥路径。
@@ -299,6 +328,14 @@ pub fn establish_session(
 						)
 					},
 				)?;
+			// 握手已完成、认证尚未开始：此刻验指纹，凭据还没出过本机
+			hostkey::verify_host_key(
+				&session,
+				&target.host,
+				target.port,
+				target.host_key_policy,
+				"目标主机",
+			)?;
 			authenticate(
 				&session,
 				&target.host,
@@ -322,6 +359,13 @@ pub fn establish_session(
 					first.port()
 				)
 			})?;
+			hostkey::verify_host_key(
+				&session,
+				first.host(),
+				first.port(),
+				target.host_key_policy,
+				"跳板机",
+			)?;
 			authenticate(
 				&session,
 				first.host(),
@@ -346,6 +390,14 @@ pub fn establish_session(
 					)
 				})?;
 				let next = session_over(stream)?;
+				// 每一跳都验：只验目标等于放开整条跳板链
+				hostkey::verify_host_key(
+					&next,
+					hop.host(),
+					hop.port(),
+					target.host_key_policy,
+					"跳板机",
+				)?;
 				authenticate(
 					&next,
 					hop.host(),
@@ -372,6 +424,13 @@ pub fn establish_session(
 		)
 	})?;
 	let target_session = session_over(stream)?;
+	hostkey::verify_host_key(
+		&target_session,
+		&target.host,
+		target.port,
+		target.host_key_policy,
+		"目标主机",
+	)?;
 	authenticate(
 		&target_session,
 		&target.host,

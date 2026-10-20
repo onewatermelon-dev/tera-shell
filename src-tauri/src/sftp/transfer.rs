@@ -37,6 +37,9 @@ pub struct TransferJob {
 	/// 设置里的默认私钥路径（与终端 `-i` 一致）。
 	#[serde(default)]
 	pub(super) key_path: Option<String>,
+	/// 主机密钥校验策略（设置页 `hostKeyPolicy`）。缺省 accept-new。
+	#[serde(default)]
+	pub(super) host_key_policy: Option<String>,
 	/// 本地文件路径（上传时为源文件，下载时为目标文件）
 	pub(super) local: String,
 	/// 远程文件路径（上传时为目标文件，下载时为源文件）
@@ -174,14 +177,15 @@ fn emit_transfer(
 pub(crate) fn transfer_target(
 	job: &TransferJob,
 ) -> Result<SshTarget, String> {
-	SshTarget::new(
+	Ok(SshTarget::new(
 		&job.host,
 		job.port,
 		job.username.as_deref(),
 		job.password.as_deref(),
 		job.key_path.as_deref(),
 		job.jump.clone(),
-	)
+	)?
+	.with_host_key_policy(job.host_key_policy.as_deref()))
 }
 
 /// 单个传输任务的控制开关：前端通过命令翻转，传输循环每块检查一次。

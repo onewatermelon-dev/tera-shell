@@ -13,7 +13,10 @@
  */
 import { resolveJumpPath } from "@/sessions/lib/jumpHost";
 import type { SavedSession } from "@/sessions/lib/session";
-import { loadSettings } from "@/settings/lib/settings";
+import {
+  loadSettings,
+  type HostKeyPolicy
+} from "@/settings/lib/settings";
 import { resolvePassword } from "@/sftp/lib/sftpUtils";
 
 /** 一跳跳板机的连接参数（离客户端最近的一跳在前）。 */
@@ -36,6 +39,14 @@ export type SshTarget = {
   keyPath: string;
   /** 跳板链；空数组表示直连。 */
   jump: JumpHop[];
+  /**
+   * 主机密钥校验策略。
+   *
+   * 后端按它决定「没见过的主机」是记录指纹后继续（accept-new）、直接
+   * 拒绝（ask / strict），还是必须匹配已知条目。与终端 `ssh` 用的是
+   * 同一份 `~/.ssh/known_hosts`，同一档策略。
+   */
+  hostKeyPolicy: HostKeyPolicy;
 };
 
 /** 把会话里存的密码还原成明文（默认实现，测试可注入替身）。 */
@@ -77,8 +88,9 @@ export async function buildSshTarget(
 ): Promise<SshTarget> {
   const secret =
     options.secret ?? resolvePassword;
+  const settings = loadSettings();
   const keyPath = (
-    options.keyPath ?? loadSettings().sshKeyPath
+    options.keyPath ?? settings.sshKeyPath
   ).trim();
   const hops =
     resolveJumpPath(from, sessions) ?? [];
@@ -103,7 +115,10 @@ export async function buildSshTarget(
           ? await secret(from.password)
           : null,
     keyPath,
-    jump
+    jump,
+    // 与终端同源：设置页改档位后，下一次建连即生效（已缓存的连接
+    // 不重新校验 —— 它们本来就验证过了）
+    hostKeyPolicy: settings.hostKeyPolicy
   };
 }
 

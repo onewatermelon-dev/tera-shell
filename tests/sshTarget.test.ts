@@ -57,7 +57,10 @@ describe("SSH 连接目标", () => {
       username: "root",
       password: null,
       keyPath: "/home/ops/.ssh/id_ed25519",
-      jump: []
+      jump: [],
+      // 没存过设置时取默认档：与终端 ssh 缺省一致，SFTP/AI
+      // 不会因为缺这个字段而变成「拒绝一切新主机」
+      hostKeyPolicy: "accept-new"
     });
     expect(secret).not.toHaveBeenCalled();
   });
@@ -149,7 +152,8 @@ describe("execTargetOf", () => {
     username: "u",
     password: null,
     keyPath: "",
-    jump: []
+    jump: [],
+    hostKeyPolicy: "accept-new" as const
   };
 
   it("取已打开会话上的目标", () => {

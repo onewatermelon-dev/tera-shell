@@ -129,3 +129,61 @@ fn jump_hop_defaults_match_target_defaults() {
 	assert_eq!(hop.username(), "root");
 	assert_eq!(hop.password(), None);
 }
+
+#[test]
+fn host_key_policy_defaults_to_accept_new() {
+	// 与终端 ssh 的缺省一致：不传策略时按「新主机自动记住」处理，
+	// 否则升级后所有没配过的会话都会连不上
+	let target = SshTarget::new(
+		"web-01",
+		None,
+		None,
+		None,
+		None,
+		Vec::new(),
+	)
+	.unwrap();
+	assert_eq!(
+		target.host_key_policy,
+		HostKeyPolicy::AcceptNew
+	);
+}
+
+#[test]
+fn host_key_policy_can_be_set_after_construction() {
+	let target = SshTarget::new(
+		"web-01",
+		None,
+		None,
+		None,
+		None,
+		Vec::new(),
+	)
+	.unwrap()
+	.with_host_key_policy(Some("strict"));
+	assert_eq!(target.host_key_policy, HostKeyPolicy::Strict);
+}
+
+#[test]
+fn host_key_policy_is_unrelated_to_pool_key() {
+	// 策略不进连接池 key：同一个已验证的目标换档位不该重连
+	let base = || {
+		SshTarget::new(
+			"web-01",
+			None,
+			None,
+			None,
+			None,
+			Vec::new(),
+		)
+		.unwrap()
+	};
+	assert_eq!(
+		base()
+			.with_host_key_policy(Some("strict"))
+			.key(),
+		base()
+			.with_host_key_policy(Some("accept-new"))
+			.key()
+	);
+}

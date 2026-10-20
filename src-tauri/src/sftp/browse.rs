@@ -40,6 +40,9 @@ pub struct SftpRequest {
 	/// 设置里的默认私钥路径（与终端 `-i` 一致）。
 	#[serde(default)]
 	key_path: Option<String>,
+	/// 主机密钥校验策略（设置页 `hostKeyPolicy`）。缺省 accept-new。
+	#[serde(default)]
+	host_key_policy: Option<String>,
 	/// 要列出的远程目录；留空表示会话默认目录。
 	path: Option<String>,
 	/// 手动刷新：跳过目录缓存，强制重新读取。
@@ -116,7 +119,8 @@ fn browse(
 		request.password.as_deref(),
 		request.key_path.as_deref(),
 		request.jump.clone(),
-	)?;
+	)?
+	.with_host_key_policy(request.host_key_policy.as_deref());
 	let remote = request
 		.path
 		.as_deref()

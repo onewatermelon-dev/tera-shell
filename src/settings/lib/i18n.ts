@@ -688,7 +688,7 @@ const zhCN = {
     "让 ssh 读取用户配置里的 Host 别名、ProxyJump 等设置；关掉后一律直连主机地址。",
   "settings.hostKey.title": "主机密钥策略",
   "settings.hostKey.desc":
-    "SSH 首次连接时如何处理服务器指纹：新主机自动记住后，指纹再变化会拒绝连接并告警。",
+    "SSH 首次连接时如何处理服务器指纹：新主机自动记住后，指纹再变化会拒绝连接并告警。终端、SFTP 与 AI 命令共用同一份 known_hosts；「每次询问」只有在终端里能当场确认，SFTP 与 AI 通道遇到新主机会拒绝并提示先在终端连接一次。",
   "settings.hostKey.acceptNew": "新主机自动记住",
   "settings.hostKey.ask": "每次询问",
   "settings.hostKey.strict": "仅限已知主机",
@@ -1395,7 +1395,7 @@ const enUS: Record<MessageKey, string> = {
     "Let ssh honor Host aliases, ProxyJump and other settings from your user config; turn off to always connect to the host address directly.",
   "settings.hostKey.title": "Host key policy",
   "settings.hostKey.desc":
-    "How SSH handles server fingerprints on first connect. Once a new host is pinned, a changed fingerprint is rejected with a warning.",
+    "How SSH handles server fingerprints on first connect. Once a new host is pinned, a changed fingerprint is rejected with a warning. Terminal, SFTP and AI commands share the same known_hosts; the ask option can only prompt inside the terminal, so the SFTP and AI channels reject unknown hosts and ask you to connect once from the terminal.",
   "settings.hostKey.acceptNew": "Trust new hosts",
   "settings.hostKey.ask": "Ask every time",
   "settings.hostKey.strict": "Known hosts only",

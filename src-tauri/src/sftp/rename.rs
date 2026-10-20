@@ -23,6 +23,9 @@ pub struct RenameJob {
 	/// 设置里的默认私钥路径（与终端 `-i` 一致）。
 	#[serde(default)]
 	key_path: Option<String>,
+	/// 主机密钥校验策略（设置页 `hostKeyPolicy`）。缺省 accept-new。
+	#[serde(default)]
+	host_key_policy: Option<String>,
 	/// 原路径
 	from: String,
 	/// 新路径
@@ -48,7 +51,10 @@ pub async fn rename_remote(
 			request.password.as_deref(),
 			request.key_path.as_deref(),
 			request.jump.clone(),
-		)?;
+		)?
+		.with_host_key_policy(
+			request.host_key_policy.as_deref(),
+		);
 		let connection = obtain(&connections, &target)?;
 		// None = 不覆盖同名目标，让"已存在"变成一条明确的错误
 		connection

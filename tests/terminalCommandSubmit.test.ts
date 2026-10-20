@@ -107,7 +107,8 @@ const execTarget = {
   username: "u",
   password: null,
   keyPath: "",
-  jump: []
+  jump: [],
+  hostKeyPolicy: "accept-new" as const
 };
 
 describe("命令提交回调", () => {
