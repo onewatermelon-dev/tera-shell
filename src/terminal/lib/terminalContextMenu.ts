@@ -41,6 +41,16 @@ type TerminalMenuOptions = {
   onFind: () => void;
   /** 点击"命令历史"时打开历史检索面板（与快捷键同一入口） */
   onHistory: () => void;
+  /**
+   * 粘贴一段文本到指定会话。
+   *
+   * ⚠️ 必须交给宿主判断，不能在这里直接 `terminal.paste()` ——
+   * 粘贴防护要覆盖所有入口，右键是最容易被漏掉的那条。
+   */
+  onPaste: (
+    sessionId: string,
+    text: string
+  ) => void;
   /** 点击"重新连接"时重连该会话（断线后自动重连放弃时的兜底入口） */
   onReconnect: (id: string) => void;
 };
@@ -56,6 +66,7 @@ export function createTerminalMenu({
   onError,
   onFind,
   onHistory,
+  onPaste,
   onReconnect
 }: TerminalMenuOptions) {
   let menu: HTMLDivElement | undefined;
@@ -355,7 +366,7 @@ export function createTerminalMenu({
       navigator.clipboard
         .readText()
         .then(text => {
-          if (text) target?.paste(text);
+          if (text) onPaste(targetId, text);
         })
         .catch(onError);
       hide();

@@ -266,6 +266,9 @@ export function useTerminalPaneOps(options: {
       // 先摘 WebGL 再 dispose 终端：addon 的 canvas 由它自己管，
       // 终端先 dispose 的话 addon 会对已销毁的 screenElement 操作
       if (closing) {
+        // 先摘掉挂在 window 上的监听（粘贴防护这类全局监听不会随
+        // DOM 移除失效，留着会让每次粘贴都跑一遍已关闭会话的判断）
+        closing.disposeListeners?.();
         disableWebgl(closing.terminal);
         closing.terminal.dispose();
       }

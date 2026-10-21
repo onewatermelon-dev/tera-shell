@@ -28,6 +28,10 @@ import { enableWebgl } from "@/terminal/lib/webglRenderer";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { useTerminalSearch } from "@/terminal/lib/search/useTerminalSearch";
 import { hostKeyOf } from "@/terminal/lib/commandHistory";
+import {
+  assessPaste,
+  type PasteAssessment
+} from "@/terminal/lib/pasteGuard";
 import { useTerminalReconnect } from "./useTerminalReconnect";
 import type { OpenSession } from "./terminalTypes";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
@@ -130,6 +134,245 @@ export function useTerminals(
     openedRef,
     activeIdRef
   );
+
+  // ---- 粘贴防护（多行 / 危险命令先确认）----
+  const [pasteRequest, setPasteRequest] =
+    useState<{
+      sessionId: string;
+      text: string;
+      /**
+       * 粘贴**之前**输入行里已有的内容。
+       *
+       * 确认/取消时先 Ctrl+U 清行、再用它把这一截写回去 —— 因为原生
+       * 粘贴可能已经抢先把内容插进输入行了（WebView2 实测拦不住），
+       * 只能「先清干净再按用户的决定重建」。
+       */
+      before: string;
+      /**
+       * 清行要发几次 `Ctrl+U`。
+       *
+       * ⚠️ readline 的 `unix-line-discard` **只删当前一行**：多行粘贴
+       * （或者粘贴前进里本来就是多行）时发一次只删掉最后一行，剩下的
+       * 会留在缓冲区里 —— 表现就是「确认粘贴后多出来几个提示符」。
+       * 所以按「粘贴内容行数 + 原有内容行数」重复发。
+       */
+      clearCount: number;
+      assessment: PasteAssessment;
+    } | null>(null);
+  /**
+   * 勾了「本会话不再提示」的会话。
+   *
+   * 只记内存、按会话 id：重连不清（同一台机器，用户说过他熟），
+   * 重启应用清空 —— 关一次就永久生效太危险。
+   */
+  const pasteGuardBypass = useRef(
+    new Set<string>()
+  );
+  /** 弹窗期间「延迟清行」的定时器（确认/取消时要先取消它）。 */
+  const pasteClearTimer = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+
+  /**
+   * 文本占几行（空串算 0）。
+   *
+   * @param text 待统计文本
+   */
+  function lineCount(text: string): number {
+    return text ? text.split(/\r?\n/).length : 0;
+  }
+
+  /**
+   * 清掉「可能跨多行的当前输入」。
+   *
+   * ⚠️ readline 的 Ctrl+U（unix-line-discard）**只删光标所在那一行**，
+   * 多行输入时发一次只删最后一行，前面几行会留在缓冲区 ——
+   * 表现就是「确认粘贴后多出来几个提示符」。所以按行数重复发。
+   * 上限 64 次：够覆盖任何正常粘贴，又不至于给一次超长粘贴刷出几千个字节。
+   *
+   * @param count 需要清掉的行数
+   */
+  function clearInput(count: number): string {
+    return "\x15".repeat(
+      Math.min(Math.max(count, 1), 64)
+    );
+  }
+
+  /**
+   * 一段文本要粘进某只终端。
+   *
+   * ⚠️ **安全内容什么都不做**：这套环境（WebView2）的原生粘贴一定会把
+   * 内容插进输入行，我们再 `terminal.paste()` 一次就是两份 ——
+   * 「粘一次 `ls -la /tmp` 出现两个」就是这么来的。
+   *
+   * 只有危险内容才需要事后纠正：记下粘贴前的输入行、清一次行、弹确认框，
+   * 由用户决定重建哪一份（确认 = before + 粘贴内容，取消 = before）。
+   *
+   * @param sessionId 目标会话
+   * @param text 粘贴内容
+   * @param options.before 粘贴前输入行（Ctrl+V 路径在插入之前读到的）
+   * @param options.inserted 内容是否**已经**由原生粘贴插进输入行
+   *   （缺省 true）。右键菜单那种「我们自己发起」的粘贴传 false ——
+   *   这时安全内容必须由我们 paste，否则什么都不发生。
+   */
+  const requestPaste = useCallback(
+    (
+      sessionId: string,
+      text: string,
+      options?: {
+        before?: string;
+        inserted?: boolean;
+      }
+    ) => {
+      const session = openedRef.current.find(
+        item => item.id === sessionId
+      );
+      if (
+        !session ||
+        disconnectedRef.current[sessionId]
+      )
+        return;
+      const assessment = assessPaste(text);
+      const inserted =
+        options?.inserted !== false;
+      // 安全内容：原生插入过的就不再插一次；我们自己发起的才补 paste
+      if (
+        !assessment.risky ||
+        pasteGuardBypass.current.has(sessionId)
+      ) {
+        if (!inserted)
+          session.terminal.paste(text);
+        return;
+      }
+      console.info(
+        `[paste] 疑似危险粘贴，等待确认（${assessment.risks
+          .map(risk => risk.id)
+          .join(", ")}）`
+      );
+      // 粘贴前的输入行：Ctrl+V 路径在插入前就读好了（传进来）；
+      // 右键菜单这类「我们发起」的粘贴此刻行还是干净的，现场读即可
+      const integration = session.integration;
+      const before =
+        options?.before ??
+        (inserted
+          ? ""
+          : integration.available &&
+              integration.atPrompt
+            ? integration.readInput()
+            : "");
+      // 清行要覆盖「原有内容 + 粘贴内容」的全部行数（见 clearInput）
+      const clearCount =
+        lineCount(before) + lineCount(text);
+      // 原生粘贴已经把内容插进输入行了：稍等一下（等它落定）再清行，
+      // 让弹窗期间看到的是「还没粘」。
+      // ⚠️ 定时器要能取消：确认/取消时会重建输入行，这个定时器若在
+      // 之后才执行，会把刚写回去的内容又清掉。
+      if (pasteClearTimer.current)
+        clearTimeout(pasteClearTimer.current);
+      pasteClearTimer.current = setTimeout(() => {
+        pasteClearTimer.current = null;
+        invoke("terminal_write", {
+          id: session.id,
+          data: clearInput(clearCount),
+          command: null
+        }).catch(onError);
+      }, 120);
+      // Ctrl+V 会同时走「键盘路径」与「paste 事件」两条：同一次粘贴
+      // 别把弹窗重挂一遍（会闪），内容相同就保持当前请求
+      setPasteRequest(current =>
+        current &&
+        current.sessionId === sessionId &&
+        current.text === text
+          ? current
+          : {
+              sessionId,
+              text,
+              before,
+              clearCount,
+              assessment
+            }
+      );
+    },
+    [onError]
+  );
+
+  /**
+   * 确认粘贴：先清行，再把「原有输入 + 粘贴内容」写回去。
+   *
+   * 为什么不是简单 `terminal.paste(text)`：原生粘贴拦不住时，内容**已经**
+   * 在输入行里了，再 paste 一次就是两份。统一先 `Ctrl+U` 清掉当前行，
+   * 再用我们记下的 `before` 重建 —— 两条路径（拦住了 / 没拦住）结果一致。
+   */
+  const confirmPaste = useCallback(
+    (skipNextTime: boolean) => {
+      const request = pasteRequest;
+      setPasteRequest(null);
+      // 先取消「延迟清行」：它若在重建之后执行，会把刚写回的内容清掉
+      if (pasteClearTimer.current) {
+        clearTimeout(pasteClearTimer.current);
+        pasteClearTimer.current = null;
+      }
+      if (!request) return;
+      if (skipNextTime)
+        pasteGuardBypass.current.add(
+          request.sessionId
+        );
+      const session = openedRef.current.find(
+        item => item.id === request.sessionId
+      );
+      if (!session) return;
+      const payload = `${request.before}${request.text}`;
+      // 先清行再写：两条 invoke 由 IPC 保序，`then` 里再 paste 更稳。
+      // 清行按行数重复（多行输入时一次 Ctrl+U 只删一行）
+      invoke("terminal_write", {
+        id: session.id,
+        data: clearInput(request.clearCount),
+        command: null
+      })
+        .then(() => {
+          if (payload)
+            session.terminal.paste(payload);
+        })
+        .catch(onError);
+      requestAnimationFrame(() =>
+        session.terminal.focus()
+      );
+    },
+    [pasteRequest, onError]
+  );
+
+  /**
+   * 取消粘贴：清行后把粘贴前的输入写回去（没有就留空行）。
+   *
+   * 剪贴板内容不动 —— 用户随时可以再粘一次。
+   */
+  const cancelPaste = useCallback(() => {
+    const request = pasteRequest;
+    setPasteRequest(null);
+    // 同上：取消掉待执行的「延迟清行」，避免它在恢复之后又清一次
+    if (pasteClearTimer.current) {
+      clearTimeout(pasteClearTimer.current);
+      pasteClearTimer.current = null;
+    }
+    if (!request) return;
+    const session = openedRef.current.find(
+      item => item.id === request.sessionId
+    );
+    if (!session) return;
+    invoke("terminal_write", {
+      id: session.id,
+      data: clearInput(request.clearCount),
+      command: null
+    })
+      .then(() => {
+        if (request.before)
+          session.terminal.paste(request.before);
+      })
+      .catch(onError);
+    requestAnimationFrame(() =>
+      session.terminal.focus()
+    );
+  }, [pasteRequest, onError]);
 
   // ---- 命令历史检索面板（跨主机可搜，见 HistoryPanel）----
   const [historyOpen, setHistoryOpen] =
@@ -318,13 +561,20 @@ export function useTerminals(
       onError,
       onFind: search.openSearch,
       onHistory: openHistorySearch,
+      // 右键「粘贴」与剪贴板粘贴同一条路径，但它是**我们发起**的，
+      // 没有原生插入垫底 —— 安全内容必须由 requestPaste 自己补 paste
+      onPaste: (sessionId, text) =>
+        requestPaste(sessionId, text, {
+          inserted: false
+        }),
       onReconnect: id => reconnectRef.current(id)
     });
     return terminalMenu.current;
   }, [
     onError,
     search.openSearch,
-    openHistorySearch
+    openHistorySearch,
+    requestPaste
   ]);
 
   const createTerminal = useCallback(
@@ -349,6 +599,11 @@ export function useTerminals(
             search.reportResults,
           openSearch: search.openSearch,
           openHistorySearch,
+          // 绑定到本会话：组件层只上报「有人粘了这段」+ 粘贴前的输入行
+          requestPaste: (text, before) =>
+            requestPaste(session.id, text, {
+              before
+            }),
           ensureTerminalMenu,
           formatFontSizeHint: size =>
             t("terminal.fontSizeHint", { size }),
@@ -362,6 +617,7 @@ export function useTerminals(
       search.reportResults,
       search.openSearch,
       openHistorySearch,
+      requestPaste,
       ensureTerminalMenu,
       t,
       onLongCommand
@@ -496,6 +752,10 @@ export function useTerminals(
     historyHost: active ? hostKeyOf(active) : "",
     openHistorySearch,
     closeHistorySearch,
-    insertHistory
+    insertHistory,
+    // ---- 粘贴防护 ----
+    pasteRequest,
+    confirmPaste,
+    cancelPaste
   };
 }

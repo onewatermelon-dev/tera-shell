@@ -24,6 +24,14 @@ export type OpenSession = SavedSession & {
   /** 复制会话时指向被复制的那个会话 id */
   sourceSessionId: string;
   /**
+   * 会话级全局监听的清理函数（挂在 window 上的 paste 等）。
+   *
+   * `terminal.dispose()` 不会碰这些：注册在 window 上的监听不随 DOM
+   * 移除失效，必须在关闭会话时显式摘掉，否则每关一个会话就多一个
+   * 永远跑空判断的监听。
+   */
+  disposeListeners?: () => void;
+  /**
    * SFTP / AI 命令用的连接目标（跳板链 + 私钥 + 明文密码，已在启动时
    * 解析好）。终端 PTY 本身走 `-J` / `-i`，不读这份。
    */

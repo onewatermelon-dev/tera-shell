@@ -1,0 +1,87 @@
+// 粘贴确认弹窗：会话环境色条 + 风险列表 + 内容预览 + 「本会话不再提示」。
+
+// 标题左侧的警告图标：与 AI 风险弹窗同一套配色（警示黄），
+// 让用户一眼认出「这是个要先看再点」的框
+.paste-guard-title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.paste-guard-icon {
+  font-size: 15px;
+  color: #faad14;
+}
+
+// 目标会话：色条 + 名字 + 主机。三只终端并排时，这行是最后一道
+// 「别粘错机器」的视觉提示
+.paste-guard-target {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.paste-guard-env {
+  flex: none;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+}
+
+.paste-guard-where {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.paste-guard-host {
+  font:
+    12px Consolas,
+    monospace;
+  color: var(--muted);
+}
+
+.paste-guard-lead {
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.paste-guard-risks {
+  padding-left: 18px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #faad14;
+}
+
+// 内容预览：等宽 + 限高滚动，保留原始换行（用户要判断的就是这些行）
+.paste-guard-preview {
+  max-height: 180px;
+  padding: 8px 10px;
+  margin: 0 0 10px;
+  overflow: auto;
+  font:
+    12px Consolas,
+    monospace;
+  line-height: 1.5;
+  color: var(--foreground);
+  word-break: break-all;
+  white-space: pre-wrap;
+  background: var(--field-background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.paste-guard-skip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}

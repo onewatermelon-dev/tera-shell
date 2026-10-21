@@ -71,6 +71,20 @@ export interface CreateTerminalOptions {
   openSearch: () => void;
   /** 命令历史检索面板（历史快捷键调起，见 HistoryPanel） */
   openHistorySearch: () => void;
+  /**
+   * 一段文本被粘进这只终端（剪贴板粘贴 / 右键粘贴都走这里）。
+   *
+   * 由宿主决定「要不要事后纠正」—— 见 lib/pasteGuard。
+   * 组件这一层不做判断：要不要拦是产品策略，不是渲染逻辑。
+   *
+   * @param text 粘贴内容
+   * @param before 粘贴**之前**输入行里的文本（Ctrl+V 路径能拿到；
+   *               原生粘贴随后会把它弄脏，所以只能在插入前读）
+   */
+  requestPaste: (
+    text: string,
+    before?: string
+  ) => void;
   /** 右键菜单实例（整个应用只建一次，由调用方缓存；
    *  其中的「重新连接」由调用方在建菜单时直接接线） */
   ensureTerminalMenu: () => ReturnType<
@@ -109,6 +123,7 @@ export function createTerminalInstance(
     reportSearchResults,
     openSearch,
     openHistorySearch,
+    requestPaste,
     ensureTerminalMenu,
     formatFontSizeHint,
     onLongCommand
@@ -138,6 +153,19 @@ export function createTerminalInstance(
     )
   });
   const element = document.createElement("div");
+  /**
+   * 本终端最后一次获得焦点的时刻。
+   *
+   * ⚠️ 不能只靠 `element.contains(event.target)` 认领粘贴：WebView2 里
+   * 事件 target 可能报成 document / body，`contains` 为 false，监听就在
+   * **取内容之前**直接返回了 —— 连日志都不会打，而文本照样被 xterm
+   * 处理进终端。要粘贴必然是用户把焦点放在这只终端上，
+   * 用「最近持有过焦点」兜底认领最可靠。
+   */
+  let lastFocusAt = 0;
+  element.addEventListener("focusin", () => {
+    lastFocusAt = Date.now();
+  });
   const fit = new FitAddon();
   terminal.loadAddon(fit);
   const searchAddon = new SearchAddon();
@@ -254,8 +282,45 @@ export function createTerminalInstance(
     )
       return true;
     const key = event.key.toLowerCase();
-    // Ctrl+V 交给浏览器原生粘贴（return false 让 xterm 别处理）
-    if (key === "v") return false;
+    /**
+     * Ctrl+V / Ctrl+Shift+V。
+     *
+     * ⚠️ 这里**刻意不 preventDefault、也不设 readOnly**：这套环境
+     * （WebView2）里原生粘贴根本拦不住，而一旦「拦了一半」，安全内容就
+     * 会出现两份 —— 原生插进去一份、我们自己再 paste 一份。所以统一成
+     * 「原生粘贴照常发生」：
+     * - 安全内容什么都不用我们做（只此一份）；
+     * - 危险内容由防护层事后纠正（弹窗 + 清行重建）。
+     *
+     * 这里只做两件事：在**插入之前**读下当前输入行（原生粘贴随后会把它
+     * 弄脏，事后读不到干净的「粘贴前内容」），以及读剪贴板正文。
+     */
+    if (key === "v") {
+      const before =
+        integration.available &&
+        integration.atPrompt
+          ? integration.readInput()
+          : "";
+      navigator.clipboard
+        .readText()
+        .then(text => {
+          if (!text) return;
+          console.info(
+            "[paste] 键盘粘贴",
+            `${text.length} 字符`
+          );
+          requestPaste(text, before);
+        })
+        .catch(reason => {
+          // 读不到剪贴板（权限被拒 / 空剪贴板）：只能记日志，让用户重试。
+          // 此时原生粘贴已被 preventDefault，不会再粘一次
+          console.warn(
+            "[paste] 读取剪贴板失败",
+            reason
+          );
+        });
+      return false;
+    }
     if (key === "c" && terminal.hasSelection()) {
       navigator.clipboard
         .writeText(terminal.getSelection())
@@ -274,6 +339,43 @@ export function createTerminalInstance(
     applyFontSize: onFontSizeChange,
     formatHint: formatFontSizeHint
   });
+  // 粘贴上报：捕获阶段挂在 window 上，只处理落在本终端里的粘贴。
+  //
+  // ⚠️ **不 preventDefault、不 stopPropagation**：这套环境（WebView2）里
+  // 原生粘贴拦不住，一旦拦截只成功一半，安全内容就会变成两份 ——
+  // 原生插进去一份、我们再 paste 一份。所以统一成「原生粘贴照常发生」，
+  // 这里只把「有内容粘进来了」报给防护层（危险内容由它事后纠正）。
+  // ⚠️ 认领判断不能只看 event.target：它可能报成 document / body，
+  // 此时 contains 为 false，会在取内容之前就 return（连日志都没有）。
+  const pasteTargets = (
+    target: EventTarget | null
+  ) => {
+    if (
+      target instanceof Node &&
+      element.contains(target)
+    )
+      return true;
+    const active = document.activeElement;
+    if (active && element.contains(active))
+      return true;
+    // 兜底：粘之前焦点一定在这只终端上（点标签/切窗格都会 focusin）
+    return Date.now() - lastFocusAt < 3000;
+  };
+  const onPaste = (event: ClipboardEvent) => {
+    if (!pasteTargets(event.target)) return;
+    const text =
+      event.clipboardData?.getData(
+        "text/plain"
+      ) ?? "";
+    // 图片 / 文件粘贴不归这层管
+    if (!text) return;
+    console.info(
+      "[paste] 捕获粘贴",
+      `${text.length} 字符`
+    );
+    requestPaste(text);
+  };
+  window.addEventListener("paste", onPaste, true);
   element.addEventListener(
     "contextmenu",
     event => {
@@ -298,7 +400,15 @@ export function createTerminalInstance(
     element,
     mounted: false,
     sourceSessionId,
-    execTarget: options.execTarget
+    execTarget: options.execTarget,
+    // window 监听不会随 DOM 移除失效：关闭会话时由 useTerminalPaneOps 调用
+    disposeListeners: () => {
+      window.removeEventListener(
+        "paste",
+        onPaste,
+        true
+      );
+    }
   };
 }
 

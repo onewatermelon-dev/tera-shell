@@ -442,6 +442,22 @@ const zhCN = {
   "terminal.history.empty": "没有匹配的命令",
   "terminal.history.hint":
     "↑↓ 选择 · Enter 插入 · Tab 切换范围 · Esc 关闭",
+  "terminal.paste.title": "确认粘贴",
+  "terminal.paste.lead":
+    "粘贴是批量输入，一次回车就会全部执行。请先确认这段内容：",
+  "terminal.paste.risk.multiline":
+    "多行内容（{lines} 行）",
+  "terminal.paste.risk.rmRf": "rm 递归强制删除",
+  "terminal.paste.risk.dd": "dd 直接写入设备",
+  "terminal.paste.risk.mkfs":
+    "格式化文件系统（mkfs）",
+  "terminal.paste.risk.chmodRoot":
+    "把根目录权限改成 777",
+  "terminal.paste.risk.forkBomb":
+    "fork bomb（进程炸弹）",
+  "terminal.paste.skip": "本会话不再提示",
+  "terminal.paste.confirm": "仍然粘贴",
+  "terminal.paste.more": "…还有 {count} 行",
   "terminal.passwordHint":
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
@@ -1147,6 +1163,25 @@ const enUS: Record<MessageKey, string> = {
     "No matching commands",
   "terminal.history.hint":
     "↑↓ select · Enter insert · Tab switch scope · Esc close",
+  "terminal.paste.title": "Confirm paste",
+  "terminal.paste.lead":
+    "Pasting is bulk input — one Enter runs all of it. Check this first:",
+  "terminal.paste.risk.multiline":
+    "Multiple lines ({lines})",
+  "terminal.paste.risk.rmRf":
+    "recursive forced delete (rm -rf)",
+  "terminal.paste.risk.dd":
+    "raw device write (dd of=)",
+  "terminal.paste.risk.mkfs":
+    "filesystem format (mkfs)",
+  "terminal.paste.risk.chmodRoot":
+    "chmod 777 on the root directory",
+  "terminal.paste.risk.forkBomb": "fork bomb",
+  "terminal.paste.skip":
+    "Don't warn again in this session",
+  "terminal.paste.confirm": "Paste anyway",
+  "terminal.paste.more":
+    "…and {count} more lines",
   "terminal.passwordHint":
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",

@@ -16,6 +16,11 @@ import { useT } from "@/settings/lib/i18n";
 import AppHeader from "@/app/components/AppHeader";
 import SessionSidebar from "@/sessions/components/SessionSidebar";
 import TerminalWorkspace from "@/terminal/components/TerminalWorkspace";
+import { PasteGuardDialog } from "@/terminal/components/workspace/PasteGuardDialog";
+import {
+  hostKeyOf,
+  hostLabelOf
+} from "@/terminal/lib/commandHistory";
 import { useSettings } from "@/settings/lib/useSettings";
 import { refocusAfterAction } from "@/shared/lib/keepTerminalFocus";
 import SettingsPage from "@/settings/components/SettingsPage";
@@ -141,6 +146,20 @@ export default function App() {
     sessionStore.sessions,
     notifications.notifyCommand
   );
+
+  /**
+   * 待确认粘贴的目标会话：弹窗显示会话名 / 环境色 / 主机要用。
+   *
+   * 会话可能在这期间被关掉（find 返回 undefined），此时弹窗按空信息
+   * 显示 —— 确认后 requestPaste 找不到会话会自然忽略。
+   */
+  const pasteTarget = terminals.pasteRequest
+    ? terminals.opened.find(
+        item =>
+          item.id ===
+          terminals.pasteRequest?.sessionId
+      )
+    : undefined;
 
   /** 把键盘焦点还给活动终端（竖条按钮动作 / 菜单关闭后的焦点回还）。 */
   function refocusActive() {
@@ -499,6 +518,31 @@ export default function App() {
           loading.handleLoadingFinished
         }
       />
+
+      {/*
+        粘贴确认弹窗放在应用根部而不是终端工作区里：工作区有
+        `overflow: hidden` 与自己的层叠上下文，弹层的遮罩会被裁剪或压在
+        终端下面（症状就是「明明拦住了，但屏幕上什么也没出现」）。
+      */}
+      {terminals.pasteRequest && (
+        <PasteGuardDialog
+          sessionName={pasteTarget?.name ?? ""}
+          host={
+            pasteTarget
+              ? hostLabelOf(
+                  hostKeyOf(pasteTarget)
+                )
+              : ""
+          }
+          color={pasteTarget?.color}
+          text={terminals.pasteRequest.text}
+          assessment={
+            terminals.pasteRequest.assessment
+          }
+          onConfirm={terminals.confirmPaste}
+          onCancel={terminals.cancelPaste}
+        />
+      )}
     </main>
   );
 }
