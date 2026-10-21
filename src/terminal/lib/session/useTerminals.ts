@@ -32,6 +32,11 @@ import {
   assessPaste,
   type PasteAssessment
 } from "@/terminal/lib/pasteGuard";
+import { askAiFromTerminal } from "@/terminal/lib/ai/askFromTerminal";
+import {
+  buildDiagnosisText,
+  type TerminalFailure
+} from "@/terminal/lib/failureDiagnosis";
 import { useTerminalReconnect } from "./useTerminalReconnect";
 import type { OpenSession } from "./terminalTypes";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
@@ -374,6 +379,79 @@ export function useTerminals(
     );
   }, [pasteRequest, onError]);
 
+  // ---- 失败即诊断（角上提示，点了才调 AI）----
+  /** 每个会话最近一次失败（成功命令会把它收掉，见 onCommandSuccess）。 */
+  const [failures, setFailures] = useState<
+    Record<string, TerminalFailure>
+  >({});
+
+  /** 收掉某会话的失败提示（点关闭 / 点了诊断 / 下一条命令成功）。 */
+  const clearFailure = useCallback(
+    (sessionId: string) => {
+      setFailures(prev => {
+        if (!prev[sessionId]) return prev;
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+    },
+    []
+  );
+
+  /**
+   * 命令以非零码结束：只记现场，不调 AI。
+   *
+   * 事件驱动、不常驻：这里唯一的开销是读一次输出尾部（40 行），
+   * token 要等用户点提示才花。
+   */
+  const handleCommandFailure = useCallback(
+    (
+      sessionId: string,
+      payload: {
+        command: string;
+        exitCode: number;
+        output: string;
+      }
+    ) => {
+      console.info(
+        `[diagnose] 命令失败 exit=${payload.exitCode}：${payload.command || "(未识别命令)"}`
+      );
+      setFailures(prev => ({
+        ...prev,
+        [sessionId]: {
+          sessionId,
+          at: Date.now(),
+          ...payload
+        }
+      }));
+    },
+    []
+  );
+
+  /**
+   * 点提示 → 把「命令 + 退出码 + 输出尾部」作为一轮提问送进 AI 面板。
+   *
+   * 走的是与右键「让 AI 看看」同一条通道，面板收起时会自动展开。
+   */
+  const diagnoseFailure = useCallback(
+    (sessionId: string) => {
+      const failure = failures[sessionId];
+      clearFailure(sessionId);
+      if (!failure) return;
+      const sent = askAiFromTerminal(
+        "diagnose",
+        buildDiagnosisText(failure)
+      );
+      // 没有 AI 面板（本地会话）时通道返回 false：提示照样收掉，
+      // 不至于卡在角上
+      if (!sent)
+        console.warn(
+          "[diagnose] 没送到 AI 面板（本地会话不挂面板）"
+        );
+    },
+    [failures, clearFailure]
+  );
+
   // ---- 命令历史检索面板（跨主机可搜，见 HistoryPanel）----
   const [historyOpen, setHistoryOpen] =
     useState(false);
@@ -604,6 +682,14 @@ export function useTerminals(
             requestPaste(session.id, text, {
               before
             }),
+          // 失败即诊断：只在 D 标记给出非零退出码时上报现场
+          onCommandFailure: failure =>
+            handleCommandFailure(
+              session.id,
+              failure
+            ),
+          onCommandSuccess: () =>
+            clearFailure(session.id),
           ensureTerminalMenu,
           formatFontSizeHint: size =>
             t("terminal.fontSizeHint", { size }),
@@ -618,6 +704,8 @@ export function useTerminals(
       search.openSearch,
       openHistorySearch,
       requestPaste,
+      handleCommandFailure,
+      clearFailure,
       ensureTerminalMenu,
       t,
       onLongCommand
@@ -756,6 +844,10 @@ export function useTerminals(
     // ---- 粘贴防护 ----
     pasteRequest,
     confirmPaste,
-    cancelPaste
+    cancelPaste,
+    // ---- 失败即诊断 ----
+    failures,
+    diagnoseFailure,
+    clearFailure
   };
 }

@@ -23,6 +23,7 @@ import { attachFontZoom } from "@/terminal/lib/fontZoom";
 import { CommandTimer } from "@/lib/notify";
 import type { CompletionController } from "@/terminal/lib/commandCompletion";
 import { attachShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
+import { readRecentOutput } from "@/terminal/lib/failureDiagnosis";
 import {
   resolveColorScheme,
   toXtermTheme
@@ -85,6 +86,19 @@ export interface CreateTerminalOptions {
     text: string,
     before?: string
   ) => void;
+  /**
+   * 命令以非零退出码结束（依赖 OSC 133 的 D 标记）。
+   *
+   * 只上报现场，**不在这里调 AI** —— 要不要看由用户点角上的提示决定，
+   * 否则每条失败命令都会白烧一次 token。
+   */
+  onCommandFailure?: (failure: {
+    command: string;
+    exitCode: number;
+    output: string;
+  }) => void;
+  /** 命令成功结束（退出码 0）：用来把上一次的失败提示收掉。 */
+  onCommandSuccess?: () => void;
   /** 右键菜单实例（整个应用只建一次，由调用方缓存；
    *  其中的「重新连接」由调用方在建菜单时直接接线） */
   ensureTerminalMenu: () => ReturnType<
@@ -211,6 +225,26 @@ export function createTerminalInstance(
         commandTimer.finishNow();
         // 退出码回填到刚记下的那条历史（面板里据此标红失败命令）
         completion?.pushExitCode(exitCode);
+        // 排查用锚点：D 标记到没到、退出码是多少，一行看清。
+        // 稳定后可降为 debug。
+        console.info(
+          "[diagnose] onCommandEnd exit=",
+          exitCode
+        );
+        // 失败即诊断：非零退出码时把现场打包上报（只上报，不调 AI ——
+        // 要不要看由用户点角上的提示决定）
+        if (exitCode === null) return;
+        if (exitCode === 0) {
+          // 接着敲的命令成功了，说明用户已经继续往下走：收掉旧提示，
+          // 免得 `grep` 没匹配那种 1 一直挂在角上
+          options.onCommandSuccess?.();
+          return;
+        }
+        options.onCommandFailure?.({
+          command: lastCommand.current,
+          exitCode,
+          output: readRecentOutput(terminal)
+        });
       }
     }
   );

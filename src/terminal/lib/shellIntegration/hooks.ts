@@ -25,7 +25,7 @@
 export type RemoteShell = "bash" | "zsh" | "pwsh";
 
 /** 钩子协议版本：脚本语义有变动时 +1，deploy 据此决定要不要重装。 */
-export const HOOK_VERSION = 1;
+export const HOOK_VERSION = 3;
 
 /** rc 文件里用来识别「这一行是我们加的」的标记。 */
 export const RC_MARKER =
@@ -82,8 +82,11 @@ const BASH_HOOK = [
   ``,
   `# PROMPT_COMMAND 在 bash 5.1+ 是数组、更早是字符串。直接赋值会顶掉`,
   `# 用户原有的 precmd（starship 之类全靠它），必须按类型追加。`,
+  `# ⚠️ 必须排在**最前面**：追加到末尾的话，前面的 precmd（starship/conda）`,
+  `# 先跑，$? 已经被它们改成自己的退出码，__tera_si_precmd 里读到的永远是 0`,
+  `# —— 表现就是「失败命令从来不提示、历史里也没有退出码」。`,
   `if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then`,
-  `  PROMPT_COMMAND+=(__tera_si_precmd)`,
+  `  PROMPT_COMMAND=(__tera_si_precmd "\${PROMPT_COMMAND[@]}")`,
   `else`,
   `  PROMPT_COMMAND="__tera_si_precmd\${PROMPT_COMMAND:+;\${PROMPT_COMMAND}}"`,
   `fi`
@@ -118,6 +121,10 @@ const ZSH_HOOK = [
   ``,
   `autoload -Uz add-zsh-hook`,
   `add-zsh-hook precmd __tera_si_precmd`,
+  `# ⚠️ add-zsh-hook 是**追加**：排在前面的 precmd 会先跑，$? 已经变成它自己`,
+  `# 的退出码。挪到最前面，__tera_si_precmd 里的 local code=$? 才拿得到`,
+  `# 上一条命令的真实退出码。`,
+  `precmd_functions=(__tera_si_precmd \${precmd_functions:#__tera_si_precmd})`,
   `add-zsh-hook preexec __tera_si_preexec`,
   `__tera_si_wrap_prompt`
 ].join("\n");
@@ -145,7 +152,9 @@ const PWSH_HOOK = [
   `function global:prompt {`,
   `  $ok = $?`,
   `  $code = $global:LASTEXITCODE`,
-  `  if (-not $ok -and -not $code) { $code = 1 }`,
+  `  # 成功时必须归零：$LASTEXITCODE 是**上一次原生命令**留下的旧值，`,
+  `  # 这次跑的是纯 PowerShell 命令时它还停在 1，会把成功判成失败。`,
+  `  if ($ok) { $code = 0 } elseif (-not $code) { $code = 1 }`,
   `  $text = & $global:__TeraSiOrigPrompt`,
   `  return "$(__TeraSiOsc "D;exit=$code")$(__TeraSiOsc 'A')$text$(__TeraSiOsc 'B')"`,
   `}`,
@@ -229,12 +238,37 @@ export function buildInstallCommand(
     `cat > "${hook}" <<'TERA_SI_HOOK_EOF'`,
     hookScript(shell),
     `TERA_SI_HOOK_EOF`,
+    // 追加 source 行：带 marker 幂等，重复部署不会写两遍。
+    // 每一步都 `|| true` + 末尾 `return 0`：`set -e` 下任何一步失败
+    //（比如 rc 是只读的）都会让整个部署被判定为失败，但其实钩子文件
+    // 已经写好了，没必要因此重试或报错。
     `marker='${RC_MARKER}'`,
-    // rc 可能是 `.bashrc` 这种普通文件；不存在时 `-f` 为假 → 创建
-    `if [ -f "${rc}" ] && grep -qF "$marker" "${rc}" 2>/dev/null; then`,
-    `  exit 0`,
-    `fi`,
-    `mkdir -p "$(dirname "${rc}")"`,
-    `printf '\\n%s\\n%s\\n' "$marker" '[ -f "${hook}" ] && . "${hook}"' >> "${rc}"`
+    `__tera_si_add_rc() {`,
+    `  _f="$1"`,
+    `  if [ -f "$_f" ] && grep -qF "$marker" "$_f" 2>/dev/null; then`,
+    `    return 0`,
+    `  fi`,
+    `  mkdir -p "$(dirname "$_f")" 2>/dev/null || true`,
+    `  _src="[ -f \\"${hook}\\" ] && . \\"${hook}\\""`,
+    `  printf '\\n%s\\n%s\\n' "$marker" "$_src" >> "$_f" 2>/dev/null || true`,
+    `  return 0`,
+    `}`,
+    `__tera_si_add_rc "${rc}"`,
+    // ⚠️ bash 的登录 shell（SSH 默认就是）读的是 profile 系列，
+    // **不读 .bashrc**：只往 .bashrc 写 source 行的话，钩子在 SSH 会话里
+    // 永远不加载（症状：`echo $PROMPT_COMMAND` 是空的、退出码拿不到、
+    // 补全与历史一直走启发式兜底）。
+    // 按登录 shell 的查找顺序补一份，已有的文件只追加、不覆盖。
+    ...(shell === "bash"
+      ? [
+          `if [ -f "$HOME/.bash_profile" ]; then __tera_si_add_rc "$HOME/.bash_profile"`,
+          `elif [ -f "$HOME/.bash_login" ]; then __tera_si_add_rc "$HOME/.bash_login"`,
+          `elif [ -f "$HOME/.profile" ]; then __tera_si_add_rc "$HOME/.profile"`,
+          // 三个都没有（很少见）：建 .bash_profile 并让它带我们这一行。
+          // 不 source .bashrc 是有意的 —— 那是用户自己的文件，
+          // 我们的职责只是把钩子挂上去。
+          `else __tera_si_add_rc "$HOME/.bash_profile"; fi`
+        ]
+      : [])
   ].join("\n");
 }

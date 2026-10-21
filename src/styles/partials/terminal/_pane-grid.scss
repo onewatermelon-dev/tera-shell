@@ -17,6 +17,7 @@
 
 // 一个窗格：纵向排「标签条 + 终端」，flex:1 让它撑满父级给的权重
 .pane-cell {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;

@@ -36,6 +36,31 @@ describe("钩子脚本", () => {
     );
   });
 
+  it("bash 的 precmd 排在 PROMPT_COMMAND 最前面（否则 $? 被别人的 precmd 覆盖）", () => {
+    const script = hookScript("bash");
+    // 前置写法：数组首项就是我们的函数
+    expect(script).toContain(
+      'PROMPT_COMMAND=(__tera_si_precmd "${PROMPT_COMMAND[@]}")'
+    );
+    // 曾经的追加写法会让 starship/conda 先把 $? 改成 0
+    expect(script).not.toContain(
+      "PROMPT_COMMAND+=(__tera_si_precmd)"
+    );
+  });
+
+  it("zsh 的 precmd 也排在最前面", () => {
+    const script = hookScript("zsh");
+    expect(script).toContain(
+      "precmd_functions=(__tera_si_precmd"
+    );
+  });
+
+  it("pwsh 成功时退出码归零（$LASTEXITCODE 是旧值）", () => {
+    expect(hookScript("pwsh")).toContain(
+      "if ($ok) { $code = 0 }"
+    );
+  });
+
   it("zsh 用原生 precmd/preexec 钩子", () => {
     const script = hookScript("zsh");
     expect(script).toContain(
@@ -84,16 +109,42 @@ describe("安装命令", () => {
     expect(command).toContain("TERA_SI_HOOK_EOF");
     expect(command).toContain(RC_MARKER);
     expect(command).toContain(
-      '>> "$HOME/.bashrc"'
+      '__tera_si_add_rc "$HOME/.bashrc"'
     );
   });
 
-  it("rc 里已有标记时直接退出，不重复追加", () => {
+  it("⚠️ bash 还要写登录 shell 的 profile 系列（它不读 .bashrc）", () => {
+    const command = buildInstallCommand("bash");
+    // 只写 .bashrc 的话，SSH 会话里 $PROMPT_COMMAND 是空的 ——
+    // 钩子从未加载，退出码永远拿不到
+    expect(command).toContain(
+      '"$HOME/.bash_profile"'
+    );
+    expect(command).toContain(
+      '"$HOME/.bash_login"'
+    );
+    expect(command).toContain('"$HOME/.profile"');
+  });
+
+  it("zsh 不需要 profile 系列（interactive shell 必读 .zshrc）", () => {
+    expect(
+      buildInstallCommand("zsh")
+    ).not.toContain(".bash_profile");
+  });
+
+  it("rc 里已有标记时跳过追加（幂等）", () => {
     const command = buildInstallCommand("bash");
     expect(command).toContain(
-      'grep -qF "$marker" "$HOME/.bashrc"'
+      'grep -qF "$marker" "$_f"'
     );
-    expect(command).toContain("exit 0");
+    expect(command).toContain("return 0");
+  });
+
+  it("任何一步失败都不至于整体失败（rc 只读时钩子文件仍写好）", () => {
+    const command = buildInstallCommand("bash");
+    expect(command).toContain(
+      '>> "$_f" 2>/dev/null || true'
+    );
   });
 
   it("任何一步失败都让整体失败（set -e）", () => {

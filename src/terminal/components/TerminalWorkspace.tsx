@@ -28,6 +28,8 @@ import {
 import { EmptyTerminal } from "@/terminal/components/workspace/EmptyTerminal";
 import { FindBox } from "@/terminal/components/workspace/FindBox";
 import { HistoryPanel } from "@/terminal/components/workspace/HistoryPanel";
+import { FailureBadge } from "@/terminal/components/workspace/FailureBadge";
+import type { TerminalFailure } from "@/terminal/lib/failureDiagnosis";
 import { TerminalStatus } from "@/terminal/components/workspace/TerminalStatus";
 import { WelcomeCard } from "@/terminal/components/workspace/WelcomeCard";
 import { startTabDrag } from "@/terminal/lib/pane/tabDrag";
@@ -74,6 +76,13 @@ type Props = {
   /** 插入选中命令到当前会话输入行（不执行） */
   onInsertHistory: (command: string) => void;
   onCloseHistory: () => void;
+  // ---- 失败即诊断 ----
+  /** 各会话最近一次命令失败（非零退出码），key = 会话 id */
+  failures: Record<string, TerminalFailure>;
+  /** 点角标：把失败现场送进 AI 面板 */
+  onDiagnoseFailure: (sessionId: string) => void;
+  /** 关掉角标（或下一条命令成功时由会话侧清除） */
+  onDismissFailure: (sessionId: string) => void;
   // ---- 窗格网格 ----
   /** 每个窗格的标签组与当前显示的会话 */
   panes: PaneState[];
@@ -184,6 +193,9 @@ export default function TerminalWorkspace({
   historyHost,
   onInsertHistory,
   onCloseHistory,
+  failures,
+  onDiagnoseFailure,
+  onDismissFailure,
   panes,
   tree,
   activePaneId,
@@ -371,6 +383,13 @@ export default function TerminalWorkspace({
                   paneSessions.get(paneId) ?? [];
                 const isActive =
                   paneId === activePaneId;
+                // 该窗格当前显示的那只（失败角标按它取现场）
+                const visible = sessions.find(
+                  item =>
+                    item.id === pane.visibleId
+                );
+                const failure =
+                  failures[pane.visibleId];
                 return (
                   <div
                     key={paneId}
@@ -450,6 +469,28 @@ export default function TerminalWorkspace({
                         );
                       }}
                     ></div>
+                    {/* 失败即诊断：只对 SSH 会话显示（本地会话没有 AI 面板） */}
+                    {failure &&
+                      visible?.kind === "ssh" && (
+                        <FailureBadge
+                          command={
+                            failure.command
+                          }
+                          exitCode={
+                            failure.exitCode
+                          }
+                          onDiagnose={() =>
+                            onDiagnoseFailure(
+                              failure.sessionId
+                            )
+                          }
+                          onDismiss={() =>
+                            onDismissFailure(
+                              failure.sessionId
+                            )
+                          }
+                        />
+                      )}
                   </div>
                 );
               }}

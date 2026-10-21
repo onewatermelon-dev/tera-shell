@@ -458,6 +458,8 @@ const zhCN = {
   "terminal.paste.skip": "本会话不再提示",
   "terminal.paste.confirm": "仍然粘贴",
   "terminal.paste.more": "…还有 {count} 行",
+  "terminal.failure.title":
+    "命令失败（exit {code}）· 看看？",
   "terminal.passwordHint":
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
@@ -1182,6 +1184,8 @@ const enUS: Record<MessageKey, string> = {
   "terminal.paste.confirm": "Paste anyway",
   "terminal.paste.more":
     "…and {count} more lines",
+  "terminal.failure.title":
+    "Command failed (exit {code}) · Investigate?",
   "terminal.passwordHint":
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",

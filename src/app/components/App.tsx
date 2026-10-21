@@ -419,6 +419,13 @@ export default function App() {
           onCloseHistory={
             terminals.closeHistorySearch
           }
+          failures={terminals.failures}
+          onDiagnoseFailure={
+            terminals.diagnoseFailure
+          }
+          onDismissFailure={
+            terminals.clearFailure
+          }
           onFocusTerminal={
             terminals.focusTerminal
           }

@@ -33,6 +33,7 @@
 @use "partials/terminal/terminal-find";
 @use "partials/terminal/terminal-history";
 @use "partials/terminal/terminal-paste-guard";
+@use "partials/terminal/terminal-failure";
 @use "partials/terminal/pane-grid";
 @use "partials/terminal/pane-tabs";
 @use "partials/terminal/terminal";
