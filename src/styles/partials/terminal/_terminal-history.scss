@@ -1,0 +1,140 @@
+// 命令历史检索面板：全屏遮罩 + 居中面板（输入框 + 范围切换 + 结果列表）。
+
+// 细滚动条 mixin 在 _scrollbar.scss —— 与 SFTP 面板、终端信息抽屉同一套
+// 规格（6px 宽 + 3px 圆角）。浏览器默认的宽灰方角在这个浮层里太抢眼。
+// `as *` 不能省：scss 的 @use 按文件隔离命名空间，不加就得写全名。
+@use "../scrollbar" as *;
+
+// 遮罩盖住整个工作区，靠上的位置更像命令面板，视线不用来回跳
+.history-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgb(0 0 0 / 35%);
+}
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 76vw);
+  max-height: 60vh;
+  overflow: hidden;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 28%);
+}
+
+.history-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-input {
+  flex: 1;
+  font-size: 13px;
+}
+
+.history-scope {
+  display: flex;
+  flex: none;
+  gap: 4px;
+
+  button {
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+
+    &[data-active="true"] {
+      color: var(--accent-foreground);
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+  }
+}
+
+.history-list {
+  flex: 1;
+  padding: 4px;
+  overflow-y: auto;
+
+  // 结果不满一屏时不预留、满屏时才出现滑块会让整行内容横向跳动
+  // （SFTP 文件列表也是这个处理）
+  scrollbar-gutter: stable;
+
+  @include thin-scrollbar;
+}
+
+// 一行 = 命令 + 主机 + 退出码 + 时间；命令占满剩余宽度并单行省略
+.history-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 6px 8px;
+  font:
+    12px Consolas,
+    monospace;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+
+  &[data-active="true"] {
+    background: var(--surface-hover);
+  }
+}
+
+.history-cmd {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-host {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+// 非 0 退出码标红：一眼看出哪次是跑挂的
+.history-exit {
+  flex: none;
+  font-size: 11px;
+  color: #e5484d;
+}
+
+.history-time {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.history-empty {
+  padding: 24px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.history-foot {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}

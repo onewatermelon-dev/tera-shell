@@ -392,6 +392,14 @@ export default function App() {
             terminals.searchCaseSensitive
           }
           searchRegex={terminals.searchRegex}
+          historyOpen={terminals.historyOpen}
+          historyHost={terminals.historyHost}
+          onInsertHistory={
+            terminals.insertHistory
+          }
+          onCloseHistory={
+            terminals.closeHistorySearch
+          }
           onFocusTerminal={
             terminals.focusTerminal
           }

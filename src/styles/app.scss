@@ -31,6 +31,7 @@
 @use "partials/ai/ai-compose";
 @use "partials/ai/ai-overlays";
 @use "partials/terminal/terminal-find";
+@use "partials/terminal/terminal-history";
 @use "partials/terminal/pane-grid";
 @use "partials/terminal/pane-tabs";
 @use "partials/terminal/terminal";

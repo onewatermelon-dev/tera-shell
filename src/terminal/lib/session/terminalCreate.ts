@@ -69,6 +69,8 @@ export interface CreateTerminalOptions {
   ) => void;
   /** 右键菜单 / 查找快捷键调起的搜索框 */
   openSearch: () => void;
+  /** 命令历史检索面板（历史快捷键调起，见 HistoryPanel） */
+  openHistorySearch: () => void;
   /** 右键菜单实例（整个应用只建一次，由调用方缓存；
    *  其中的「重新连接」由调用方在建菜单时直接接线） */
   ensureTerminalMenu: () => ReturnType<
@@ -106,6 +108,7 @@ export function createTerminalInstance(
     isDisconnected,
     reportSearchResults,
     openSearch,
+    openHistorySearch,
     ensureTerminalMenu,
     formatFontSizeHint,
     onLongCommand
@@ -175,7 +178,12 @@ export function createTerminalInstance(
         lastCommand.current = command;
         completion?.pushHistory(command);
       },
-      onCommandEnd: () => commandTimer.finishNow()
+      onCommandEnd: exitCode => {
+        // 精确结束点：静默判定让位（见下面的 onWriteParsed）
+        commandTimer.finishNow();
+        // 退出码回填到刚记下的那条历史（面板里据此标红失败命令）
+        completion?.pushExitCode(exitCode);
+      }
     }
   );
   // 静默判定只在**没有** shell 集成时兜底。有集成还照旧 poke 的话，
@@ -223,6 +231,21 @@ export function createTerminalInstance(
     ) {
       event.preventDefault();
       openSearch();
+      return false;
+    }
+    // 命令历史检索面板。备用屏（vim/less/top 等）里不抢这个组合：
+    // 全屏应用自己要用键，抢掉等于把用户的键位吞了
+    if (
+      event.type === "keydown" &&
+      terminal.buffer.active.type !==
+        "alternate" &&
+      matchTerminalShortcut(
+        event,
+        "historySearch"
+      )
+    ) {
+      event.preventDefault();
+      openHistorySearch();
       return false;
     }
     if (

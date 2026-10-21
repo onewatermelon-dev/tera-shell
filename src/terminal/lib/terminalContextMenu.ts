@@ -17,6 +17,7 @@ import {
   FileTextOutlined,
   FolderOpenOutlined,
   FullscreenOutlined,
+  HistoryOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   QuestionCircleOutlined,
@@ -38,6 +39,8 @@ type TerminalMenuOptions = {
   onError: (reason: unknown) => void;
   /** 点击"查找"时打开搜索框 */
   onFind: () => void;
+  /** 点击"命令历史"时打开历史检索面板（与快捷键同一入口） */
+  onHistory: () => void;
   /** 点击"重新连接"时重连该会话（断线后自动重连放弃时的兜底入口） */
   onReconnect: (id: string) => void;
 };
@@ -52,6 +55,7 @@ type TerminalMenuOptions = {
 export function createTerminalMenu({
   onError,
   onFind,
+  onHistory,
   onReconnect
 }: TerminalMenuOptions) {
   let menu: HTMLDivElement | undefined;
@@ -400,6 +404,18 @@ export function createTerminalMenu({
       onFind();
     });
 
+    // 命令历史：与快捷键同一入口，默认只看本机（面板里可切到跨主机）
+    const history = makeItem(
+      "命令历史",
+      "historySearch",
+      HistoryOutlined
+    );
+    history.addEventListener("click", () => {
+      hide();
+      onHistory();
+      target?.focus();
+    });
+
     // 断线后自动重连放弃时的兜底入口：未断线时点了也只是重新连一次
     const reconnect = makeItem(
       "重新连接",
@@ -447,6 +463,7 @@ export function createTerminalMenu({
       diagnose,
       separator.cloneNode(),
       find,
+      history,
       separator.cloneNode(),
       reconnect,
       clear,

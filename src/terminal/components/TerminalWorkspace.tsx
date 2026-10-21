@@ -27,6 +27,7 @@ import {
 } from "@/terminal/components/drawers/BottomDrawer";
 import { EmptyTerminal } from "@/terminal/components/workspace/EmptyTerminal";
 import { FindBox } from "@/terminal/components/workspace/FindBox";
+import { HistoryPanel } from "@/terminal/components/workspace/HistoryPanel";
 import { TerminalStatus } from "@/terminal/components/workspace/TerminalStatus";
 import { WelcomeCard } from "@/terminal/components/workspace/WelcomeCard";
 import { startTabDrag } from "@/terminal/lib/pane/tabDrag";
@@ -66,6 +67,13 @@ type Props = {
   onCloseSearch: () => void;
   onToggleCaseSensitive: () => void;
   onToggleRegex: () => void;
+  // ---- 命令历史检索（HistoryPanel）----
+  historyOpen: boolean;
+  /** 当前会话的主机标识：面板默认只过滤这一台 */
+  historyHost: string;
+  /** 插入选中命令到当前会话输入行（不执行） */
+  onInsertHistory: (command: string) => void;
+  onCloseHistory: () => void;
   // ---- 窗格网格 ----
   /** 每个窗格的标签组与当前显示的会话 */
   panes: PaneState[];
@@ -172,6 +180,10 @@ export default function TerminalWorkspace({
   onCloseSearch,
   onToggleCaseSensitive,
   onToggleRegex,
+  historyOpen,
+  historyHost,
+  onInsertHistory,
+  onCloseHistory,
   panes,
   tree,
   activePaneId,
@@ -562,6 +574,14 @@ export default function TerminalWorkspace({
               onToggleCaseSensitive
             }
             onToggleRegex={onToggleRegex}
+          />
+        )}
+
+        {historyOpen && (
+          <HistoryPanel
+            host={historyHost}
+            onInsert={onInsertHistory}
+            onClose={onCloseHistory}
           />
         )}
       </Card>

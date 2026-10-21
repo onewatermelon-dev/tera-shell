@@ -5,9 +5,9 @@
  * 与 PowerShell 7 的 PSReadLine Inline 预测一致；↑↓ 仍交给 shell 自己的
  * 历史翻页，不做拦截。
  *
- * 建议来源两级：① 命令历史整行前缀匹配（和 PSReadLine 的 history
- * 预测源一样）；② 没敲空格时用内置常用命令字典补首个词。
- * 历史在回车时记录，随应用数据落盘（`command_history.json`）。
+ * 建议来源两级：① **当前主机**的命令历史整行前缀匹配（和 PSReadLine
+ * 的 history 预测源一样，但按主机隔离 —— 生产机上不会补出测试机的命令）；
+ * ② 没敲空格时用内置常用命令字典补首个词。
  *
  * 「现在是否在提示符处」与「提示符在哪儿结束」两个问题，有 shell 集成
  * （OSC 133）时由远端钩子的 B/C 标记直接回答；装不上钩子的会话退回
@@ -22,15 +22,14 @@ import type {
   Terminal
 } from "@xterm/xterm";
 import {
-  DataName,
-  readData,
-  writeData
-} from "@/settings/lib/storage";
+  commandsOfHost,
+  historySnapshot,
+  historyVersion,
+  recordCommand,
+  recordExitCode
+} from "@/terminal/lib/commandHistory";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
 import type { ShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
-
-/** 历史上限：超出后丢最旧的（和 bash HISTSIZE 一个思路）。 */
-const HISTORY_LIMIT = 500;
 
 /**
  * 内置常用命令字典：历史里没有匹配时，对没有空格的输入（还在敲
@@ -109,52 +108,38 @@ export const BUILTIN_COMMANDS = [
   "Test-Connection"
 ];
 
-/** 全部终端共享的命令历史（同 PSReadLine 的全局历史），懒加载一次。 */
-let sharedHistory: string[] | null = null;
+/**
+ * 按主机缓存的命令列表。
+ *
+ * 补全每次输出解析都要取一次「当前主机的命令」，5000 条全量过滤撑不住
+ * 那个频率（打字时每秒几十次）。用 `historyVersion()` 判断缓存是否过期：
+ * 历史只在记录命令/回填退出码时变，比较一个整数比重新过滤便宜得多。
+ */
+let hostCache: {
+  host: string;
+  version: number;
+  commands: string[];
+} | null = null;
 
 /**
- * 读取落盘的命令历史；没有或损坏时返回空数组。
- * 历史丢了不致命，不能让终端区因此挂掉。
+ * 取某主机的命令列表（时间正序，带缓存）。
+ *
+ * @param host 当前会话的主机标识（见 commandHistory.hostKeyOf）
  */
-function loadCommandHistory(): string[] {
-  try {
-    const raw = readData(DataName.commandHistory);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is string =>
-        typeof item === "string" &&
-        item.trim() !== ""
-    );
-  } catch (reason) {
-    console.warn(
-      "[completion] 命令历史读取失败",
-      reason
-    );
-    return [];
-  }
-}
-
-/** 共享历史（首次调用时从存储加载）。 */
-function getSharedHistory(): string[] {
-  sharedHistory ??= loadCommandHistory();
-  return sharedHistory;
-}
-
-/**
- * 往历史里追加一条命令：去重后挪到末尾（最新），超出上限丢最旧。
- * 纯函数，返回新数组。
- */
-export function pushCommand(
-  history: string[],
-  command: string
-): string[] {
-  const next = history.filter(
-    item => item !== command
+function hostCommands(host: string): string[] {
+  const version = historyVersion();
+  if (
+    hostCache &&
+    hostCache.host === host &&
+    hostCache.version === version
+  )
+    return hostCache.commands;
+  const commands = commandsOfHost(
+    historySnapshot(),
+    host
   );
-  next.push(command);
-  return next.slice(-HISTORY_LIMIT);
+  hostCache = { host, version, commands };
+  return commands;
 }
 
 /**
@@ -234,6 +219,13 @@ export interface CompletionHooks {
    * 远端钩子给出，不再需要 stripPrompt 猜提示符。
    */
   integration?: ShellIntegration;
+  /**
+   * 当前会话的主机标识（见 commandHistory.hostKeyOf）。
+   *
+   * 历史按它隔离：补全只建议**本机**跑过的命令。必填 —— 忘了传就会
+   * 按空主机取，那正好是「历史遗留」那批条目的归属，等于把隔离放开了。
+   */
+  host: string;
 }
 
 /** 补全控制器：由会话在输出与键盘事件里驱动。 */
@@ -245,8 +237,10 @@ export interface CompletionController {
    * 接受的文本；返回 true 表示事件已消费（xterm 不再处理）。
    */
   consumeKeydown(event: KeyboardEvent): boolean;
-  /** 回车后记录命令历史（去重、落盘）。 */
+  /** 回车后记录命令历史（按本机隔离、落盘）。 */
   pushHistory(command: string): void;
+  /** 命令结束时回填退出码（有 shell 集成才有，见 OSC 133 的 D 标记）。 */
+  pushExitCode(code: number | null): void;
   /** 设置开关（设置页实时切换）：关闭时立即收起 ghost text。 */
   setEnabled(on: boolean): void;
 }
@@ -394,7 +388,7 @@ export function attachCommandCompletion(
     }
     const found = findSuggestion(
       input,
-      getSharedHistory()
+      hostCommands(hooks.host)
     );
     if (!found) {
       suggestion = null;
@@ -469,17 +463,13 @@ export function attachCommandCompletion(
   };
 
   const pushHistory = (command: string) => {
-    const trimmed = command.trim();
-    if (!trimmed) return;
-    sharedHistory = pushCommand(
-      getSharedHistory(),
-      trimmed
-    );
-    // 存储层内存先行、异步落盘，失败只记日志
-    writeData(
-      DataName.commandHistory,
-      JSON.stringify(sharedHistory)
-    );
+    // 空命令、纯空白在这里被 recordCommand 挡掉
+    recordCommand(command, hooks.host);
+  };
+
+  const pushExitCode = (code: number | null) => {
+    if (code === null) return;
+    recordExitCode(hooks.host, code);
   };
 
   // 回显驱动：每批写进终端的内容解析完就重算一次建议
@@ -503,6 +493,7 @@ export function attachCommandCompletion(
       }
     },
     consumeKeydown,
-    pushHistory
+    pushHistory,
+    pushExitCode
   };
 }

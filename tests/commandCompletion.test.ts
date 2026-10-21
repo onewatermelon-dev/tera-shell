@@ -1,14 +1,14 @@
 /**
- * 命令补全纯逻辑测试：历史匹配、字典兜底、按词接受、历史去重。
+ * 命令补全纯逻辑测试：历史匹配、字典兜底、按词接受。
  * ghost text 渲染与按键拦截依赖 xterm 实例，不在单测范围。
+ * 历史条目本身的增删/隔离/检索见 commandHistory.test.ts。
  */
 
 import { describe, expect, it } from "vitest";
 import {
   acceptNextWord,
   BUILTIN_COMMANDS,
-  findSuggestion,
-  pushCommand
+  findSuggestion
 } from "@/terminal/lib/commandCompletion";
 
 describe("findSuggestion", () => {
@@ -104,38 +104,5 @@ describe("acceptNextWord", () => {
 
   it("空余量返回空", () => {
     expect(acceptNextWord("")).toBe("");
-  });
-});
-
-describe("pushCommand", () => {
-  it("新命令追加到末尾", () => {
-    expect(pushCommand(["a", "b"], "c")).toEqual([
-      "a",
-      "b",
-      "c"
-    ]);
-  });
-
-  it("重复命令去重并挪到末尾", () => {
-    expect(
-      pushCommand(["a", "b", "c"], "a")
-    ).toEqual(["b", "c", "a"]);
-  });
-
-  it("不改动原数组", () => {
-    const original = ["a"];
-    pushCommand(original, "b");
-    expect(original).toEqual(["a"]);
-  });
-
-  it("超出上限丢最旧的", () => {
-    const history = Array.from(
-      { length: 500 },
-      (_, i) => `cmd-${i}`
-    );
-    const next = pushCommand(history, "newest");
-    expect(next).toHaveLength(500);
-    expect(next[0]).toBe("cmd-1");
-    expect(next[499]).toBe("newest");
   });
 });

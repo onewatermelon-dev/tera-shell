@@ -20,6 +20,7 @@ import {
   VIM_SCHEME_SETUP
 } from "@/terminal/lib/catView";
 import { stripPrompt } from "@/terminal/lib/stripPrompt";
+import { hostKeyOf } from "@/terminal/lib/commandHistory";
 import type { ShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
 import { attachCommandCompletion } from "@/terminal/lib/commandCompletion";
 import {
@@ -41,7 +42,7 @@ import {
  */
 export function matchTerminalShortcut(
   event: KeyboardEvent,
-  actionId: "find" | "devtools"
+  actionId: "find" | "devtools" | "historySearch"
 ): boolean {
   const chord = parseChord(
     effectiveShortcuts()[actionId] ?? ""
@@ -112,7 +113,9 @@ export function attachTerminalInput(
       isInputBlocked: () =>
         isDisconnected() || explaining || viewing,
       enabled: commandCompletion,
-      integration
+      integration,
+      // 历史按主机隔离：补全只建议本机跑过的命令
+      host: hostKeyOf(session)
     }
   );
   // pts 注入与 exec 共用：SSH 会话的 exec 目标 + 找该用户最新 pts 的

@@ -37,7 +37,8 @@ import { useSyncExternalStore } from "react";
  */
 const HANDLED_ELSEWHERE = new Set([
   "find",
-  "devtools"
+  "devtools",
+  "historySearch"
 ]);
 
 /**
@@ -88,6 +89,12 @@ export const APP_SHORTCUTS: Record<
   // ---- 查看 ----
   // 已由 useTerminals 处理，菜单照常显示键位。
   find: "Ctrl+F",
+  // H = History。打开命令历史检索面板（跨主机可搜）。
+  // ⚠️ 不用裸 Ctrl+R：那是 readline 的**反向增量搜索**，抢掉等于让远端
+  // shell 里按 Ctrl+R 彻底失效（而且用户按下去期待的是 shell 自己的历史）。
+  // 想要 Ctrl+R 观感的可以在设置页把这一项改过去 —— 面板本身是
+  // 「输入即过滤、↑↓ 选、Enter 插入」，与 reverse-i-search 同一套手感。
+  historySearch: "Ctrl+Shift+H",
   // ⚠️ 这里曾有 `toggleCaseSensitive`（Ctrl+Shift+C）与 `toggleRegex`
   // （Ctrl+Shift+G）两项，用户要求取消。它们的实现在查找面板里
   // （面板上有「区分大小写 / 正则表达式」两个按钮，见 TerminalWorkspace），
@@ -180,6 +187,7 @@ export const ACTION_LABELS: Record<
   selectAll: "Select all",
   clear: "Clear",
   find: "Find",
+  historySearch: "Command history",
   toggleMaximize: "Maximize / restore",
   openSftp: "Open SFTP",
   devtools: "Developer tools",

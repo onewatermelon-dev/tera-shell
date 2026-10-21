@@ -436,6 +436,12 @@ const zhCN = {
   "terminal.find.regex": "正则表达式",
   "terminal.find.close": "关闭 (Esc)",
   "terminal.find.noMatch": "无匹配",
+  "terminal.history.placeholder": "搜索命令历史…",
+  "terminal.history.scopeHost": "本机",
+  "terminal.history.scopeAll": "全部主机",
+  "terminal.history.empty": "没有匹配的命令",
+  "terminal.history.hint":
+    "↑↓ 选择 · Enter 插入 · Tab 切换范围 · Esc 关闭",
   "terminal.passwordHint":
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
@@ -1133,6 +1139,14 @@ const enUS: Record<MessageKey, string> = {
   "terminal.find.regex": "Regular expression",
   "terminal.find.close": "Close (Esc)",
   "terminal.find.noMatch": "No matches",
+  "terminal.history.placeholder":
+    "Search command history…",
+  "terminal.history.scopeHost": "This host",
+  "terminal.history.scopeAll": "All hosts",
+  "terminal.history.empty":
+    "No matching commands",
+  "terminal.history.hint":
+    "↑↓ select · Enter insert · Tab switch scope · Esc close",
   "terminal.passwordHint":
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",

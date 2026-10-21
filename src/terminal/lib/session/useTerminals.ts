@@ -21,11 +21,13 @@ import {
   useRef,
   useState
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
 import { useT } from "@/settings/lib/i18n";
 import { enableWebgl } from "@/terminal/lib/webglRenderer";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { useTerminalSearch } from "@/terminal/lib/search/useTerminalSearch";
+import { hostKeyOf } from "@/terminal/lib/commandHistory";
 import { useTerminalReconnect } from "./useTerminalReconnect";
 import type { OpenSession } from "./terminalTypes";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
@@ -127,6 +129,55 @@ export function useTerminals(
   const search = useTerminalSearch(
     openedRef,
     activeIdRef
+  );
+
+  // ---- 命令历史检索面板（跨主机可搜，见 HistoryPanel）----
+  const [historyOpen, setHistoryOpen] =
+    useState(false);
+  const openHistorySearch = useCallback(
+    () => setHistoryOpen(true),
+    []
+  );
+  const closeHistorySearch = useCallback(() => {
+    setHistoryOpen(false);
+    // Esc / 点遮罩关闭后把焦点交回终端：否则接下来敲的字全落在
+    // 已经关掉的输入框上，用户会以为终端卡了
+    const session = openedRef.current.find(
+      item => item.id === activeIdRef.current
+    );
+    requestAnimationFrame(() =>
+      session?.terminal.focus()
+    );
+  }, []);
+  /**
+   * 把面板里选中的命令插进当前会话的输入行（**不执行**）。
+   *
+   * 走 normal 的 PTY 写入当作用户键入：远端 readline 回显、光标停在行尾，
+   * 用户可以接着改再回车 —— 与 shell 自己 Ctrl+R 之后的行为一致。
+   * 断线会话先滤掉：往后端写只会收到「终端会话不存在」，静默失败。
+   */
+  const insertHistory = useCallback(
+    (command: string) => {
+      setHistoryOpen(false);
+      const session = openedRef.current.find(
+        item => item.id === activeIdRef.current
+      );
+      if (
+        !session ||
+        disconnectedRef.current[session.id]
+      )
+        return;
+      invoke("terminal_write", {
+        id: session.id,
+        data: command,
+        command: null
+      }).catch(onError);
+      // 面板卸载后再把焦点交回终端，否则敲字落在已移除的输入框上
+      requestAnimationFrame(() =>
+        session.terminal.focus()
+      );
+    },
+    [onError]
   );
 
   // ---- 窗格（多标签组网格），状态与操作见 paneGrid ----
@@ -266,10 +317,15 @@ export function useTerminals(
     terminalMenu.current ??= createTerminalMenu({
       onError,
       onFind: search.openSearch,
+      onHistory: openHistorySearch,
       onReconnect: id => reconnectRef.current(id)
     });
     return terminalMenu.current;
-  }, [onError, search.openSearch]);
+  }, [
+    onError,
+    search.openSearch,
+    openHistorySearch
+  ]);
 
   const createTerminal = useCallback(
     (
@@ -292,6 +348,7 @@ export function useTerminals(
           reportSearchResults:
             search.reportResults,
           openSearch: search.openSearch,
+          openHistorySearch,
           ensureTerminalMenu,
           formatFontSizeHint: size =>
             t("terminal.fontSizeHint", { size }),
@@ -304,6 +361,7 @@ export function useTerminals(
       onFontSizeChange,
       search.reportResults,
       search.openSearch,
+      openHistorySearch,
       ensureTerminalMenu,
       t,
       onLongCommand
@@ -431,6 +489,13 @@ export function useTerminals(
     toggleCaseSensitive:
       search.toggleCaseSensitive,
     toggleRegex: search.toggleRegex,
-    search: search.search
+    search: search.search,
+    // ---- 命令历史检索面板 ----
+    historyOpen,
+    /** 当前会话的主机标识：面板默认只看本机（可切到跨主机） */
+    historyHost: active ? hostKeyOf(active) : "",
+    openHistorySearch,
+    closeHistorySearch,
+    insertHistory
   };
 }
