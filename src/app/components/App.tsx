@@ -186,6 +186,34 @@ export default function App() {
     : undefined;
 
   /**
+   * 目录栏双击目录：让终端 `cd` 过去。
+   *
+   * 走 PTY（等价于用户自己敲了 `cd ...`），所以终端里会留下这条命令 ——
+   * 这是有意的：用户随时能看见自己是怎么到这个目录的，也不会出现
+   * 「终端在 A、目录栏在 B」的错位（视图由 cwd 跟随自动切）。
+   *
+   * 引号规则两端不同：
+   * - POSIX（SSH）：单引号包裹，内部 `'` 写成 `'\''`
+   * - PowerShell（本地）：单引号包裹，内部 `'` 写成 `''`
+   * - 全是安全字符时不加引号，命令看着干净
+   */
+  function enterDirectory(path: string) {
+    const target = terminals.active;
+    if (!target) return;
+    const remote = target.kind !== "local";
+    const safe = /^[\w@%+=:,./-]+$/.test(path);
+    const quoted = safe
+      ? path
+      : remote
+        ? `'${path.replace(/'/g, `'\\''`)}'`
+        : `'${path.replace(/'/g, "''")}'`;
+    terminals.insertText(
+      target.id,
+      `cd ${quoted}\r`
+    );
+  }
+
+  /**
    * 目录栏双击文件：把路径插进终端（不执行）。
    *
    * 含空格的路径加引号，否则粘进 shell 会被拆成多个参数。
@@ -453,6 +481,7 @@ export default function App() {
             session={terminals.active}
             cwd={terminals.activeCwd}
             onInsertPath={insertPath}
+            onEnterDirectory={enterDirectory}
           />
         )}
         <TerminalWorkspace

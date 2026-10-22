@@ -11,6 +11,7 @@
  * 「终端跑到哪个目录了，旁边就能看见」，只读浏览、单栏跟随。
  */
 import {
+  Fragment,
   useEffect,
   useRef,
   useState
@@ -27,7 +28,6 @@ import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 import { buildRemoteConnection } from "@/sftp/lib/sftpConnection";
 import {
   parentOf,
-  type PaneEntry,
   type PaneListing
 } from "@/sftp/lib/sftpUtils";
 
@@ -59,7 +59,8 @@ async function listDirectory(
 export default function DirectoryPanel({
   session,
   cwd,
-  onInsertPath
+  onInsertPath,
+  onEnterDirectory
 }: {
   /** 活动会话；没有活动会话时显示空状态 */
   session?: OpenSession;
@@ -67,6 +68,13 @@ export default function DirectoryPanel({
   cwd: string;
   /** 把路径插进终端（不执行） */
   onInsertPath: (text: string) => void;
+  /**
+   * 双击目录：让终端 `cd` 过去。
+   *
+   * 目录栏的定位是「终端的镜像」，所以导航以终端为准 —— 双击即 cd，
+   * 视图随后由 cwd 跟随自动切过去，不会出现「栏里在 A、终端在 B」。
+   */
+  onEnterDirectory: (path: string) => void;
 }) {
   const t = useT();
   // 初值取当前 cwd；cwd 变化由父级换 key 重挂载（见 App），所以这里
@@ -161,10 +169,6 @@ export default function DirectoryPanel({
 
   const entries = listing?.entries ?? [];
 
-  function open(entry: PaneEntry) {
-    if (entry.isDir) setPath(entry.path);
-  }
-
   return (
     // 复用 .sidebar 类：收起侧栏（.workspace.sidebar-closed）时靠它
     // 一起隐藏，网格也从两列变一列 —— 否则目录栏会顶到整宽的位置上
@@ -218,15 +222,26 @@ export default function DirectoryPanel({
             .slice(0, index + 1)
             .join("/")}`;
           return (
-            <button
-              key={target}
-              type="button"
-              className="directory-crumb"
-              onClick={() => setPath(target)}
-              title={target}
-            >
-              {part}
-            </button>
+            <Fragment key={target}>
+              {/* 段与段之间显式画一个 /：根节点自身已经带斜杠
+                  （`/` 或 `C:/`），所以第一段前面不再重复 */}
+              {index > 0 && (
+                <span
+                  className="directory-sep"
+                  aria-hidden="true"
+                >
+                  /
+                </span>
+              )}
+              <button
+                type="button"
+                className="directory-crumb"
+                onClick={() => setPath(target)}
+                title={target}
+              >
+                {part}
+              </button>
+            </Fragment>
           );
         })}
       </div>
@@ -258,14 +273,15 @@ export default function DirectoryPanel({
                 selected === entry.path
               }
               data-busy={loading}
-              onClick={() => {
-                setSelected(entry.path);
-                open(entry);
-              }}
-              // 文件双击才插入路径：单击误触会把路径敲进终端，太吵
+              // 单击只选中：双击才是动作（目录 cd / 文件插路径），
+              // 避免手滑就把命令敲进终端
+              onClick={() =>
+                setSelected(entry.path)
+              }
               onDoubleClick={() => {
-                if (!entry.isDir)
-                  onInsertPath(entry.path);
+                if (entry.isDir)
+                  onEnterDirectory(entry.path);
+                else onInsertPath(entry.path);
               }}
               title={entry.path}
             >

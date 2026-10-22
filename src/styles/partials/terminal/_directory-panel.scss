@@ -51,7 +51,7 @@
 
 .directory-crumb {
   flex: none;
-  padding: 2px 4px;
+  padding: 2px 3px;
   font:
     11px Consolas,
     monospace;
@@ -65,6 +65,17 @@
     color: var(--foreground);
     background: var(--surface-hover);
   }
+}
+
+// 层级之间的斜杠：不可点、不占交互面积
+.directory-sep {
+  flex: none;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--muted);
+  user-select: none;
+  opacity: 0.55;
 }
 
 .directory-list {
