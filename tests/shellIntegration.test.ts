@@ -187,4 +187,29 @@ describe("shell 集成状态机", () => {
     expect(integration.atPrompt).toBe(false);
     expect(integration.running).toBe(false);
   });
+
+  it("OSC 7 只在目录真的变了时回调（每个提示符都会发一次）", () => {
+    const { terminal } = fakeTerminal("$ ");
+    const seen: string[] = [];
+    const integration = createShellIntegration(
+      terminal as never,
+      { onCwdChange: cwd => seen.push(cwd) }
+    );
+    integration.feedCwd("file://host/home/root");
+    integration.feedCwd("file://host/home/root");
+    integration.feedCwd("file://host/var/log");
+    expect(seen).toEqual([
+      "/home/root",
+      "/var/log"
+    ]);
+    expect(integration.cwd).toBe("/var/log");
+  });
+
+  it("没收到过 OSC 7 时 cwd 为空串（目录栏据此显示等待态）", () => {
+    const { terminal } = fakeTerminal("$ ");
+    const integration = createShellIntegration(
+      terminal as never
+    );
+    expect(integration.cwd).toBe("");
+  });
 });

@@ -1,0 +1,123 @@
+// 目录栏：跟随当前会话工作目录（OSC 7）。与会话栏同一列宽（网格第一列）。
+
+// 细滚动条 mixin 在 _scrollbar.scss
+@use "../scrollbar" as *;
+
+.directory-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.directory-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 4px 12px;
+}
+
+// 会话名：窄栏里必须省略，不能把按钮挤出去
+.directory-session {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.directory-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+// 面包屑：一条横向可滚动的窄条，路径深了也不换行占两行高度
+.directory-crumbs {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 0 8px 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+
+  @include thin-scrollbar;
+}
+
+.directory-crumb {
+  flex: none;
+  padding: 2px 4px;
+  font:
+    11px Consolas,
+    monospace;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+}
+
+.directory-list {
+  flex: 1;
+  padding: 4px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+
+  @include thin-scrollbar;
+}
+
+.directory-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+
+  &:hover,
+  &[data-selected="true"] {
+    background: var(--surface-hover);
+  }
+
+  // 刷新中让列表淡一点，避免用户以为点了没反应
+  &[data-busy="true"] {
+    opacity: 0.6;
+  }
+}
+
+// 图标与 SFTP 面板同一套：系统原生 PNG 用 .file-icon（16×16，全局样式），
+// 取不到时退回 antd 线性图标 —— 那种没有类名，颜色跟着这里走
+.directory-row > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.directory-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-empty {
+  padding: 20px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  text-align: center;
+}

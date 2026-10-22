@@ -7,6 +7,7 @@ import {
   MenuUnfoldOutlined,
   SettingOutlined,
   DashboardOutlined,
+  FolderOpenOutlined,
   ThunderboltOutlined
 } from "@ant-design/icons";
 import Hint from "@/shared/components/Hint";
@@ -16,6 +17,15 @@ import {
 } from "@/settings/lib/i18n";
 import type { StatusMode } from "@/settings/lib/settings";
 import { shortcutOf } from "@/shared/lib/appShortcuts";
+
+/**
+ * 侧栏的两种内容：会话列表 / 跟随当前会话的目录。
+ *
+ * 为什么放竖条上切换而不是在侧栏里加 tab：两者占的是**同一块空间**，
+ * 一次只看一种，加一行 tab 只是平白吃掉高度。
+ */
+export type SidebarMode =
+  "sessions" | "directory";
 
 /**
  * 菜单项定义。
@@ -178,6 +188,10 @@ type RailProps = {
   /** 会话栏展开态与切换动作：竖条上的侧栏开关图标跟随它换图标与提示。 */
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  /** 侧栏当前显示的是会话列表还是跟随目录。 */
+  sidebarMode: SidebarMode;
+  /** 会话列表 ⇆ 跟随目录。 */
+  onToggleSidebarMode: () => void;
   /** 打开设置页。 */
   onOpenSettings: () => void;
   /** 底部状态栏形态（快捷宏 ⇆ 信息栏）与切换动作。 */
@@ -199,6 +213,8 @@ export default function AppRail({
   onAction,
   sidebarOpen,
   onToggleSidebar,
+  sidebarMode,
+  onToggleSidebarMode,
   onOpenSettings,
   statusMode,
   onToggleStatus,
@@ -362,6 +378,29 @@ export default function AppRail({
             ) : (
               <ThunderboltOutlined />
             )}
+          </button>
+        </Hint>
+        {/* 侧栏内容切换：会话列表 ⇆ 跟随当前会话的目录 */}
+        <Hint
+          label={
+            sidebarMode === "directory"
+              ? t("rail.toSessions")
+              : t("rail.directory")
+          }
+        >
+          <button
+            type="button"
+            className="rail-trigger"
+            data-active={
+              sidebarMode === "directory"
+            }
+            aria-pressed={
+              sidebarMode === "directory"
+            }
+            aria-label={t("rail.directory")}
+            onClick={onToggleSidebarMode}
+          >
+            <FolderOpenOutlined />
           </button>
         </Hint>
         {/* 设置按钮沉底：margin-top:auto 把它推到卡片最下面 */}

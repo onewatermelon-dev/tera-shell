@@ -460,6 +460,15 @@ const zhCN = {
   "terminal.paste.more": "…还有 {count} 行",
   "terminal.failure.title":
     "命令失败（exit {code}）· 看看？",
+  "rail.directory": "显示跟随目录",
+  "rail.toSessions": "回到会话列表",
+  "directory.noSession": "没有活动会话",
+  "directory.waiting":
+    "等待终端上报目录（需要 shell 集成生效）",
+  "directory.loading": "读取中…",
+  "directory.emptyDir": "空目录",
+  "directory.up": "上级目录",
+  "directory.refresh": "刷新",
   "terminal.passwordHint":
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
@@ -1186,6 +1195,15 @@ const enUS: Record<MessageKey, string> = {
     "…and {count} more lines",
   "terminal.failure.title":
     "Command failed (exit {code}) · Investigate?",
+  "rail.directory": "Show followed directory",
+  "rail.toSessions": "Back to sessions",
+  "directory.noSession": "No active session",
+  "directory.waiting":
+    "Waiting for the shell to report its directory (needs shell integration)",
+  "directory.loading": "Loading…",
+  "directory.emptyDir": "Empty directory",
+  "directory.up": "Parent directory",
+  "directory.refresh": "Refresh",
   "terminal.passwordHint":
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",

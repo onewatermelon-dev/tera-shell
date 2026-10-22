@@ -32,6 +32,10 @@ import {
   parseOsc133Event,
   type Osc133Event
 } from "./osc133";
+import {
+  parseOsc7,
+  parsePromptCwd
+} from "./osc7";
 
 /** 提示符结束时（B）记下的输入起点。 */
 export interface PromptPoint {
@@ -77,6 +81,13 @@ export interface ShellIntegrationHooks {
   onCommandStart?(command: string | null): void;
   /** 命令执行结束（D）：带上远端 shell 给出的退出码 */
   onCommandEnd?(exitCode: number | null): void;
+  /**
+   * 当前工作目录变了（OSC 7）。
+   *
+   * 只在路径**真的**变了时回调（每个提示符都会发 OSC 7，不去重会导致
+   * 目录栏每次回车都重新拉一遍列表）。
+   */
+  onCwdChange?(cwd: string): void;
 }
 
 /** 会话级的 shell 集成句柄。 */
@@ -93,6 +104,12 @@ export interface ShellIntegration {
    * 生产路径由 xterm 的 OSC handler 调用；测试直接调它模拟远端输出。
    */
   feed(body: string): void;
+  /**
+   * 喂一条 OSC 7 载荷（`file://host/path`）。
+   *
+   * 生产路径由 xterm 的 OSC 7 handler 调用；测试直接调它模拟远端上报目录。
+   */
+  feedCwd(data: string): void;
   /** 提示符结束位置；未见过 B 时为 null。 */
   promptEnd(): PromptPoint | null;
   /**
@@ -103,6 +120,8 @@ export interface ShellIntegration {
   readInput(): string;
   /** 最近一条已开始执行的命令文本。 */
   lastCommand(): string | null;
+  /** 远端 shell 的当前工作目录（OSC 7）；没收到过为空串。 */
+  readonly cwd: string;
   /**
    * 丢弃当前的输入起点（注入过内容、屏幕被我们改写之后调用）。
    *
@@ -183,6 +202,30 @@ export function createShellIntegration(
   let marker: IMarker | null = null;
   let markerColumn = 0;
   let command: string | null = null;
+  /** 最近一次 OSC 7 报上来的目录 */
+  let cwd = "";
+  /** 是否收到过 OSC 7（收到后就不再采用提示符推断的结果） */
+  let cwdFromOsc7 = false;
+
+  /**
+   * 喂一条 OSC 7（`file://host/path`）。
+   *
+   * 与 `feed`（OSC 133）分开：两者语义不同，混在一个 switch 里会让
+   * 133 的解析器背上一半无关逻辑。
+   *
+   * @param data OSC 7 载荷
+   */
+  const feedCwd = (data: string) => {
+    const next = parseOsc7(data);
+    if (!next) return;
+    // 权威来源到了：之后的提示符推断一律让位
+    cwdFromOsc7 = true;
+    if (next === cwd) return;
+    cwd = next;
+    // 目录栏「不跟随」时先看有没有这行：没有 = 钩子没发 OSC 7
+    console.info("[cwd] OSC 7 →", next);
+    hooks.onCwdChange?.(next);
+  };
 
   const point = (): PromptPoint | null =>
     marker && marker.line >= 0
@@ -208,6 +251,29 @@ export function createShellIntegration(
       case "prompt-end": {
         // 提示符刚画完：此刻光标就是输入起点
         const buffer = terminal.buffer.active;
+        // 兜底跟随：钩子还没发 OSC 7（老版本 / 没重载）时，从提示符
+        // 文本里猜目录 —— 绝大多数 PS1 都把 \w 画在里面。
+        // 一旦收到过 OSC 7 就只用权威值，避免 `~` 把真实路径盖回去。
+        if (!cwdFromOsc7) {
+          const line = buffer.getLine(
+            buffer.baseY + buffer.cursorY
+          );
+          const promptText = line
+            ? line
+                .translateToString(true)
+                .slice(0, buffer.cursorX)
+            : "";
+          const guess =
+            parsePromptCwd(promptText);
+          if (guess && guess !== cwd) {
+            cwd = guess;
+            console.info(
+              "[cwd] 提示符推断 →",
+              guess
+            );
+            hooks.onCwdChange?.(guess);
+          }
+        }
         clearMarker();
         marker =
           terminal.registerMarker(0) ?? null;
@@ -277,6 +343,10 @@ export function createShellIntegration(
     lastCommand() {
       return command;
     },
+    get cwd() {
+      return cwd;
+    },
+    feedCwd,
     reset() {
       atPrompt = false;
       running = false;
@@ -343,12 +413,41 @@ export function attachShellIntegration(
     );
     return integration;
   }
+  // OSC 7（当前工作目录）：目录栏「实时跟随」的数据源。
+  // 单独注册、失败也不影响 133 —— 拿不到目录只是目录栏空着，
+  // 不能因此把补全与退出码一起拖下水。
+  let cwdRegistration: {
+    dispose(): void;
+  } | null = null;
+  try {
+    cwdRegistration =
+      terminal.parser.registerOscHandler(
+        7,
+        data => {
+          try {
+            integration.feedCwd(data);
+          } catch (reason) {
+            console.warn(
+              "[shell-integration] OSC 7 处理失败",
+              reason
+            );
+          }
+          return true;
+        }
+      );
+  } catch (reason) {
+    console.warn(
+      "[shell-integration] OSC 7 注册失败，目录栏将没有跟随目录",
+      reason
+    );
+  }
   // dispose 要一并注销 handler：终端销毁后残留的注册会持有闭包
   const dispose =
     integration.dispose.bind(integration);
   return Object.assign(integration, {
     dispose() {
       registration?.dispose();
+      cwdRegistration?.dispose();
       dispose();
     }
   });

@@ -25,7 +25,7 @@
 export type RemoteShell = "bash" | "zsh" | "pwsh";
 
 /** 钩子协议版本：脚本语义有变动时 +1，deploy 据此决定要不要重装。 */
-export const HOOK_VERSION = 3;
+export const HOOK_VERSION = 4;
 
 /** rc 文件里用来识别「这一行是我们加的」的标记。 */
 export const RC_MARKER =
@@ -74,6 +74,9 @@ const BASH_HOOK = [
   `__tera_si_precmd() {`,
   `  local code=$?`,
   `  __tera_si_osc "D;exit=\${code}"`,
+  // OSC 7：当前工作目录。目录栏靠它「实时跟随」——每画一次提示符就报
+  // 一次，`cd` 之后自然就更新了。用 $PWD 而不是 pwd，省一次子进程。
+  `  __tera_si_osc "7;file://\${HOSTNAME:-localhost}\${PWD}"`,
   `  __tera_si_wrap_ps1`,
   `  return $code`,
   `}`,
@@ -113,6 +116,8 @@ const ZSH_HOOK = [
   `__tera_si_precmd() {`,
   `  local code=$?`,
   `  __tera_si_osc "D;exit=\${code}"`,
+  // OSC 7：当前工作目录（zsh 里 $PWD 与 bash 同义）
+  `  __tera_si_osc "7;file://\${HOST:-localhost}\${PWD}"`,
   `  __tera_si_wrap_prompt`,
   `  return $code`,
   `}`,
@@ -156,7 +161,10 @@ const PWSH_HOOK = [
   `  # 这次跑的是纯 PowerShell 命令时它还停在 1，会把成功判成失败。`,
   `  if ($ok) { $code = 0 } elseif (-not $code) { $code = 1 }`,
   `  $text = & $global:__TeraSiOrigPrompt`,
-  `  return "$(__TeraSiOsc "D;exit=$code")$(__TeraSiOsc 'A')$text$(__TeraSiOsc 'B')"`,
+  // OSC 7：当前工作目录。PowerShell 的 $PWD 用反斜杠，转成正斜杠
+  // （OSC 7 与我们的目录列表都用 /）
+  `  $cwdPath = ($PWD.Path -replace '\\\\', '/')`,
+  `  return "$(__TeraSiOsc "D;exit=$code")$(__TeraSiOsc 'A')$(__TeraSiOsc "7;file://$env:COMPUTERNAME/$cwdPath")$text$(__TeraSiOsc 'B')"`,
   `}`,
   ``,
   `# C（命令开始）：PowerShell 没有 preexec 钩子，挂在 PSReadLine 的`,

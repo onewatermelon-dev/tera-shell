@@ -452,6 +452,23 @@ export function useTerminals(
     [failures, clearFailure]
   );
 
+  // ---- 目录跟随（OSC 7）：目录栏的「实时跟随目录」----
+  /** 每个会话的最新工作目录（远端报上来的；本地会话没有） */
+  const [cwdById, setCwdById] = useState<
+    Record<string, string>
+  >({});
+
+  const handleCwdChange = useCallback(
+    (sessionId: string, cwd: string) => {
+      setCwdById(prev =>
+        prev[sessionId] === cwd
+          ? prev
+          : { ...prev, [sessionId]: cwd }
+      );
+    },
+    []
+  );
+
   // ---- 命令历史检索面板（跨主机可搜，见 HistoryPanel）----
   const [historyOpen, setHistoryOpen] =
     useState(false);
@@ -477,20 +494,28 @@ export function useTerminals(
    * 用户可以接着改再回车 —— 与 shell 自己 Ctrl+R 之后的行为一致。
    * 断线会话先滤掉：往后端写只会收到「终端会话不存在」，静默失败。
    */
-  const insertHistory = useCallback(
-    (command: string) => {
-      setHistoryOpen(false);
+  /**
+   * 把一段文本**当作用户键入**写进终端（不执行）。
+   *
+   * 历史面板的「Enter 插入」与目录栏的「双击文件插路径」共用它：
+   * 走到远端 readline 的输入行，用户可以接着改再回车。
+   *
+   * @param sessionId 目标会话
+   * @param text 要插入的文本
+   */
+  const insertText = useCallback(
+    (sessionId: string, text: string) => {
       const session = openedRef.current.find(
-        item => item.id === activeIdRef.current
+        item => item.id === sessionId
       );
       if (
         !session ||
-        disconnectedRef.current[session.id]
+        disconnectedRef.current[sessionId]
       )
         return;
       invoke("terminal_write", {
-        id: session.id,
-        data: command,
+        id: sessionId,
+        data: text,
         command: null
       }).catch(onError);
       // 面板卸载后再把焦点交回终端，否则敲字落在已移除的输入框上
@@ -499,6 +524,14 @@ export function useTerminals(
       );
     },
     [onError]
+  );
+
+  const insertHistory = useCallback(
+    (command: string) => {
+      setHistoryOpen(false);
+      insertText(activeIdRef.current, command);
+    },
+    [insertText]
   );
 
   // ---- 窗格（多标签组网格），状态与操作见 paneGrid ----
@@ -690,6 +723,8 @@ export function useTerminals(
             ),
           onCommandSuccess: () =>
             clearFailure(session.id),
+          onCwdChange: cwd =>
+            handleCwdChange(session.id, cwd),
           ensureTerminalMenu,
           formatFontSizeHint: size =>
             t("terminal.fontSizeHint", { size }),
@@ -706,6 +741,7 @@ export function useTerminals(
       requestPaste,
       handleCommandFailure,
       clearFailure,
+      handleCwdChange,
       ensureTerminalMenu,
       t,
       onLongCommand
@@ -841,6 +877,8 @@ export function useTerminals(
     openHistorySearch,
     closeHistorySearch,
     insertHistory,
+    /** 把文本当作用户键入写进终端（不执行） */
+    insertText,
     // ---- 粘贴防护 ----
     pasteRequest,
     confirmPaste,
@@ -848,6 +886,12 @@ export function useTerminals(
     // ---- 失败即诊断 ----
     failures,
     diagnoseFailure,
-    clearFailure
+    clearFailure,
+    // ---- 目录跟随 ----
+    cwdById,
+    /** 活动会话的当前目录（没有就空串） */
+    activeCwd: active
+      ? (cwdById[active.id] ?? "")
+      : ""
   };
 }

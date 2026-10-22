@@ -81,6 +81,12 @@
     background: var(--surface-hover);
   }
 
+  // 开关型按钮的「当前已打开」态（目录栏按钮）
+  &[data-active="true"] {
+    color: var(--accent-foreground);
+    background: var(--accent);
+  }
+
   svg {
     width: 16px;
   }

@@ -99,6 +99,8 @@ export interface CreateTerminalOptions {
   }) => void;
   /** 命令成功结束（退出码 0）：用来把上一次的失败提示收掉。 */
   onCommandSuccess?: () => void;
+  /** 远端当前工作目录变了（OSC 7）：目录栏靠它实时跟随。 */
+  onCwdChange?: (cwd: string) => void;
   /** 右键菜单实例（整个应用只建一次，由调用方缓存；
    *  其中的「重新连接」由调用方在建菜单时直接接线） */
   ensureTerminalMenu: () => ReturnType<
@@ -245,7 +247,10 @@ export function createTerminalInstance(
           exitCode,
           output: readRecentOutput(terminal)
         });
-      }
+      },
+      // 目录跟随：钩子在每个提示符前发 OSC 7，变了才回调（见 feedCwd）
+      onCwdChange: cwd =>
+        options.onCwdChange?.(cwd)
     }
   );
   // 静默判定只在**没有** shell 集成时兜底。有集成还照旧 poke 的话，

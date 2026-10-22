@@ -61,6 +61,18 @@ describe("钩子脚本", () => {
     );
   });
 
+  it("三种 shell 都上报当前目录（OSC 7，目录栏靠它跟随）", () => {
+    for (const shell of [
+      "bash",
+      "zsh",
+      "pwsh"
+    ] as const) {
+      expect(hookScript(shell)).toContain(
+        "7;file://"
+      );
+    }
+  });
+
   it("zsh 用原生 precmd/preexec 钩子", () => {
     const script = hookScript("zsh");
     expect(script).toContain(

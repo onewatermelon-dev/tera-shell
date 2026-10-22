@@ -15,6 +15,8 @@ import {
 import { useT } from "@/settings/lib/i18n";
 import AppHeader from "@/app/components/AppHeader";
 import SessionSidebar from "@/sessions/components/SessionSidebar";
+import DirectoryPanel from "@/terminal/components/directory/DirectoryPanel";
+import type { SidebarMode } from "@/app/components/AppRail";
 import TerminalWorkspace from "@/terminal/components/TerminalWorkspace";
 import { PasteGuardDialog } from "@/terminal/components/workspace/PasteGuardDialog";
 import {
@@ -93,10 +95,32 @@ export default function App() {
     refocusAfterAction(refocusActive);
   }
 
+  /**
+   * 侧栏内容：会话列表 ⇆ 跟随目录。
+   *
+   * 不落盘：重启回到会话列表更符合预期（目录是「当前正在干什么」的
+   * 临时视图，不是长期偏好）。
+   */
+  const [sidebarMode, setSidebarMode] =
+    useState<SidebarMode>("sessions");
+
+  /** 竖条上的切换按钮；侧栏收着时顺手展开，否则点了像没反应。 */
+  function toggleSidebarMode() {
+    const next =
+      sidebarMode === "sessions"
+        ? "directory"
+        : "sessions";
+    setSidebarMode(next);
+    if (next === "directory" && !sidebarOpen) {
+      appSettings.update({ sidebarOpen: true });
+    }
+    refocusAfterAction(refocusActive);
+  }
+
   // 底部状态栏形态（快捷宏 ⇆ 信息栏）同样落盘
   const statusMode =
-    appSettings.settings.statusMode;
-  /** 切换底部状态栏形态并落盘。 */
+    appSettings.settings
+      .statusMode; /** 切换底部状态栏形态并落盘。 */
   function toggleStatusMode() {
     appSettings.update({
       statusMode:
@@ -160,6 +184,20 @@ export default function App() {
           terminals.pasteRequest?.sessionId
       )
     : undefined;
+
+  /**
+   * 目录栏双击文件：把路径插进终端（不执行）。
+   *
+   * 含空格的路径加引号，否则粘进 shell 会被拆成多个参数。
+   */
+  function insertPath(path: string) {
+    const target = terminals.active;
+    if (!target) return;
+    const text = /\s/.test(path)
+      ? `"${path}"`
+      : path;
+    terminals.insertText(target.id, text);
+  }
 
   /** 把键盘焦点还给活动终端（竖条按钮动作 / 菜单关闭后的焦点回还）。 */
   function refocusActive() {
@@ -363,6 +401,8 @@ export default function App() {
         menuState={menuState}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={toggleSidebar}
+        sidebarMode={sidebarMode}
+        onToggleSidebarMode={toggleSidebarMode}
         statusMode={statusMode}
         onToggleStatus={toggleStatusMode}
         hideMenus={settingsOpen}
@@ -377,29 +417,44 @@ export default function App() {
             : "workspace sidebar-closed"
         }
       >
-        <SessionSidebar
-          sessions={filteredSessions}
-          groups={groups}
-          activeId={
-            terminals.active?.sourceSessionId ??
-            ""
-          }
-          openedCount={terminals.opened.length}
-          query={query}
-          onQueryChange={setQuery}
-          onDuplicate={terminals.duplicate}
-          onEdit={dialogs.openEdit}
-          onRemove={dialogs.setSessionToRemove}
-          onCreate={dialogs.openCreate}
-          onToggleGroup={toggleGroup}
-          onCreateGroup={dialogs.openCreateGroup}
-          onEditGroup={dialogs.openEditGroup}
-          onRemoveGroup={dialogs.setGroupToRemove}
-          onCreateInGroup={
-            dialogs.openCreateInGroup
-          }
-          onMove={move}
-        />
+        {sidebarMode === "sessions" ? (
+          <SessionSidebar
+            sessions={filteredSessions}
+            groups={groups}
+            activeId={
+              terminals.active?.sourceSessionId ??
+              ""
+            }
+            openedCount={terminals.opened.length}
+            query={query}
+            onQueryChange={setQuery}
+            onDuplicate={terminals.duplicate}
+            onEdit={dialogs.openEdit}
+            onRemove={dialogs.setSessionToRemove}
+            onCreate={dialogs.openCreate}
+            onToggleGroup={toggleGroup}
+            onCreateGroup={
+              dialogs.openCreateGroup
+            }
+            onEditGroup={dialogs.openEditGroup}
+            onRemoveGroup={
+              dialogs.setGroupToRemove
+            }
+            onCreateInGroup={
+              dialogs.openCreateInGroup
+            }
+            onMove={move}
+          />
+        ) : (
+          <DirectoryPanel
+            // cwd 一变就重挂：组件内部无需「跟随」effect，
+            // 顺带把列表与滚动位置一起重置到新目录
+            key={`${terminals.active?.id ?? ""}:${terminals.activeCwd}`}
+            session={terminals.active}
+            cwd={terminals.activeCwd}
+            onInsertPath={insertPath}
+          />
+        )}
         <TerminalWorkspace
           opened={terminals.opened}
           active={terminals.active}

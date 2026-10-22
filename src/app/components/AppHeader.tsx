@@ -13,7 +13,8 @@ import {
 import Hint from "@/shared/components/Hint";
 import AppRail, {
   buildMenus,
-  type MenuState
+  type MenuState,
+  type SidebarMode
 } from "@/app/components/AppRail";
 import { useT } from "@/settings/lib/i18n";
 import {
@@ -116,6 +117,9 @@ type Props = {
   /** 会话栏展开态与切换动作：透传给左侧竖条上的开关图标。 */
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  /** 侧栏内容：会话列表 / 跟随目录（竖条上的切换按钮） */
+  sidebarMode: SidebarMode;
+  onToggleSidebarMode: () => void;
   /** 底部状态栏形态（快捷宏 ⇆ 信息栏）：透传给左侧竖条上的开关。 */
   statusMode: StatusMode;
   onToggleStatus: () => void;
@@ -131,6 +135,8 @@ export default function AppHeader({
   menuState,
   sidebarOpen,
   onToggleSidebar,
+  sidebarMode,
+  onToggleSidebarMode,
   statusMode,
   onToggleStatus,
   hideMenus = false,
@@ -309,6 +315,10 @@ export default function AppHeader({
           onMenuClosed={onMenuClosed}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={onToggleSidebar}
+          sidebarMode={sidebarMode}
+          onToggleSidebarMode={
+            onToggleSidebarMode
+          }
           onOpenSettings={actions.openSettings}
           statusMode={statusMode}
           onToggleStatus={onToggleStatus}
