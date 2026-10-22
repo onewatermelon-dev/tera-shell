@@ -22,6 +22,7 @@
  * 不能覆盖新内容。
  */
 
+import { logError } from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -100,10 +101,7 @@ export function AiCodeBlock({
       .catch(reason => {
         // 保存失败不冒面板气泡（那条路是给 Streamdown 内部按钮的
         // hack 用的），这里按钮自己闪一下 + 控制台留痕
-        console.error(
-          "[ai] 代码另存为失败",
-          reason
-        );
+        logError("[ai] 代码另存为失败", reason);
         setSaveFailed(true);
       });
   }, [code, lang]);

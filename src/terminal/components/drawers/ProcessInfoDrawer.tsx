@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -79,10 +80,7 @@ export default function ProcessInfoDrawer({
         setError("");
       } catch (reason) {
         if (cancelled) return;
-        console.error(
-          "[proc-info] 采集失败",
-          reason
-        );
+        logError("[proc-info] 采集失败", reason);
         setError(String(reason));
       }
       if (!cancelled) {

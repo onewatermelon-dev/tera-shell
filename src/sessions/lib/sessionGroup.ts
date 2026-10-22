@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 import type { SavedSession } from "@/sessions/lib/session";
 
 /**
@@ -185,7 +186,7 @@ export function parseGroups(
       collapsed: item?.collapsed === true
     }));
   } catch (error) {
-    console.warn(
+    logWarn(
       "[groups] 分组数据解析失败，按空处理",
       error
     );

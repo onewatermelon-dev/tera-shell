@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 import { useEffect, useState } from "react";
 import {
   InfoCircleOutlined,
@@ -77,10 +78,7 @@ export default function StatusInfoBar({
       } catch (reason) {
         // 轮询失败静默保留旧值：状态栏是次要展示，不打扰用户
         if (!cancelled)
-          console.warn(
-            "[status] 采集失败",
-            reason
-          );
+          logWarn("[status] 采集失败", reason);
       }
       if (!cancelled)
         timer = window.setTimeout(

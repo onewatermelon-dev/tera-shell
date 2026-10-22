@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import {
   useEffect,
   useCallback,
@@ -189,7 +190,7 @@ export default function AiPanel({
             );
         })
         .catch(reason => {
-          console.error(
+          logError(
             "[ai] 导出 Runbook 失败",
             reason
           );

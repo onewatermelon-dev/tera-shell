@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -243,7 +244,7 @@ export function useAppDialogs(options: {
         `[transfer] 导出完成：${sessions.length} 个会话`
       );
     } catch (reason) {
-      console.error("导出会话失败", reason);
+      logError("导出会话失败", reason);
       setError(
         t("transfer.exportFailed", {
           error: String(reason)
@@ -293,7 +294,7 @@ export function useAppDialogs(options: {
       }
       setPendingImport(result);
     } catch (reason) {
-      console.error("读取会话文件失败", reason);
+      logError("读取会话文件失败", reason);
       setError(
         t("transfer.importFailed", {
           error: String(reason)

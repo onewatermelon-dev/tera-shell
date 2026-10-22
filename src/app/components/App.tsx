@@ -1,4 +1,8 @@
 import {
+  logError,
+  logWarn
+} from "@/shared/lib/log";
+import {
   useEffect,
   useMemo,
   useState
@@ -52,7 +56,8 @@ import "@/styles/main.css";
  */
 export default function App() {
   const t = useT();
-  const { error, setError, fail } = useAppToast();
+  const { error, setError, fail, notify } =
+    useAppToast();
 
   const macroStore = useMacros();
 
@@ -214,6 +219,39 @@ export default function App() {
   }
 
   /**
+   * 错误提示里的一键导出诊断包。
+   *
+   * 结果复用同一个气泡显示（成功也是「已保存到 …」）—— 用户此刻只关心
+   * 「东西给出来了没有、在哪」，不必再开一个成功弹窗。
+   */
+  function exportDiagnosticsFromToast() {
+    invoke<{ path: string; files: number }>(
+      "diagnostics_export",
+      { days: 3 }
+    )
+      .then(info => {
+        console.info(
+          "[diagnostics] 诊断包已生成",
+          info
+        );
+        // 成功提示不该记成 error：走 notify（只显示不落盘）
+        notify(
+          t("about.diagnostics.done", {
+            path: info.path,
+            files: info.files
+          })
+        );
+      })
+      .catch((reason: unknown) => {
+        logError(
+          "[diagnostics] 导出失败",
+          reason
+        );
+        setError(String(reason));
+      });
+  }
+
+  /**
    * 目录栏的「打开 SFTP」：带着当前目录开一个独立 SFTP 窗口。
    *
    * 路径在这里就编码好：后端只把字符串拼到 URL 上，重复编码会把中文
@@ -350,7 +388,7 @@ export default function App() {
       terminals.activeId
     );
     if (ids.length === 0) {
-      console.warn(
+      logWarn(
         "[macro] 没有可发送的会话标签，已放弃广播"
       );
       setError(t("macro.broadcastNone"));
@@ -625,6 +663,9 @@ export default function App() {
         onCloseMacro={() => setMacroOpen(false)}
         error={error}
         onDismissError={() => setError("")}
+        onExportDiagnostics={
+          exportDiagnosticsFromToast
+        }
         appReady={loading.appReady}
         appLoadingRef={loading.appLoadingRef}
         onLoadingFinished={

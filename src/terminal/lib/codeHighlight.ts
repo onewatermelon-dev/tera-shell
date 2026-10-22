@@ -27,6 +27,7 @@
  * 是同一个坑。
  */
 
+import { logWarn } from "@/shared/lib/log";
 import chalk, { type Chalk } from "chalk";
 
 /**
@@ -432,7 +433,7 @@ export function createTokenSource(): TokenSource {
             ?.forEach(cb => cb(tokens));
         } catch (error) {
           // 高亮失败不是致命问题：退化成无色，别让整块代码块报错
-          console.warn(
+          logWarn(
             "[ai] 代码高亮失败，回退纯文本",
             error
           );
@@ -446,10 +447,7 @@ export function createTokenSource(): TokenSource {
         }
       })
       .catch(error => {
-        console.warn(
-          "[ai] 代码高亮器加载失败",
-          error
-        );
+        logWarn("[ai] 代码高亮器加载失败", error);
         callbacks.delete(key);
       });
     return null;

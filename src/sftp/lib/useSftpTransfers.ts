@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
@@ -126,7 +127,7 @@ export function useSftpTransfers({
           // 取消是用户主动行为，不算失败
           if (tasks.failTask(id, String(reason)))
             continue;
-          console.error(
+          logError(
             `[sftp] 拖放传输失败：${entry.name}`,
             reason
           );

@@ -14,6 +14,7 @@
  * 所以走 `tauri-plugin-notification`，它由原生侧发通知，不受该开关限制。
  * 版本必须与 tauri 2.11 匹配，原因见 `Cargo.toml` 里的注释。
  */
+import { logWarn } from "@/shared/lib/log";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   isPermissionGranted,
@@ -84,7 +85,7 @@ export async function ensurePermission(): Promise<PermissionOutcome> {
   } catch (reason) {
     // 命令不存在（插件没注册 / capability 没放行）会走到这里。
     // 这不是「用户拒绝」，必须如实区分，否则排查方向完全错
-    console.warn(
+    logWarn(
       "[notify] 查询通知权限失败：插件可能未注册",
       reason
     );
@@ -93,7 +94,7 @@ export async function ensurePermission(): Promise<PermissionOutcome> {
   try {
     const result = await requestPermission();
     if (result !== "granted") {
-      console.warn(
+      logWarn(
         "[notify] 用户未授予通知权限",
         result
       );
@@ -101,10 +102,7 @@ export async function ensurePermission(): Promise<PermissionOutcome> {
     }
     return { ok: true };
   } catch (reason) {
-    console.warn(
-      "[notify] 申请通知权限失败",
-      reason
-    );
+    logWarn("[notify] 申请通知权限失败", reason);
     return { ok: false, reason: "denied" };
   }
 }
@@ -119,7 +117,7 @@ export async function isWindowFocused(): Promise<boolean> {
   try {
     return await getCurrentWindow().isFocused();
   } catch (reason) {
-    console.warn(
+    logWarn(
       "[notify] 读窗口聚焦状态失败，按已聚焦处理",
       reason
     );
@@ -186,7 +184,7 @@ export async function notify(
   }
   const permission = await ensurePermission();
   if (!permission.ok) {
-    console.warn(
+    logWarn(
       `[notify] 通知被拒（${payload.kind}）`,
       permission.reason
     );
@@ -206,7 +204,7 @@ export async function notify(
     return true;
   } catch (reason) {
     // 通知发不出去绝不能影响主流程（AI 回复已经产出、传输已经完成）
-    console.warn("[notify] 发送通知失败", reason);
+    logWarn("[notify] 发送通知失败", reason);
     return false;
   }
 }

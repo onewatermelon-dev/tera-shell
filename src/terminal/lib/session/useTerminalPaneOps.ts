@@ -7,6 +7,7 @@
  * ConPTY 整屏重发把屏幕内容挤掉），并补两帧 rAF 的显式 fit
  * （ResizeObserver 会命中「尺寸没定」的中间态）。详见各函数内注释。
  */
+import { logError } from "@/shared/lib/log";
 import {
   useCallback,
   type Dispatch,
@@ -181,7 +182,7 @@ export function useTerminalPaneOps(options: {
       } catch (error) {
         // 拆分失败要露出完整错误（含 TypeError 堆栈摘要），否则用户只看到
         // 毫无线索的气泡甚至毫无反应
-        console.error(
+        logError(
           "[terminal] 拆分窗格失败",
           error
         );

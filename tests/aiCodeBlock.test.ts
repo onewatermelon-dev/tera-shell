@@ -82,8 +82,8 @@ describe("AI 代码块外观（aicss 改造版）", () => {
     // WebView2 丢原生下载，必须走后端命令（见 streamdownExport.ts）
     expect(src).toContain("fs_save_text_file");
     expect(src).toContain("codeBlockFileName");
-    // 失败必须留痕（出错路径 error! 带上下文）
-    expect(src).toContain("console.error");
+    // 失败必须留痕（现在走 logError：console + 落盘，见 shared/lib/log）
+    expect(src).toContain("logError");
   });
 
   it("复制钮保留 aicss 行为（clipboard + 1.2s 复位）", async () => {

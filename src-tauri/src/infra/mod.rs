@@ -7,3 +7,4 @@ pub mod http;
 pub mod logging;
 pub mod proxy;
 pub mod secret;
+pub mod diagnostics;

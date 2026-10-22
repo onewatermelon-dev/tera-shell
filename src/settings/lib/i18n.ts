@@ -521,6 +521,14 @@ const zhCN = {
   "settings.nav.about": "关于",
   "about.desc":
     "SSH 终端 · AI 助手（Tauri + React）",
+  "about.diagnostics.title": "诊断与日志",
+  "about.diagnostics.hint":
+    "反馈问题前先导出诊断包：近 3 天日志 + 脱敏后的设置 + 版本与系统信息",
+  "about.diagnostics.openLogs": "打开日志目录",
+  "about.diagnostics.export": "导出诊断包",
+  "about.diagnostics.working": "正在打包…",
+  "about.diagnostics.done":
+    "已保存到 {path}（{files} 个文件）",
   "about.update.title": "版本更新",
   "about.update.check": "检查更新",
   "about.update.checking": "检查中…",
@@ -1258,6 +1266,15 @@ const enUS: Record<MessageKey, string> = {
   "settings.nav.about": "About",
   "about.desc":
     "SSH terminal with an AI assistant (Tauri + React)",
+  "about.diagnostics.title": "Diagnostics & logs",
+  "about.diagnostics.hint":
+    "Export a bundle before filing an issue: last 3 days of logs, redacted settings, version and system info",
+  "about.diagnostics.openLogs": "Open log folder",
+  "about.diagnostics.export":
+    "Export diagnostics",
+  "about.diagnostics.working": "Packaging…",
+  "about.diagnostics.done":
+    "Saved to {path} ({files} files)",
   "about.update.title": "Updates",
   "about.update.check": "Check for updates",
   "about.update.checking": "Checking…",

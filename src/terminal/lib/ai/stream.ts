@@ -4,6 +4,7 @@
  *
  * 从 aiChat.ts 拆出。协议转换在 adapters.ts，这里只负责事件桥接。
  */
+import { logError } from "@/shared/lib/log";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiModelOption } from "./tools";
 import {
@@ -209,6 +210,6 @@ export async function cancelChatStream(
     );
   } catch (reason) {
     // 停止是用户主动操作，失败不该弹错误打扰他；但必须留痕
-    console.error("[ai] 停止生成失败", reason);
+    logError("[ai] 停止生成失败", reason);
   }
 }

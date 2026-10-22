@@ -18,6 +18,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# 诊断包（zip）的 CRC32：自己写 STORE 打包，不引 zip crate
+# （拉 zip 需要下载 zip/zopfli 等，离线环境会失败）
+crc32fast = "=1.5.0"
 # ── Tauri 核心 ──
 # ⚠️ tauri 与 tauri-plugin-notification 都**精确钉死**版本，勿随手改成 "2"。
 #

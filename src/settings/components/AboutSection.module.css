@@ -50,6 +50,13 @@
   justify-content: space-between;
 }
 
+/* 右侧可能并排两个按钮（诊断卡片），不换行挤压标题 */
+.actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
 .rowTitle {
   display: inline-flex;
   gap: 6px;

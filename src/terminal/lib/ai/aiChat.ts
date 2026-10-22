@@ -13,6 +13,7 @@
  * 并原样再导出此前的公开 API —— 调用方（AiPanel、aiExplain、测试等）
  * 的导入路径无需改动。
  */
+import { logWarn } from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -1390,7 +1391,7 @@ export function useAiChat(
     // 用最后一次调用留下的 ref 续发，语义上是"接着上一轮继续"
     const option = optionRef.current;
     if (!option) {
-      console.warn(
+      logWarn(
         "[ai] 队列有消息但没有可用模型，已停止自动续发"
       );
       return;

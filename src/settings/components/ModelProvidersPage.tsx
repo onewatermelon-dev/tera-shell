@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import { useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -186,7 +187,7 @@ export default function ModelProvidersPage() {
     } catch (reason) {
       // invoke 本身的错误（如没重启后端 → command not found）也显示出来
       detail = String(reason).slice(0, 120);
-      console.error(
+      logError(
         "[model-test] 请求失败",
         url,
         reason

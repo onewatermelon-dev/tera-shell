@@ -16,6 +16,7 @@
  * 所以 `fs_pick_file` / `fs_pick_save_path` 弹系统框，用户亲自挑，
  * 模型只提供远程那一侧的路径。
  */
+import { logError } from "@/shared/lib/log";
 import { invoke } from "@tauri-apps/api/core";
 import {
   execTargetOf,
@@ -132,7 +133,7 @@ export async function executeFileCall(
       return `[用户取消了传输] ${reason.message}`;
     }
     call.error = String(reason);
-    console.error(
+    logError(
       "[ai] 文件传输失败",
       call.direction,
       call.remotePath,

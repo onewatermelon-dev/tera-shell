@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -84,10 +85,7 @@ export default function NetworkInfoDrawer({
         setError("");
       } catch (reason) {
         if (cancelled) return;
-        console.error(
-          "[net-info] 采集失败",
-          reason
-        );
+        logError("[net-info] 采集失败", reason);
         setError(String(reason));
       }
       if (!cancelled) {

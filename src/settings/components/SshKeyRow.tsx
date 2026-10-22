@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@heroui/react";
 import { useT } from "@/settings/lib/i18n";
@@ -49,7 +50,7 @@ export default function SshKeyRow({
     } catch (reason) {
       // 打不开文件框属于环境问题，别静默 —— 但也没有常驻的提示位，
       // 打到控制台足够排查
-      console.warn(
+      logWarn(
         "[settings] 选择私钥文件失败",
         reason
       );

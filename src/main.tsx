@@ -2,7 +2,12 @@ import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import App from "./app/components/App";
+import ErrorBoundary from "./app/components/ErrorBoundary";
 import SftpApp from "./sftp/components/SftpApp";
+import {
+  installGlobalErrorLogging,
+  logInfo
+} from "./shared/lib/log";
 import {
   applyReduceMotion,
   applyTheme,
@@ -17,6 +22,10 @@ import { initStorage } from "./settings/lib/storage";
 document.addEventListener("contextmenu", e =>
   e.preventDefault()
 );
+
+// 未捕获异常与未处理的 Promise rejection 也进日志文件。
+// 越早装越好：bootstrap 里任何一步炸掉都能被记下来。
+installGlobalErrorLogging();
 
 // 同一个 index.html 服务两种窗口：
 // 带 ?sftp=<会话 id> 的是后端的独立 SFTP 窗口，其余是主窗口。
@@ -35,7 +44,7 @@ const sftpSessionId = new URLSearchParams(
  */
 async function bootstrap() {
   await initStorage();
-  console.info("[boot] 应用数据已从磁盘加载");
+  logInfo("[boot] 应用数据已从磁盘加载");
   // 主题写在各窗口自己的 document 根元素上：主窗口靠 useSettings 的 effect，
   // SFTP 独立窗口不挂 useSettings，必须在这里显式应用一次，否则永远默认浅色
   const settings = loadSettings();
@@ -64,11 +73,14 @@ async function bootstrap() {
   createRoot(
     document.getElementById("app")!
   ).render(
-    sftpSessionId ? (
-      <SftpApp sessionId={sftpSessionId} />
-    ) : (
-      <App />
-    )
+    // 渲染崩溃时至少有人写日志、给出口，而不是白屏
+    <ErrorBoundary>
+      {sftpSessionId ? (
+        <SftpApp sessionId={sftpSessionId} />
+      ) : (
+        <App />
+      )}
+    </ErrorBoundary>
   );
 
   // 窗口初始为隐藏（tauri.conf.json visible:false）以避免 webview 导航白屏；

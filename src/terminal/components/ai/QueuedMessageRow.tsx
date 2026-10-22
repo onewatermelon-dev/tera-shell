@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import {
   useEffect,
   useRef,
@@ -85,10 +86,7 @@ export function QueuedMessageRow({
       setTimeout(() => setCopied(false), 1500);
     } catch (reason) {
       // 用户预算是"宁可多打日志"，失败路径必须留痕
-      console.error(
-        "[ai] 复制排队消息失败",
-        reason
-      );
+      logError("[ai] 复制排队消息失败", reason);
     }
   }
 

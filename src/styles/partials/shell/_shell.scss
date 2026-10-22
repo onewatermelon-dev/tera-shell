@@ -117,3 +117,61 @@
   padding-left: 30px;
   font-size: 12px;
 }
+
+// 渲染崩溃页（ErrorBoundary）：白屏的替代品，必须留一条出路。
+// 类组件拿不到 i18n hook，文案在组件里中英并排写死。
+.crash-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 24px;
+  color: var(--foreground);
+  text-align: center;
+  background: var(--background);
+}
+
+.crash-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.crash-reason {
+  max-width: 720px;
+  margin: 0;
+  font:
+    12px Consolas,
+    monospace;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.crash-hint {
+  max-width: 560px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.crash-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.crash-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+}

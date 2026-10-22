@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 import {
   useEffect,
   useMemo,
@@ -206,9 +207,7 @@ export default function AppHeader({
       return;
     }
     // 菜单项与动作未对齐时不再静默失败，控制台直接点名，避免"点了没反应"难排查
-    console.warn(
-      `[menu] 未实现的菜单动作：${id}`
-    );
+    logWarn(`[menu] 未实现的菜单动作：${id}`);
   }
 
   /**
@@ -275,7 +274,7 @@ export default function AppHeader({
         const handler = handlersRef.current[id];
         if (!handler) {
           // 表里有键位但没有对应实现：不静默，菜单项与动作脱节要能查
-          console.warn(
+          logWarn(
             `[shortcut] ${id}（${shortcuts[id]}）没有对应实现`
           );
           return;

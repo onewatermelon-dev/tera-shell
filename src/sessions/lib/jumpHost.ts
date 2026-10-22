@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 import type { SavedSession } from "@/sessions/lib/session";
 
 /**
@@ -57,7 +58,7 @@ export function resolveJumpPath(
     from.jumpHostId;
   while (nextId) {
     if (visited.has(nextId)) {
-      console.warn(
+      logWarn(
         "[jump-host] 跳板链成环，本次连接不走跳板",
         from.id,
         nextId
@@ -67,14 +68,14 @@ export function resolveJumpPath(
     visited.add(nextId);
     const hop = byId.get(nextId);
     if (!hop) {
-      console.warn(
+      logWarn(
         "[jump-host] 跳板会话已删除，本次连接不走跳板",
         nextId
       );
       return undefined;
     }
     if (!hopSpec(hop)) {
-      console.warn(
+      logWarn(
         "[jump-host] 跳板会话不是可用的 ssh 连接，本次连接不走跳板",
         hop.id
       );

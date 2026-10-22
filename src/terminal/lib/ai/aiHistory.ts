@@ -6,6 +6,7 @@
  * （恢复后能接着聊），entries 是面板展示快照。两者按 unknown[] 存，
  * 类型收口在 aiChat 的 restore 里。
  */
+import { logError } from "@/shared/lib/log";
 import {
   DataName,
   readData,
@@ -37,7 +38,7 @@ function parseList(
     const parsed = JSON.parse(raw) as AiHistory[];
     return Array.isArray(parsed) ? parsed : [];
   } catch (reason) {
-    console.error(
+    logError(
       "[ai-history] 历史数据解析失败",
       reason
     );
@@ -70,7 +71,7 @@ export function loadHistories(): AiHistory[] {
       return legacy;
     }
   } catch (reason) {
-    console.error(
+    logError(
       "[ai-history] 迁移旧历史失败",
       reason
     );

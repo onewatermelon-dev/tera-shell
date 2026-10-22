@@ -10,6 +10,7 @@
  * 最终尺寸出生，首帧才不会触发 ConPTY 整屏重绘（会抹掉欢迎横幅、堆出
  * 重复提示符）。
  */
+import { logWarn } from "@/shared/lib/log";
 import {
   useCallback,
   useState,
@@ -198,7 +199,7 @@ export function useTerminalSessions(options: {
           );
         })
         .catch(reason => {
-          console.warn(
+          logWarn(
             "[shell-integration] 部署流程异常，已忽略",
             reason
           );

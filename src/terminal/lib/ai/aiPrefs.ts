@@ -9,6 +9,7 @@
  * 内自清空，跑几次都安全）。
  */
 
+import { logWarn } from "@/shared/lib/log";
 import {
   DataName,
   readData,
@@ -65,10 +66,7 @@ function readPrefs(): AiPrefs {
       }
     }
   } catch (reason) {
-    console.warn(
-      "[ai-prefs] 偏好解析失败",
-      reason
-    );
+    logWarn("[ai-prefs] 偏好解析失败", reason);
   }
   try {
     const picked: AiPrefs = {};
@@ -123,10 +121,7 @@ function readPrefs(): AiPrefs {
     }
   } catch (reason) {
     // localStorage 不可用（老 WebView 隐私模式等）时跳过迁移，文件值照常
-    console.warn(
-      "[ai-prefs] 旧偏好迁移跳过",
-      reason
-    );
+    logWarn("[ai-prefs] 旧偏好迁移跳过", reason);
   }
   return prefs;
 }

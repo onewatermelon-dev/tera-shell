@@ -3,6 +3,7 @@ import {
   useEffect,
   useState
 } from "react";
+import { logError } from "@/shared/lib/log";
 
 /**
  * 右下角错误气泡。
@@ -23,10 +24,38 @@ export function useAppToast() {
     );
     return () => clearTimeout(timer);
   }, [error]);
-  /** 读写剪贴板 / 调后端失败等统一走右下角错误提示。 */
-  const fail = useCallback(
-    (reason: unknown) => setError(String(reason)),
+  /**
+   * 失败出口：**任何显示给用户的错误都会写进日志**。
+   *
+   * 这是全应用的错误汇聚点 —— 业务代码到处 `setError(...)`，以前这些
+   * 文本只闪 5 秒就消失，诊断包里一个字都看不到。
+   */
+  const reportError = useCallback(
+    (message: string) => {
+      // 关闭提示（setError("")）不该记一条错误
+      if (message) logError("[toast]", message);
+      setError(message);
+    },
     []
   );
-  return { error, setError, fail };
+
+  /** 只显示、不记日志：用于成功提示（如「诊断包已保存到 …」）。 */
+  const notify = useCallback(
+    (message: string) => setError(message),
+    []
+  );
+
+  /** 读写剪贴板 / 调后端失败等统一走右下角错误提示（并落盘）。 */
+  const fail = useCallback((reason: unknown) => {
+    const text = String(reason);
+    logError("[fail]", text);
+    setError(text);
+  }, []);
+
+  return {
+    error,
+    setError: reportError,
+    fail,
+    notify
+  };
 }

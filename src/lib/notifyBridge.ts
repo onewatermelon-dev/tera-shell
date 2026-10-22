@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 /**
  * 通知的跨层桥接。
  *
@@ -61,7 +62,7 @@ export function emitAiDone(
     );
   } catch (reason) {
     // 通知失败绝不能影响 AI 回复本身的产出
-    console.warn(
+    logWarn(
       "[notify] AI 完成回调抛错，已忽略",
       reason
     );

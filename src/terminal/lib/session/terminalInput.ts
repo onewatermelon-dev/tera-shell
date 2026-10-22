@@ -7,6 +7,7 @@
  * ConPTY 缓冲，扛得住 vim 进出 / 面板切换 / resize 的整屏重绘；
  * stdin 走数据流分包，不受命令串 ~16KB channel request 上限。
  */
+import { logWarn } from "@/shared/lib/log";
 import type { Terminal } from "@xterm/xterm";
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
@@ -209,7 +210,7 @@ export function attachTerminalInput(
               `AI_HEAD`
             ].join("\n")
           ).catch(reason =>
-            console.warn(
+            logWarn(
               "[explain] pts 回显失败",
               reason
             )
@@ -240,7 +241,7 @@ export function attachTerminalInput(
                   `[ -n "$p" ] && printf '%s' '${chunk.replace(/'/g, `'\\''`)}' > "/dev/$p"`
                 ].join("\n")
               ).catch(reason =>
-                console.warn(
+                logWarn(
                   "[explain] pts 流式写入失败",
                   reason
                 )
@@ -302,7 +303,7 @@ export function attachTerminalInput(
                   )
                 )
                 .catch(reason =>
-                  console.warn(
+                  logWarn(
                     "[explain] pts 注入失败",
                     reason
                   )
@@ -328,7 +329,7 @@ export function attachTerminalInput(
             VIM_SCHEME_SETUP
           )
             .catch(reason =>
-              console.warn(
+              logWarn(
                 "[vim-view] 配色部署失败，vim 以默认配色打开",
                 reason
               )
@@ -402,7 +403,7 @@ export function attachTerminalInput(
               });
             })
             .catch(reason => {
-              console.warn(
+              logWarn(
                 "[cat-view] 拦截失败，回退原始命令",
                 reason
               );

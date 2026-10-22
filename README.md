@@ -151,7 +151,7 @@ tests/            # vitest 单元测试
 
 提问、想法、路线图讨论都欢迎，不用为一句话开 issue，也不用担心问得不够专业被判为无效。先搜一下关键词，找不到已有讨论再开新的。
 
-- 报 bug → [Bug 反馈模板](https://github.com/onewatermelon-dev/tera-shell/issues/new?template=bug_report.yml)，请附上 `~/.tera-shell/logs/<日期>/` 下的日志（可用 `RUST_LOG=debug` 提升级别），粘贴前删除密码、token 等敏感信息
+- 报 bug → [Bug 反馈模板](https://github.com/onewatermelon-dev/tera-shell/issues/new?template=bug_report.yml)，请附上诊断包：**设置 · 关于 → 导出诊断包**（近 3 天日志 + 脱敏后的设置 + 版本与系统信息，zip 会存到桌面，直接拖进 issue 即可）。也可以点「打开日志目录」自己挑，`RUST_LOG=debug` 可提升日志级别
 - 要功能 → [功能建议模板](https://github.com/onewatermelon-dev/tera-shell/issues/new?template=feature_request.yml)
 
 ### 提交代码

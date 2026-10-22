@@ -25,6 +25,7 @@
  * 仍是 `command_history.json` 一个文件（`DataName.commandHistory`），
  * 上限 5000 条。写入是「内存先行 + 异步落盘」，`Snapshot` 随时可读。
  */
+import { logWarn } from "@/shared/lib/log";
 import type { SavedSession } from "@/sessions/lib/session";
 import {
   DataName,
@@ -156,10 +157,7 @@ export function loadHistory(): CommandHistoryEntry[] {
       : [];
   } catch (reason) {
     // 历史丢了不致命，不能让终端区因此挂掉
-    console.warn(
-      "[history] 命令历史读取失败",
-      reason
-    );
+    logWarn("[history] 命令历史读取失败", reason);
     cache = [];
   }
   return cache;

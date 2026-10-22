@@ -28,6 +28,22 @@ fn debug_log(message: String) {
     tracing::info!(message, "前端诊断");
 }
 
+/// 前端日志落盘。
+///
+/// 前端 `console.*` 只活在 DevTools 里 —— 用户关掉窗口就没了，报 issue
+/// 时也带不出来。这里按级别写进同一份 tracing 日志（诊断包直接就能收走）。
+///
+/// 为什么不是直接给 `debug_log` 加参数：那个命令还有调用方，改签名会
+/// 连带改它们，而语义也不同（诊断手记 vs 分级日志）。
+#[tauri::command(rename = "frontend_log")]
+fn frontend_log(level: String, message: String) {
+    match level.as_str() {
+        "error" => tracing::error!(target: "frontend", "{message}"),
+        "warn" => tracing::warn!(target: "frontend", "{message}"),
+        _ => tracing::info!(target: "frontend", "{message}"),
+    }
+}
+
 /// 创建并运行 Tauri 桌面应用。
 ///
 /// 插件必须在应用启动阶段注册，前端才能调用对应的 JavaScript API；
@@ -87,6 +103,10 @@ pub fn run() {
             sftp::remote_ops::archive,
             sftp::remote_ops::remote_fs,
             debug_log,
+            frontend_log,
+            // 诊断：开日志目录 / 打包诊断（设置·关于 & 错误提示用）
+            infra::diagnostics::open_logs,
+            infra::diagnostics::export_bundle,
             sftp::remote_ops::make_remote_dir,
             sftp::remote_ops::create_remote_file,
             sftp::remote_ops::remove_remote_path,

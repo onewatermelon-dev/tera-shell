@@ -17,6 +17,10 @@
  *   之后检查更新照样失败，那这个功能等于没有。
  */
 
+import {
+  logError,
+  logWarn
+} from "@/shared/lib/log";
 import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -62,13 +66,88 @@ type UpdateState =
  * 真到几千条再考虑虚拟滚动。
  */
 
+/** 诊断包导出的状态。 */
+type DiagState =
+  | { kind: "idle" }
+  | { kind: "working" }
+  | { kind: "done"; path: string; files: number }
+  | { kind: "failed"; reason: string };
+
 export function AboutSection() {
   const t = useT();
   const [update, setUpdate] =
     useState<UpdateState>({
       kind: "idle"
     });
+  const [diag, setDiag] = useState<DiagState>({
+    kind: "idle"
+  });
   const [query, setQuery] = useState("");
+
+  /**
+   * 打开日志目录。
+   *
+   * README 让用户"附上 logs 目录下的日志"，但以前应用里没有任何入口 ——
+   * 用户不是不想给，是找不到。
+   */
+  async function openLogDir() {
+    try {
+      const dir = await invoke<string>(
+        "diagnostics_open_logs"
+      );
+      console.info(
+        "[diagnostics] 打开日志目录",
+        dir
+      );
+    } catch (reason) {
+      logError(
+        "[diagnostics] 打开日志目录失败",
+        reason
+      );
+      setDiag({
+        kind: "failed",
+        reason: String(reason)
+      });
+    }
+  }
+
+  /** 打包近 3 天日志 + 脱敏设置 + 版本信息，存到桌面。 */
+  async function exportBundle() {
+    setDiag({ kind: "working" });
+    try {
+      const info = await invoke<{
+        path: string;
+        files: number;
+      }>("diagnostics_export", { days: 3 });
+      console.info(
+        "[diagnostics] 诊断包已生成",
+        info
+      );
+      setDiag({
+        kind: "done",
+        path: info.path,
+        files: info.files
+      });
+    } catch (reason) {
+      logError("[diagnostics] 导出失败", reason);
+      setDiag({
+        kind: "failed",
+        reason: String(reason)
+      });
+    }
+  }
+
+  const diagText =
+    diag.kind === "working"
+      ? t("about.diagnostics.working")
+      : diag.kind === "done"
+        ? t("about.diagnostics.done", {
+            path: diag.path,
+            files: diag.files
+          })
+        : diag.kind === "failed"
+          ? diag.reason
+          : t("about.diagnostics.hint");
 
   const licenses = useMemo(
     () => filterLicenses(LICENSE_ENTRIES, query),
@@ -82,7 +161,7 @@ export function AboutSection() {
   /** 打开外链：失败只记日志，不打断（系统没有默认浏览器时才会走到）。 */
   function open(url: string) {
     void openUrl(url).catch(reason =>
-      console.error(
+      logError(
         "[about] 打开链接失败",
         url,
         reason
@@ -109,7 +188,7 @@ export function AboutSection() {
       try {
         payload = JSON.parse(text);
       } catch (reason) {
-        console.warn(
+        logWarn(
           "[about] 检查更新响应不是合法 JSON",
           reason
         );
@@ -142,10 +221,7 @@ export function AboutSection() {
           : { kind: "latest" }
       );
     } catch (reason) {
-      console.warn(
-        "[about] 检查更新异常",
-        reason
-      );
+      logWarn("[about] 检查更新异常", reason);
       setUpdate({
         kind: "failed",
         reason: String(reason).startsWith("HTTP ")
@@ -183,6 +259,46 @@ export function AboutSection() {
         </div>
         <p className={styles.desc}>
           {t("about.desc")}
+        </p>
+      </div>
+
+      {/* ---- 诊断与日志 ---- */}
+      <div className={styles.card}>
+        <div className={styles.rowHead}>
+          <span className={styles.rowTitle}>
+            {t("about.diagnostics.title")}
+          </span>
+          <span className={styles.actions}>
+            <button
+              type="button"
+              className={styles.action}
+              onClick={() => void openLogDir()}
+            >
+              {t("about.diagnostics.openLogs")}
+            </button>
+            <button
+              type="button"
+              className={styles.action}
+              disabled={diag.kind === "working"}
+              onClick={() => void exportBundle()}
+            >
+              {diag.kind === "working"
+                ? t("about.diagnostics.working")
+                : t("about.diagnostics.export")}
+            </button>
+          </span>
+        </div>
+        <p
+          className={styles.hint}
+          data-tone={
+            diag.kind === "done"
+              ? "good"
+              : diag.kind === "failed"
+                ? "bad"
+                : undefined
+          }
+        >
+          {diagText}
         </p>
       </div>
 

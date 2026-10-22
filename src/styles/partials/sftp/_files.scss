@@ -278,6 +278,22 @@ body.sftp-dragging {
   color: var(--foreground);
 }
 
+// 气泡里的次要按钮（导出诊断包）：贴着文字下方，不抢关闭钮的位置
+.app-toast-action {
+  padding: 3px 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.app-toast-action:hover {
+  background: var(--surface-hover);
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -154,10 +155,7 @@ export default function SystemInfoDrawer({
         setError("");
       })
       .catch(reason => {
-        console.error(
-          "[sys-info] 采集失败",
-          reason
-        );
+        logError("[sys-info] 采集失败", reason);
         setError(String(reason));
       })
       .finally(() => setBusy(false));

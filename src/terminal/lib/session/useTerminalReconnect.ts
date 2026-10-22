@@ -1,4 +1,8 @@
 import {
+  logError,
+  logWarn
+} from "@/shared/lib/log";
+import {
   useCallback,
   useRef,
   type Dispatch,
@@ -144,7 +148,7 @@ export function useTerminalReconnect({
       } catch (reason) {
         // 后端连 PTY 都没起起来（极少见）：再退避重试也没意义，
         // 交回手动入口，避免用户对着一个永远不会好的倒计时等
-        console.error(
+        logError(
           `[terminal] 重连失败 ${session.id}`,
           reason
         );
@@ -188,7 +192,7 @@ export function useTerminalReconnect({
         state.attempts > MAX_RECONNECT_ATTEMPTS
       ) {
         states.current.delete(session.id);
-        console.warn(
+        logWarn(
           `[terminal] 自动重连已达上限 ${session.id}`
         );
         notice(

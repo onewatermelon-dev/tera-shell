@@ -24,6 +24,7 @@
  * `available` 为 false 表示远端没装钩子（或 shell 不支持），调用方
  * 必须原地退回原有的启发式，行为与接入前完全一致。
  */
+import { logWarn } from "@/shared/lib/log";
 import type {
   IMarker,
   Terminal
@@ -395,7 +396,7 @@ export function attachShellIntegration(
             integration.feed(data);
           } catch (reason) {
             // 钩子是远端发的，脏数据不该让整条输出流卡住
-            console.warn(
+            logWarn(
               "[shell-integration] 标记处理失败",
               reason
             );
@@ -407,7 +408,7 @@ export function attachShellIntegration(
     // ⚠️ 注册不上就彻底退回启发式：这里抛出去会连累终端建不出来
     // （症状是点会话一片空白），而集成本来就只是增强项，绝不能
     // 成为终端可用的前提
-    console.warn(
+    logWarn(
       "[shell-integration] OSC handler 注册失败，本次退回启发式",
       reason
     );
@@ -427,7 +428,7 @@ export function attachShellIntegration(
           try {
             integration.feedCwd(data);
           } catch (reason) {
-            console.warn(
+            logWarn(
               "[shell-integration] OSC 7 处理失败",
               reason
             );
@@ -436,7 +437,7 @@ export function attachShellIntegration(
         }
       );
   } catch (reason) {
-    console.warn(
+    logWarn(
       "[shell-integration] OSC 7 注册失败，目录栏将没有跟随目录",
       reason
     );

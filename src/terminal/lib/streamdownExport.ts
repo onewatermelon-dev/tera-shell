@@ -38,6 +38,7 @@
  * Table **内部**渲染的，`components.code` 覆盖不到。
  */
 
+import { logError } from "@/shared/lib/log";
 import { invoke } from "@tauri-apps/api/core";
 import {
   defaultTranslations,
@@ -204,7 +205,7 @@ export function attachStreamdownExport(
           console.info("[ai] 用户取消了另存为");
       })
       .catch(reason => {
-        console.error("[ai] 另存为失败", reason);
+        logError("[ai] 另存为失败", reason);
         onError(String(reason));
       });
   };

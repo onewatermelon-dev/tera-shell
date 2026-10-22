@@ -40,6 +40,8 @@ type Props = {
   onCloseMacro: () => void;
   error: string;
   onDismissError: () => void;
+  /** 错误提示里的「导出诊断包」：报错时一键带走现场 */
+  onExportDiagnostics: () => void;
   appReady: boolean;
   appLoadingRef: RefObject<AppLoadingHandle | null>;
   onLoadingFinished: () => void;
@@ -67,6 +69,7 @@ export default function AppDialogs({
   onCloseMacro,
   error,
   onDismissError,
+  onExportDiagnostics,
   appReady,
   appLoadingRef,
   onLoadingFinished
@@ -203,6 +206,17 @@ export default function AppDialogs({
               {error}
             </Alert.Description>
           </Alert.Content>
+          {/* 报错时一键带走现场：日志 + 脱敏设置 + 版本信息 */}
+          <button
+            type="button"
+            className="app-toast-action"
+            onClick={event => {
+              event.stopPropagation();
+              onExportDiagnostics();
+            }}
+          >
+            {t("about.diagnostics.export")}
+          </button>
           {/* 真正可点的关闭钮：原来只是 ::after 画了个装饰性 ×，
               伪元素不接收事件，点了当然没反应 */}
           <button

@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 /** 单张图上限：base64 进请求体，超大图直接拒收。 */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -28,7 +29,7 @@ export async function fileToDataUrl(
     !file.type.startsWith("image/") ||
     file.size > MAX_IMAGE_BYTES
   ) {
-    console.warn(
+    logWarn(
       "[ai-image] 跳过不支持的文件",
       file.name,
       file.type,
@@ -41,10 +42,7 @@ export async function fileToDataUrl(
     reader.onload = () =>
       resolve(String(reader.result));
     reader.onerror = () => {
-      console.warn(
-        "[ai-image] 读取失败",
-        file.name
-      );
+      logWarn("[ai-image] 读取失败", file.name);
       resolve(null);
     };
     reader.readAsDataURL(file);

@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
 
@@ -99,7 +100,7 @@ export function enableWebgl(
       }
       webglByTerminal.delete(terminal);
       degradedCount += 1;
-      console.warn(
+      logWarn(
         "[terminal] WebGL 上下文丢失，已降级回 DOM 渲染器" +
           `（第 ${degradedCount} 次）`
       );
@@ -108,7 +109,7 @@ export function enableWebgl(
     webglByTerminal.set(terminal, addon);
   } catch (reason) {
     degradedCount += 1;
-    console.warn(
+    logWarn(
       "[terminal] WebGL 渲染器不可用，保持 DOM 渲染器",
       reason
     );

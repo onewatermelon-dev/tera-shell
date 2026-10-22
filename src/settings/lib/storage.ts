@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import { invoke } from "@tauri-apps/api/core";
 
 /**
@@ -50,7 +51,7 @@ export async function initStorage(): Promise<void> {
       cache.set(name, payload);
     }
   } catch (reason) {
-    console.error("读取本地数据失败", reason);
+    logError("读取本地数据失败", reason);
   }
 }
 
@@ -69,7 +70,7 @@ export function writeData(
   cache.set(name, payload);
   invoke("save_one", { name, payload }).catch(
     (reason: unknown) => {
-      console.error("保存本地数据失败", reason);
+      logError("保存本地数据失败", reason);
     }
   );
 }

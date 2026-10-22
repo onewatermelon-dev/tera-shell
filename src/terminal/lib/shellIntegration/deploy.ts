@@ -19,6 +19,7 @@
  * 这里走的是 `ssh2` exec 通道（独立连接），不经过终端 PTY —— 因此部署
  * 输出不会污染用户屏幕，也不进远端命令历史。
  */
+import { logWarn } from "@/shared/lib/log";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
 import {
   DataName,
@@ -63,7 +64,7 @@ function readCache(): DeployCache {
       return {};
     return parsed as DeployCache;
   } catch (reason) {
-    console.warn(
+    logWarn(
       "[shell-integration] 部署缓存读取失败",
       reason
     );
@@ -102,7 +103,7 @@ function withTimeout<T>(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      console.warn(
+      logWarn(
         `[shell-integration] 部署超时（${ms}ms），本次按无集成处理`
       );
       resolve(fallback);
@@ -118,7 +119,7 @@ function withTimeout<T>(
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        console.warn(
+        logWarn(
           "[shell-integration] 部署失败",
           reason
         );
@@ -140,7 +141,7 @@ async function detectShell(
     DETECT_SHELL_COMMAND
   );
   if (result.exitCode !== 0) {
-    console.warn(
+    logWarn(
       "[shell-integration] 探测 shell 失败",
       result.exitCode,
       result.stderr
@@ -219,7 +220,7 @@ async function deploy(
     buildInstallCommand(shell)
   );
   if (result.exitCode !== 0) {
-    console.warn(
+    logWarn(
       "[shell-integration] 写入钩子失败",
       shell,
       result.exitCode,

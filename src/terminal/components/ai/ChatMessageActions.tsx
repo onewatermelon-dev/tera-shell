@@ -1,3 +1,4 @@
+import { logError } from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -194,7 +195,7 @@ export function ChatMessageActions({
       await navigator.clipboard.writeText(text);
       setCopied(true);
     } catch (reason) {
-      console.error("[ai] 复制消息失败", reason);
+      logError("[ai] 复制消息失败", reason);
     }
   }
 

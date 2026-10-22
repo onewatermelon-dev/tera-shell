@@ -5,6 +5,7 @@
  * 由参数注入）—— 它不持有 React 状态，只是「按会话定义组装一只
  * 可用的终端」。输入管线见 terminalInput.ts。
  */
+import { logWarn } from "@/shared/lib/log";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -417,7 +418,7 @@ export function createTerminalInstance(
         .catch(reason => {
           // 读不到剪贴板（权限被拒 / 空剪贴板）：只能记日志，让用户重试。
           // 此时原生粘贴已被 preventDefault，不会再粘一次
-          console.warn(
+          logWarn(
             "[paste] 读取剪贴板失败",
             reason
           );

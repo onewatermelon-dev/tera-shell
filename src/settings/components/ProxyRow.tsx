@@ -1,3 +1,4 @@
+import { logWarn } from "@/shared/lib/log";
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@heroui/react";
@@ -111,7 +112,7 @@ export default function ProxyRow({
       });
     } catch (reason) {
       // 只有客户端构建失败才会到这里（后端其他失败都返回结构）
-      console.warn(
+      logWarn(
         "[settings] 代理连通性测试异常",
         reason
       );

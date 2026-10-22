@@ -14,6 +14,7 @@
  * - useTerminalSessions.ts 会话生命周期（开/复制/密码补验）
  * - useTerminalPaneOps.ts 会话关闭/批量关闭、拆分窗格、焦点交回
  */
+import { logWarn } from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -445,7 +446,7 @@ export function useTerminals(
       // 没有 AI 面板（本地会话）时通道返回 false：提示照样收掉，
       // 不至于卡在角上
       if (!sent)
-        console.warn(
+        logWarn(
           "[diagnose] 没送到 AI 面板（本地会话不挂面板）"
         );
     },
