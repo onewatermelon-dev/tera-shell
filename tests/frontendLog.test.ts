@@ -13,7 +13,12 @@ import {
   vi
 } from "vitest";
 
-const invoke = vi.fn(() => Promise.resolve());
+const invoke = vi.fn(
+  (
+    _command: string,
+    _args?: { level: string; message: string }
+  ) => Promise.resolve()
+);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke
@@ -67,13 +72,11 @@ describe("logError", () => {
   it("Error 格式化成「名字: 消息」（stack 太长不进日志）", async () => {
     const { logError } = await freshLog();
     logError("[x] 失败", new TypeError("boom"));
-    const payload = invoke.mock.calls[0]?.[1] as {
-      message: string;
-    };
-    expect(payload.message).toContain(
+    const payload = invoke.mock.calls[0]?.[1];
+    expect(payload?.message).toContain(
       "TypeError: boom"
     );
-    expect(payload.message).not.toContain("at ");
+    expect(payload?.message).not.toContain("at ");
   });
 
   it("对象参数被 JSON 序列化，循环引用不抛错", async () => {
@@ -83,10 +86,8 @@ describe("logError", () => {
     expect(() =>
       logError("[x]", { a: 1 }, loop)
     ).not.toThrow();
-    const payload = invoke.mock.calls[0]?.[1] as {
-      message: string;
-    };
-    expect(payload.message).toContain('{"a":1}');
+    const payload = invoke.mock.calls[0]?.[1];
+    expect(payload?.message).toContain('{"a":1}');
   });
 });
 
@@ -96,7 +97,7 @@ describe("level 映射", () => {
     logWarn("[x] 降级");
     logInfo("[x] 动作");
     const levels = invoke.mock.calls.map(
-      call => (call[1] as { level: string }).level
+      call => call[1]?.level
     );
     expect(levels).toEqual(["warn", "info"]);
   });

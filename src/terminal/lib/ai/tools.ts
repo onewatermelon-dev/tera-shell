@@ -105,6 +105,8 @@ export function parseToolArguments(raw: string): {
   command: string;
   question: string;
   isReadOnly: boolean;
+  /** 模型自报「这条需要 root」：执行时才会带提权密码 */
+  escalate: boolean;
 } | null {
   try {
     const parsed = JSON.parse(raw) as Record<
@@ -122,7 +124,8 @@ export function parseToolArguments(raw: string): {
         typeof parsed.question === "string"
           ? parsed.question
           : "",
-      isReadOnly: parsed.is_read_only === true
+      isReadOnly: parsed.is_read_only === true,
+      escalate: parsed.escalate === true
     };
   } catch {
     return null;
@@ -201,6 +204,32 @@ export function directoryFromPrompt(
   );
 }
 
+/**
+ * 从提示符里取当前 shell 的用户名（`root@host:~#` → `root`）。
+ *
+ * 用途：判断终端里的身份是否已被抬高（`su -` / `sudo -i`）。后台 exec
+ * 通道始终用**连接账号**，两者不一致时在后台执行会权限不足、目录也不对。
+ *
+ * @param terminal 目标终端
+ */
+export function userFromPrompt(
+  terminal: Terminal | undefined
+): string | null {
+  if (!terminal) return null;
+  const buffer = terminal.buffer.active;
+  const line = buffer.getLine(
+    buffer.baseY + buffer.cursorY
+  );
+  const text =
+    line?.translateToString(true) ?? "";
+  return (
+    text.match(
+      // 分隔符要带 `[`：`[user@host ~]$` 这种方括号提示符前面没有空白
+      /(?:^|[\s[])([\w.-]+)@[^\s:]+[: ][^\s#$]*[#$](?:\s|$)/
+    )?.[1] ?? null
+  );
+}
+
 /** 单引号安全包裹：路径/文本进 shell 前必用（内嵌单引号按 '\'' 转义）。 */
 export function shellQuote(
   value: string
@@ -240,6 +269,8 @@ export type PlanToolStep = {
   detail?: string;
   command: string;
   isReadOnly: boolean;
+  /** 这一步是否需要 root（执行时据此决定要不要带提权密码） */
+  escalate?: boolean;
 };
 
 /**
@@ -297,7 +328,8 @@ export function parsePlanToolArguments(
         title: stepTitle,
         ...(detail ? { detail } : {}),
         command,
-        isReadOnly: step.is_read_only === true
+        isReadOnly: step.is_read_only === true,
+        escalate: step.escalate === true
       });
       if (steps.length >= PLAN_STEP_LIMIT)
         return null;

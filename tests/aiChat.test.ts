@@ -26,7 +26,22 @@ describe("parseToolArguments", () => {
     ).toEqual({
       command: "pwd",
       question: "看目录",
-      isReadOnly: true
+      isReadOnly: true,
+      // 没写 escalate 时按 false：提权必须模型显式要求
+      escalate: false
+    });
+  });
+
+  it("模型自报 escalate=true 时透传（执行时才带提权密码）", () => {
+    expect(
+      parseToolArguments(
+        '{"command":"systemctl restart nginx","question":"重启","is_read_only":false,"escalate":true}'
+      )
+    ).toEqual({
+      command: "systemctl restart nginx",
+      question: "重启",
+      isReadOnly: false,
+      escalate: true
     });
   });
 

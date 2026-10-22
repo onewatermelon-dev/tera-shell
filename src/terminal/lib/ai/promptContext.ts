@@ -6,6 +6,7 @@ export const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行�
 - command：要执行的命令；后台执行会先切换到当前终端所在目录，每个命令独立。
 - question：一句话向用户解释这条命令做什么。
 - is_read_only：纯读取类命令（查看、搜索、统计）设为 true；任何会修改服务器状态的命令（写文件、安装、重启、删除等）必须设为 false。
+- escalate：需要 root 权限时才设 true（装包、改 systemd、写 /etc、读 /root 等）。能不能真提权看下面「运行身份」——没有提权凭据时设了也不会生效。
 - 命令必须是**非交互**的：exec 通道的 stdin 是关闭的，任何等待键盘输入的命令（rm -i、apt/yum 不带 -y、passwd、交互式向导等）都会挂起直到超时。删除用 rm -f、安装用 apt-get install -y，需要确认的命令一律改用非交互参数。
 除非用户明确要求，不要执行破坏性或高风险命令。回答用简体中文，简洁、结论先行。
 输出 markdown 代码块时**必须写明语言标识**（shell 命令用 \`bash\`，配置/脚本用对应的 \`json\`/\`yaml\`/\`python\` 等）；没有语言标注的代码块前端会补默认值，也会丢掉语法高亮。
@@ -68,16 +69,47 @@ export const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行�
  * 门面原样再导出 SYSTEM_PROMPT 保持导入路径不变。
  */
 export function workspaceContext(
-  session: OpenSession
+  session: OpenSession,
+  /** 终端提示符里看到的用户（`su -` / `sudo -i` 之后可能与登录账号不同） */
+  promptUser: string | null = null,
+  /** 是否已配置提权密码（AI 面板里设置过） */
+  canEscalate = false
 ): string {
   const target = `${session.username ? `${session.username}@` : ""}${session.host}:${session.port ?? 22}`;
   const now = new Date().toLocaleString("zh-CN", {
     hour12: false
   });
+  const loginUser = session.username || "(未知)";
+  const currentUser = promptUser || loginUser;
+  const switched =
+    !!promptUser && promptUser !== loginUser;
+  // 让模型**自己判断**权限：它得知道「现在是谁」「能不能提权」，
+  // 否则只能瞎试（先跑一遍撞 Permission denied 再重试）
+  const identity = [
+    `登录账号: ${loginUser}`,
+    `终端当前用户: ${currentUser}${
+      switched ? "（用户已 su/sudo 切换过）" : ""
+    }`,
+    currentUser === "root"
+      ? "终端已是 root：需要特权的命令直接执行即可（会自动通过终端执行以沿用该身份），不必设 escalate。"
+      : canEscalate
+        ? "已配置提权凭据：需要 root 的命令把 escalate 设为 true，会自动以 root 执行（先试 sudo，不通再试 su）。普通查看不要设，避免每条命令都提权。"
+        : "未配置提权密码：无法自动提权。遇到权限不足时如实告诉用户原因，并建议在 AI 面板配置提权密码，或让用户先在终端 su - 后改用终端执行。"
+  ].concat(
+    // 提权失败时别让它自己去 grep sudoers / 试密码 —— 那是用户的配置问题，
+    // 浪费好几轮 token 还得不到结论
+    canEscalate
+      ? [
+          "提权失败时不要自行排查 sudoers、组归属或反复试密码：直接说明失败原因，并请用户确认 AI 面板里填的是登录账号密码（sudo）还是 root 密码（su）。"
+        ]
+      : []
+  );
   return `<current_workspace>
 当前时间: ${now}
 当前打开的服务器会话:
   - 名称: ${session.name} (ip: ${session.host}) <- [当前]
   - 登录目标: ${target}
+运行身份:
+  - ${identity.join("\n  - ")}
 </current_workspace>`;
 }

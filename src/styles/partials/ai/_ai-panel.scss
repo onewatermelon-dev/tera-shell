@@ -217,3 +217,44 @@
   color: var(--muted);
   text-align: center;
 }
+
+// 提权密码行：夹在头部与消息区之间，展开时才占高度
+.ai-escalate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-escalate-input {
+  flex: 1 1 110px;
+  min-width: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ai-escalate-btn {
+  flex: none;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+}
+
+// 启用态：图标改成警示色，一眼能看出「现在命令是以 root 跑的」
+.ai-escalate-toggle.is-on {
+  color: #faad14;
+}

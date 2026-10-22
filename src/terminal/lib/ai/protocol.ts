@@ -77,6 +77,13 @@ export type AiToolCall = {
   question: string;
   /** true = 只读（受「自动执行」开关控制）；false = 读写（受「自动应用」开关控制） */
   isReadOnly: boolean;
+  /**
+   * 模型自报「这条需要 root」。
+   *
+   * 只有在会话配置了提权密码时才真的提权；没配置时按普通身份执行，
+   * 权限不足由模型自己从 stderr 看出来并解释。
+   */
+  escalate?: boolean;
   /** pending=等确认，running=执行中，done/failed=已结束 */
   state:
     "pending" | "running" | "done" | "failed";
@@ -102,6 +109,8 @@ export type AiPlanStep = {
   command: string;
   /** 只读步骤受「自动执行」开关控制，读写步骤受「自动应用」控制 */
   isReadOnly: boolean;
+  /** 这一步是否需要 root（模型自报，执行时据此带提权密码） */
+  escalate?: boolean;
   /** pending=待执行，running=执行中，done/failed=已结束，skipped=用户跳过 */
   state:
     | "pending"

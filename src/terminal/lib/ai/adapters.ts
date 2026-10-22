@@ -26,6 +26,11 @@ const RUN_COMMAND_PARAMETERS = {
       type: "boolean",
       description:
         "纯读取类命令为 true，会修改服务器状态必须为 false"
+    },
+    escalate: {
+      type: "boolean",
+      description:
+        "这条命令是否需要 root 权限。只有在需要写 /etc、装包、改服务、读 root 家目录等特权操作时设为 true；普通查看不要设"
     }
   },
   required: [
@@ -121,6 +126,11 @@ const PROPOSE_PLAN_PARAMETERS = {
             type: "boolean",
             description:
               "纯读取类命令为 true，会修改服务器状态必须为 false"
+          },
+          escalate: {
+            type: "boolean",
+            description:
+              "这一步是否需要 root 权限（需要装包 / 改服务 / 写 /etc 时设 true）"
           }
         },
         required: [

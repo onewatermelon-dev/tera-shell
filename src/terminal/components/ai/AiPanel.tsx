@@ -9,9 +9,16 @@ import "streamdown/styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import {
   PlusOutlined,
-  RightOutlined
+  RightOutlined,
+  SafetyOutlined
 } from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
+import { logInfo } from "@/shared/lib/log";
+import {
+  clearEscalation,
+  hasEscalationPassword,
+  setEscalationPasswords
+} from "@/terminal/lib/ai/escalation";
 import {
   useAiChat,
   type AiChatEntry
@@ -72,6 +79,50 @@ export default function AiPanel({
   onCollapse
 }: AiPanelProps) {
   const t = useT();
+  // ---- 提权凭据（只存内存，重启清空）----
+  // 两个密码必须分开：sudo 要登录账号的密码，su 要 root 的密码
+  const [escalateOpen, setEscalateOpen] =
+    useState(false);
+  const [sudoValue, setSudoValue] = useState("");
+  const [suValue, setSuValue] = useState("");
+  const [escalateOn, setEscalateOn] = useState(
+    () => hasEscalationPassword(session.id)
+  );
+  /** 保存提权密码：之后 AI 需要 root 的命令会自动以 root 执行。 */
+  function saveEscalation() {
+    setEscalationPasswords(session.id, {
+      sudoPassword: sudoValue,
+      suPassword: suValue
+    });
+    const on = hasEscalationPassword(session.id);
+    setEscalateOn(on);
+    setEscalateOpen(false);
+    setSudoValue("");
+    setSuValue("");
+    logInfo("[ai] 提权凭据已设置（仅本次运行）", {
+      sudo: sudoValue.trim().length > 0,
+      su: suValue.trim().length > 0
+    });
+  }
+  /** 关闭提权：AI 命令恢复普通身份。 */
+  function disableEscalation() {
+    clearEscalation();
+    setEscalateOn(false);
+    setEscalateOpen(false);
+    logInfo("[ai] 已关闭提权执行");
+  }
+  /**
+   * 换会话 / 新建聊天 / 打开历史时**一律作废凭据**：上一台机器的 root
+   * 密码不该继续用于下一台。用户需要重新输入。
+   */
+  useEffect(() => {
+    // 凭据本身已按会话绑定（读不到就是失效），这里只是把 UI 的开关灯
+    // 一起熄掉；放进微任务避免 set-state-in-effect 判成级联渲染
+    void Promise.resolve().then(() => {
+      setEscalateOn(false);
+      setEscalateOpen(false);
+    });
+  }, [session.id]);
   const {
     options,
     selected,
@@ -253,20 +304,49 @@ export default function AiPanel({
           </span>
         )}
         <div className="ai-panel-head-actions">
+          {/* 提权：配了密码后 AI 的命令自动以 root 执行 */}
+          <button
+            type="button"
+            className={
+              escalateOn
+                ? "ai-panel-clear ai-escalate-toggle is-on"
+                : "ai-panel-clear ai-escalate-toggle"
+            }
+            aria-label={t("ai.escalate.title")}
+            title={
+              escalateOn
+                ? t("ai.escalate.on")
+                : t("ai.escalate.title")
+            }
+            onClick={() =>
+              setEscalateOpen(open => !open)
+            }
+          >
+            <SafetyOutlined />
+          </button>
           <button
             type="button"
             className="ai-panel-clear"
             aria-label={t("ai.newChat")}
             title={t("ai.newChat")}
-            onClick={clear}
+            onClick={() => {
+              // 新建聊天 = 新一段对话，凭据一起作废
+              clearEscalation();
+              setEscalateOn(false);
+              setEscalateOpen(false);
+              clear();
+            }}
           >
             <PlusOutlined />
           </button>
           <AiHistoryMenu
             host={session.host}
             onRestore={history => {
-              // 换成另一段历史：阅读位置重置到最新一条，
-              // 不管之前翻到哪里
+              // 打开另一段历史 = 换了一段对话，凭据一起作废
+              clearEscalation();
+              setEscalateOn(false);
+              setEscalateOpen(false);
+              // 阅读位置重置到最新一条，不管之前翻到哪里
               atBottomRef.current = true;
               restore(history);
             }}
@@ -284,6 +364,58 @@ export default function AiPanel({
           </button>
         </div>
       </div>
+      {/* 提权密码：只存内存（重启失效），保存后 AI 的命令自动以 root 执行 */}
+      {escalateOpen && (
+        <div className="ai-escalate">
+          <input
+            type="password"
+            className="ai-escalate-input"
+            placeholder={t(
+              "ai.escalate.sudoPlaceholder"
+            )}
+            value={sudoValue}
+            autoFocus
+            onChange={event =>
+              setSudoValue(event.target.value)
+            }
+            onKeyDown={event => {
+              if (event.key === "Enter")
+                saveEscalation();
+            }}
+          />
+          <input
+            type="password"
+            className="ai-escalate-input"
+            placeholder={t(
+              "ai.escalate.suPlaceholder"
+            )}
+            value={suValue}
+            onChange={event =>
+              setSuValue(event.target.value)
+            }
+            onKeyDown={event => {
+              if (event.key === "Enter")
+                saveEscalation();
+            }}
+          />
+          <button
+            type="button"
+            className="ai-escalate-btn"
+            onClick={saveEscalation}
+          >
+            {t("ai.escalate.save")}
+          </button>
+          {escalateOn && (
+            <button
+              type="button"
+              className="ai-escalate-btn"
+              onClick={disableEscalation}
+            >
+              {t("ai.escalate.clear")}
+            </button>
+          )}
+        </div>
+      )}
       <div
         className="ai-panel-body"
         ref={bodyRef}

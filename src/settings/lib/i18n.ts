@@ -179,6 +179,23 @@ const zhCN = {
   "ai.input":
     "输入消息或粘贴图片…（Shift+Enter换行，@ 引用终端）",
   "ai.thinking": "思考中…",
+  "ai.error.rateLimit":
+    "模型服务限流，等几秒再试",
+  "ai.error.auth":
+    "API Key 无效或没有权限，检查设置里的模型配置",
+  "ai.error.quota": "额度已用尽，请检查账户余额",
+  "ai.error.server": "模型服务异常，稍后重试",
+  "ai.error.network":
+    "连不上模型服务，检查网络或代理",
+  "ai.error.unknown": "请求失败",
+  "ai.escalate.title": "以 root 执行（提权）",
+  "ai.escalate.on": "提权已启用（点此关闭）",
+  "ai.escalate.sudoPlaceholder":
+    "sudo 密码（登录账号的）",
+  "ai.escalate.suPlaceholder":
+    "root 密码（su - 用）",
+  "ai.escalate.save": "启用",
+  "ai.escalate.clear": "关闭",
   "ai.thoughtFor": "思考了 {s} 秒",
   "ai.selectModel": "选择模型",
   "ai.noModel": "未配置模型",
@@ -911,6 +928,26 @@ const enUS: Record<MessageKey, string> = {
   "ai.input":
     "Type a message or paste an image… (Shift+Enter for newline, @ to reference the terminal)",
   "ai.thinking": "Thinking",
+  "ai.error.rateLimit":
+    "Model service is rate limiting, try again in a few seconds",
+  "ai.error.auth":
+    "Invalid API key or no permission — check the model settings",
+  "ai.error.quota":
+    "Quota exhausted, check your account balance",
+  "ai.error.server":
+    "Model service error, try again later",
+  "ai.error.network":
+    "Cannot reach the model service — check network or proxy",
+  "ai.error.unknown": "Request failed",
+  "ai.escalate.title": "Run as root (escalate)",
+  "ai.escalate.on":
+    "Escalation enabled (click to disable)",
+  "ai.escalate.sudoPlaceholder":
+    "sudo password (your login)",
+  "ai.escalate.suPlaceholder":
+    "root password (for su -)",
+  "ai.escalate.save": "Enable",
+  "ai.escalate.clear": "Disable",
   "ai.thoughtFor": "Thought for {s}s",
   "ai.selectModel": "Select model",
   "ai.noModel": "No model configured",

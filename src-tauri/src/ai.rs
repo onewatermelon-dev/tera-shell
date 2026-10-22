@@ -125,6 +125,14 @@ pub struct ExecTarget {
 	/// 前端生成的执行 id：「停止」时靠它定位这条命令。缺省由内部补一个，
 	/// 只是前端取消不了。
 	exec_id: Option<String>,
+	/// sudo 密码（**登录账号**的密码）。有值才走 `sudo -S`。
+	/// ⚠️ **绝不进日志**。
+	#[serde(default)]
+	escalate_sudo_password: Option<String>,
+	/// su 密码（**root** 的密码）。有值才走 `su -` + pty。
+	/// ⚠️ 两个密码不是同一个，必须分开配 —— 合并成一个的话用户填哪个都有一半失败。
+	#[serde(default)]
+	escalate_su_password: Option<String>,
 }
 
 /// 一次命令执行的产物。
@@ -245,12 +253,43 @@ fn execute(
 
 	let session = obtain(sessions, &ssh)
 		.map_err(ExecError::Failed)?;
-	match run_once(
-		&session,
-		&command,
-		target.stdin.as_deref(),
-		cancel,
-	) {
+	// 有任一提权密码就以 root 执行；都没有就走普通通道。
+	// ⚠️ 提权路径不消费 target.stdin：sudo/su 的 stdin 已被密码占用，
+	// 大段文本注入（cat 高亮那种）在提权时不做。
+	let sudo_password = target
+		.escalate_sudo_password
+		.as_deref()
+		.filter(|value| !value.trim().is_empty());
+	let su_password = target
+		.escalate_su_password
+		.as_deref()
+		.filter(|value| !value.trim().is_empty());
+	if sudo_password.is_some() || su_password.is_some() {
+		info!(
+			key = %key,
+			sudo = sudo_password.is_some(),
+			su = su_password.is_some(),
+			"AI 命令以提权方式执行（密码不进日志）"
+		);
+	}
+	let attempt = |session: &Arc<Mutex<Session>>| {
+		if sudo_password.is_none() && su_password.is_none() {
+			return run_once(
+				session,
+				&command,
+				target.stdin.as_deref(),
+				cancel,
+			);
+		}
+		run_elevated(
+			session,
+			&command,
+			sudo_password,
+			su_password,
+			cancel,
+		)
+	};
+	match attempt(&session) {
 		Ok(outcome) => {
 			info!(
 				key = %key,
@@ -276,12 +315,7 @@ fn execute(
 			// 连接被服务器掐断：丢弃后重连一次（跳板链会整条重建）
 			let session = obtain(sessions, &ssh)
 				.map_err(ExecError::Failed)?;
-			run_once(
-				&session,
-				&command,
-				target.stdin.as_deref(),
-				cancel,
-			)
+			attempt(&session)
 		}
 	}
 }
@@ -311,6 +345,265 @@ fn obtain(
 		.entry(key)
 		.or_insert(session.clone());
 	Ok(session)
+}
+
+/// 单引号包裹的 shell 字面量（命令/路径里可能有空格与单引号）。
+fn shell_quote(value: &str) -> String {
+	format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+/// 提权执行的固定标记：su 经 pty 拿不到退出码，让远端自己打印。
+const EXIT_MARK: &str = "__TERA_EXIT__";
+
+/// 输出里出现这些字样，说明 `sudo` 不可用（不在 sudoers / 要求 tty）。
+fn sudo_rejected(text: &str) -> bool {
+	let lower = text.to_lowercase();
+	[
+		// 没有 sudo 资格
+		"not in the sudoers",
+		"is not allowed to execute",
+		"may not run sudo",
+		// 需要 tty / 没读到密码
+		"a terminal is required",
+		"no tty present",
+		"no password was provided",
+		// 密码不对（sudo 要的是**登录账号**的密码）
+		"incorrect password attempt",
+		"sorry, try again",
+		"authentication failure",
+	]
+	.iter()
+	.any(|needle| lower.contains(needle))
+}
+
+/// 以 root 执行一条命令。
+///
+/// **两个密码分开配**，这是关键：`sudo` 要的是**登录账号**的密码，
+/// `su` 要的是 **root** 的密码 —— 合成一个字段的话，用户填哪个都有
+/// 一半场景失败（实测踩过）。
+///
+/// - 配了 sudo 密码 → 先 `sudo -S`（密码走 stdin，取消/超时/重连全现成）；
+/// - 配了 su 密码 → `su -` + pty（GNU su 只从 `/dev/tty` 读密码）；
+/// - 两个都配 → sudo 被拒再退 su。
+fn run_elevated(
+	session: &Arc<Mutex<Session>>,
+	command: &str,
+	sudo_password: Option<&str>,
+	su_password: Option<&str>,
+	cancel: &Arc<AtomicBool>,
+) -> Result<ExecOutcome, ExecError> {
+	if let Some(password) = sudo_password {
+		let outcome = run_sudo(session, command, password, cancel)?;
+		let combined = format!(
+			"{}{}",
+			outcome.stdout, outcome.stderr
+		);
+		// 命令自己失败（不是 sudo 被拒）→ 原样返回，别拿 su 重跑一遍
+		if !sudo_rejected(&combined) {
+			return Ok(outcome);
+		}
+		if su_password.is_none() {
+			return Err(ExecError::Failed(
+				"sudo 提权被拒：请检查「sudo 密码」是否为登录账号的密码（不是 root 密码）"
+					.to_string(),
+			));
+		}
+		info!("sudo 提权被拒，改用 su - 提权");
+	}
+	let password = su_password.ok_or_else(|| {
+		ExecError::Failed(
+			"没有可用的提权密码".to_string(),
+		)
+	})?;
+	run_su(session, command, password, cancel).map_err(
+		|error| match error {
+			ExecError::Failed(message) => {
+				ExecError::Failed(format!(
+					"{message}（su 提权失败：请检查「root 密码」是否正确）"
+				))
+			}
+			other => other,
+		},
+	)
+}
+
+/// `sudo -S` 提权：密码从 stdin 读，走普通 exec 通道。
+fn run_sudo(
+	session: &Arc<Mutex<Session>>,
+	command: &str,
+	password: &str,
+	cancel: &Arc<AtomicBool>,
+) -> Result<ExecOutcome, ExecError> {
+	let sudo_command = format!(
+		"sudo -S -p '' -- sh -c {}",
+		shell_quote(command)
+	);
+	// sudo 从 stdin 读密码；换行符是它判断输入结束的标志
+	let stdin = format!("{password}\n");
+	run_once(session, &sudo_command, Some(&stdin), cancel)
+}
+
+/// `su -` 提权：申请 pty 后交互写密码。
+///
+/// pty 会把提示语与命令回显混进输出，所以最后要清一遍；退出码靠远端
+/// 打印的 [`EXIT_MARK`] 取（pty 通道自身拿不到 su 的退出码）。
+fn run_su(
+	session: &Arc<Mutex<Session>>,
+	command: &str,
+	password: &str,
+	cancel: &Arc<AtomicBool>,
+) -> Result<ExecOutcome, ExecError> {
+	use std::io::Write;
+
+	if cancel.load(Ordering::Relaxed) {
+		return Err(ExecError::Cancelled);
+	}
+	let session = session
+		.lock()
+		.unwrap_or_else(|error| error.into_inner());
+	session.set_timeout(EXEC_TIMEOUT_MS);
+	let mut channel = session
+		.channel_session()
+		.map_err(|error| {
+			ExecError::Failed(format!(
+				"打开 exec 通道失败：{error}"
+			))
+		})?;
+	// 关键一步：没有 pty，su 会直接拒绝读密码
+	channel
+		.request_pty("xterm", None, Some((200, 50, 0, 0)))
+		.map_err(|error| {
+			ExecError::Failed(format!(
+				"申请 pty 失败：{error}"
+			))
+		})?;
+	let wrapped = format!(
+		"{}; printf '{EXIT_MARK}%s\\n' \"$?\"",
+		command
+	);
+	channel
+		.exec(&format!(
+			"su - -c {}",
+			shell_quote(&wrapped)
+		))
+		.map_err(|error| {
+			ExecError::Failed(format!(
+				"下发命令失败：{error}"
+			))
+		})?;
+
+	session.set_timeout(CANCEL_POLL_MS);
+	let mut raw = Vec::new();
+	let mut buf = [0u8; 8192];
+	let mut sent = false;
+	let mut last_output = Instant::now();
+	loop {
+		if cancel.load(Ordering::Relaxed) {
+			let _ = channel.close();
+			return Err(ExecError::Cancelled);
+		}
+		if last_output.elapsed()
+			>= Duration::from_millis(
+				EXEC_TIMEOUT_MS as u64
+			)
+		{
+			return Err(ExecError::Failed(
+				"提权执行超时".to_string()
+			));
+		}
+		match channel.read(&mut buf) {
+			Ok(0) => break,
+			Ok(bytes) => {
+				raw.extend_from_slice(&buf[..bytes]);
+				last_output = Instant::now();
+				if !sent && needs_password(&raw) {
+					// 密码只写进通道，不进日志
+					channel
+						.write_all(
+							format!("{password}\n")
+								.as_bytes(),
+						)
+						.map_err(|error| {
+							ExecError::Failed(format!(
+								"写入密码失败：{error}"
+							))
+						})?;
+					sent = true;
+				}
+			}
+			Err(ref error)
+				if error.kind()
+					== io::ErrorKind::TimedOut =>
+			{
+				continue;
+			}
+			Err(error) => {
+				return Err(ExecError::Failed(
+					format!("读取输出失败：{error}"),
+				));
+			}
+		}
+	}
+	let text = String::from_utf8_lossy(&raw).replace('\r', "");
+	if text.contains("Authentication failure")
+		|| text.contains("认证失败")
+	{
+		return Err(ExecError::Failed(
+			"提权失败：密码不正确".to_string(),
+		));
+	}
+	let (body, exit_code) = split_exit_mark(&text);
+	let stdout = strip_pty_noise(&body);
+	if stdout.is_empty() && exit_code != 0 {
+		return Err(ExecError::Failed(format!(
+			"提权执行失败（退出码 {exit_code}）"
+		)));
+	}
+	Ok(ExecOutcome {
+		stdout,
+		stderr: String::new(),
+		exit_code,
+	})
+}
+
+/// 输出里出现密码提示（中英文都认）。
+fn needs_password(raw: &[u8]) -> bool {
+	let text = String::from_utf8_lossy(raw).to_lowercase();
+	text.contains("password") || text.contains("密码")
+}
+
+/// 从输出里切出 `EXIT_MARK<code>`，返回 (正文, 退出码)。
+fn split_exit_mark(text: &str) -> (String, i32) {
+	match text.rfind(EXIT_MARK) {
+		Some(index) => {
+			let tail = &text[index + EXIT_MARK.len()..];
+			let code = tail
+				.trim_start()
+				.chars()
+				.take_while(|ch| ch.is_ascii_digit())
+				.collect::<String>()
+				.parse::<i32>()
+				.unwrap_or(-1);
+			(text[..index].to_string(), code)
+		}
+		None => (text.to_string(), -1),
+	}
+}
+
+/// 清掉 pty 混进来的噪音：密码提示行、`su -c` 的回显。
+fn strip_pty_noise(text: &str) -> String {
+	text
+		.lines()
+		.filter(|line| {
+			let lower = line.to_lowercase();
+			!lower.contains("password:")
+				&& !line.contains("密码：")
+				&& !lower.starts_with("su - ")
+		})
+		.collect::<Vec<_>>()
+		.join("\n")
+		.trim()
+		.to_string()
 }
 
 /// 在一条会话上开 exec 通道执行命令并收集输出。
@@ -545,11 +838,23 @@ pub async fn chat_stream(
 	let response = request
 		.send()
 		.await
-		.map_err(|error| format!("连接模型失败：{error}"))?;
+		.map_err(|error| {
+			tracing::error!(url = %url, "连接模型失败：{error}");
+			format!("连接模型失败：{error}")
+		})?;
 	let status = response.status();
 	if !status.is_success() {
 		let text = response.text().await.unwrap_or_default();
 		let snippet: String = text.chars().take(300).collect();
+		// ⚠️ 错误体**必须原样进日志**：限流（429）/ 鉴权 / 额度用尽这些
+		// 响应里最有价值的是 trace_id 和服务端原话，前端只会把它翻成
+		// 一句人话，翻完就没了
+		tracing::error!(
+			status = status.as_u16(),
+			url = %url,
+			body = %snippet,
+			"模型请求失败"
+		);
 		return Err(format!("HTTP {}: {}", status.as_u16(), snippet));
 	}
 
@@ -589,6 +894,12 @@ pub async fn chat_stream(
 		let bytes = match chunk {
 			Ok(bytes) => bytes,
 			Err(error) => {
+				// 读流中断（网络抖动 / 服务端提前断开）：以前只 return，
+				// 用户那侧看到的就是「回答突然没了」，日志里却什么都没有
+				tracing::error!(
+					stream_id = %stream_id,
+					"读取模型流失败：{error}"
+				);
 				streams.unregister(&stream_id);
 				return Err(error.to_string());
 			}

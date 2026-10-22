@@ -10,6 +10,10 @@ import {
   useRef
 } from "react";
 import { useT } from "@/settings/lib/i18n";
+import {
+  describeAiError,
+  parseAiError
+} from "@/terminal/lib/ai/aiError";
 import { AiMarkdown } from "./AiMarkdown";
 import { ThinkingState } from "./ThinkingState";
 import { ReasoningBlock } from "./ReasoningBlock";
@@ -102,6 +106,21 @@ export function AiMessageList({
   ) => void;
 }) {
   const t = useT();
+
+  /**
+   * 错误条上显示什么。
+   *
+   * AI 请求失败时后端抛的是一坨原始 JSON（`HTTP 429: {"error":…}`），
+   * 直接甩给用户没法行动；这里翻成一句话。但**认不出类型时原样显示** ——
+   * 别把「保存失败：磁盘只读」压成没信息量的「请求失败」。
+   */
+  const shownError = useMemo(() => {
+    if (!error) return "";
+    const parsed = parseAiError(error);
+    return parsed.kind === "unknown"
+      ? error
+      : describeAiError(parsed, t);
+  }, [error, t]);
   // 欢迎卡片的示例提示：卡片每次出现随机换一条 —— 依赖用 entries 的
   // 数组引用而非长度：点「新对话」时 clear() 换上新数组，即便此前也是
   // 空列表也会重抽。随机数发生在渲染期属于本功能的行为需求，显式豁免
@@ -357,7 +376,7 @@ export function AiMessageList({
       )}
       {(error || saveError) && (
         <p className="ai-entry is-error">
-          {error || saveError}
+          {error ? shownError : saveError}
         </p>
       )}
     </>

@@ -144,6 +144,15 @@ export async function streamChatCompletion(
         option.provider.apiKey
       ),
       body
+    }).catch((reason: unknown) => {
+      // 后端把 HTTP 失败（429 / 5xx / 鉴权）原样抛上来，**这里必须记原文**：
+      // 上层只负责把它翻成一句人话，原始 JSON 与 trace_id 到那儿就没了，
+      // 而排查限流恰恰需要 trace_id 去找服务商
+      logError(
+        `[ai] 请求失败（${option.provider.apiFormat}）`,
+        reason
+      );
+      throw reason;
     });
     // 命令返回前已广播 done 事件，这里等监听器确认到达（留宽限兜底）
     if (!done) {
@@ -154,7 +163,11 @@ export async function streamChatCompletion(
         )
       ]);
     }
-    if (streamError) throw new Error(streamError);
+    if (streamError) {
+      // 流内错误（后端 SSE 里带回来的）同样要原文留痕
+      logError("[ai] 流内错误", streamError);
+      throw new Error(streamError);
+    }
     const message = accumulator.finalize();
     // 长回答结束通知：开关、窗口焦点由 useNotifications 统一判，
     // 这里只负责「回答好了、这句有多长、花了多久」

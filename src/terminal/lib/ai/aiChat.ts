@@ -13,7 +13,10 @@
  * 并原样再导出此前的公开 API —— 调用方（AiPanel、aiExplain、测试等）
  * 的导入路径无需改动。
  */
-import { logWarn } from "@/shared/lib/log";
+import {
+  logError,
+  logWarn
+} from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -42,6 +45,7 @@ import {
   parseFileToolArguments,
   parsePlanToolArguments,
   parseToolArguments,
+  userFromPrompt,
   planStepAutoRuns,
   shouldAutoRun,
   type AiModelOption
@@ -51,6 +55,7 @@ import {
   cancelChatStream
 } from "./stream";
 import { executeToolCard } from "./cardExec";
+import { hasEscalationPassword } from "./escalation";
 import { cancelAiExec } from "./aiExec";
 import { executeFileCall } from "./fileTransfer";
 import {
@@ -380,18 +385,26 @@ export function useAiChat(
     releasePending
   });
 
-  /** 执行一张卡片并把结果回填进协议流。mode 见 ExecCardMode。 */
+  /**
+   * 执行一张卡片并把结果回填进协议流。
+   *
+   * - `mode = "auto"`（模型自己决定 / 自动执行）：按终端身份选通道 ——
+   *   终端 `su -` 过就走终端，命令才能以 root 执行（后台通道是独立
+   *   ssh2 会话，永远是登录账号）。
+   * - 用户点按钮时传 `terminal` / `background`，照办，不替他改。
+   */
   const executeCard = useCallback(
     async (
       call: AiToolCall,
       toolCallId: string,
-      mode: ExecCardMode = "background",
+      mode: ExecCardMode | "auto" = "auto",
       skip = false
     ) => {
-      // 后台执行登记 exec id：停止时靠它让后端掐掉这条命令
-      // （终端模式写进 PTY，后端没有可取消的通道，不登记）
+      // 后台执行登记 exec id：停止时靠它让后端掐掉这条命令。
+      // auto 模式在 cardExec 里才决定最终通道，所以这里先备好；
+      // 真走终端时它不会被用到。
       const execId =
-        mode === "background" && !skip
+        mode !== "terminal" && !skip
           ? crypto.randomUUID()
           : null;
       if (execId)
@@ -715,6 +728,7 @@ export function useAiChat(
                     : {}),
                   command: step.command,
                   isReadOnly: step.isReadOnly,
+                  escalate: step.escalate,
                   state: "pending" as const
                 })
               ),
@@ -849,6 +863,7 @@ export function useAiChat(
             command: parsed.command,
             question: parsed.question,
             isReadOnly: parsed.isReadOnly,
+            escalate: parsed.escalate,
             state: "pending"
           };
           setEntries(list => [
@@ -950,6 +965,7 @@ export function useAiChat(
                 command: rest.command,
                 question: rest.question,
                 isReadOnly: rest.isReadOnly,
+                escalate: rest.escalate,
                 state: "pending"
               },
               toolCallId: call.id
@@ -1041,7 +1057,11 @@ export function useAiChat(
       }
       messages.push({
         role: "user",
-        content: `${asked}\n\n${workspaceContext(session)}${
+        content: `${asked}\n\n${workspaceContext(
+          session,
+          userFromPrompt(session.terminal),
+          hasEscalationPassword(session.id)
+        )}${
           refBlocks.length > 0
             ? `\n\n${refBlocks.join("\n\n")}`
             : ""
@@ -1051,6 +1071,7 @@ export function useAiChat(
       try {
         await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         // 已被后续轮次（confirm / skip / 停止）接管就别收尾 ——
@@ -1495,6 +1516,7 @@ export function useAiChat(
       try {
         await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         // if/else 而非 early return：return 写在 finally 里会吞异常
@@ -1583,6 +1605,7 @@ export function useAiChat(
       try {
         await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         // if/else 而非 early return：return 写在 finally 里会吞异常
@@ -1694,6 +1717,7 @@ export function useAiChat(
             command: step.command,
             question: step.title,
             isReadOnly: step.isReadOnly,
+            escalate: step.escalate,
             state: "pending"
           };
           console.info(
@@ -1782,6 +1806,7 @@ export function useAiChat(
         if (!aborted && option)
           await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         planRunningRef.current = false;
@@ -1835,6 +1860,7 @@ export function useAiChat(
       try {
         if (option) await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         if (ownsRound(round, roundRef.current)) {
@@ -1897,6 +1923,7 @@ export function useAiChat(
       try {
         if (option) await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         if (ownsRound(round, roundRef.current)) {
@@ -1947,6 +1974,7 @@ export function useAiChat(
       try {
         if (option) await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         if (ownsRound(round, roundRef.current)) {
@@ -2076,6 +2104,7 @@ export function useAiChat(
       try {
         if (option) await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         if (ownsRound(round, roundRef.current)) {
@@ -2123,6 +2152,7 @@ export function useAiChat(
       try {
         if (option) await runLoop(option);
       } catch (reason) {
+        logError("[ai] 请求失败", reason);
         setError(String(reason));
       } finally {
         if (ownsRound(round, roundRef.current)) {

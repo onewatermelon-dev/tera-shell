@@ -26,14 +26,26 @@ export function aiRunCommand(
   /** 喂给命令 stdin 的内容（走数据流分包，不受命令串 ~16KB 包上限约束） */
   stdin?: string,
   /** 前端生成的执行 id，停止时靠它定位这条命令 */
-  execId?: string
+  execId?: string,
+  /**
+   * 提权凭据：**两个密码分开传**（sudo 要登录账号的密码，su 要 root 的密码）。
+   * 后端按「配了哪个走哪条」执行，两个都配时 sudo 被拒再退 su。
+   */
+  escalate?: {
+    sudoPassword?: string;
+    suPassword?: string;
+  }
 ): Promise<AiExecResult> {
   return invoke("ai_run_command", {
     target: {
       ...target,
       command,
       stdin: stdin ?? null,
-      execId: execId ?? null
+      execId: execId ?? null,
+      escalateSudoPassword:
+        escalate?.sudoPassword || null,
+      escalateSuPassword:
+        escalate?.suPassword || null
     }
   });
 }
