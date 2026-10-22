@@ -30,6 +30,10 @@ import {
   parentOf,
   type PaneListing
 } from "@/sftp/lib/sftpUtils";
+import {
+  ROW_HEIGHT,
+  visibleRange
+} from "@/terminal/components/directory/virtual";
 
 /**
  * 读一个目录：本地走 `fs_list_dir`，远程走 `sftp_list`。
@@ -95,6 +99,24 @@ export default function DirectoryPanel({
     useState(0);
   /** 家目录缓存（`~` 展开用；确认后不再重复读） */
   const homeRef = useRef<string | null>(null);
+  /** 滚动容器（虚拟滚动要读它的可视高度） */
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] =
+    useState(0);
+
+  // 视口高度跟着容器走：拖侧栏宽度、缩窗口都会变。
+  // ResizeObserver 首次 observe 会异步回调一次，所以不必在 effect 里
+  // 同步读 clientHeight（那会触发 set-state-in-effect）。
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() =>
+      setViewportHeight(el.clientHeight)
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // 目录变了就重读；切走时丢弃在途结果（响应乱序会写错栏）。
   // ⚠️ 这里只在**异步回调**里 setState：effect 体内同步 setState 会
@@ -144,7 +166,14 @@ export default function DirectoryPanel({
   }, [session, path, reloadToken]);
 
   // 当前实际显示的目录：列表回来之前先用请求的路径（null 时为空串）
-  const currentPath = listing?.path ?? path ?? "";
+  // ⚠️ Windows 本地后端给的是**反斜杠**路径（`C:\Users\x`，来自
+  // to_string_lossy），这里统一成正斜杠再拆面包屑 —— 否则盘符判断
+  // 匹配不上、根会退化成 `/`，地址栏就露出 `/C:\Users\x` 这种多余的前导斜杠
+  const currentPath = (
+    listing?.path ??
+    path ??
+    ""
+  ).replace(/\\/g, "/");
   // 加载中的判定不另设 state：还没有列表，或者列表不是这一路径，
   // 就说明在等结果
   const loading =
@@ -168,6 +197,13 @@ export default function DirectoryPanel({
     .filter(Boolean);
 
   const entries = listing?.entries ?? [];
+  // 只渲染视口内（含缓冲）的行；start 用来把这一批整体下移
+  const { start, end } = visibleRange(
+    scrollTop,
+    viewportHeight,
+    entries.length
+  );
+  const visible = entries.slice(start, end);
 
   return (
     // 复用 .sidebar 类：收起侧栏（.workspace.sidebar-closed）时靠它
@@ -246,7 +282,15 @@ export default function DirectoryPanel({
         })}
       </div>
 
-      <div className="directory-list">
+      <div
+        className="directory-list"
+        ref={listRef}
+        onScroll={event =>
+          setScrollTop(
+            event.currentTarget.scrollTop
+          )
+        }
+      >
         {!session ? (
           <p className="directory-empty">
             {t("directory.noSession")}
@@ -264,38 +308,58 @@ export default function DirectoryPanel({
             {t("directory.emptyDir")}
           </p>
         ) : (
-          entries.map(entry => (
-            <button
-              key={entry.path}
-              type="button"
-              className="directory-row"
-              data-selected={
-                selected === entry.path
-              }
-              data-busy={loading}
-              // 单击只选中：双击才是动作（目录 cd / 文件插路径），
-              // 避免手滑就把命令敲进终端
-              onClick={() =>
-                setSelected(entry.path)
-              }
-              onDoubleClick={() => {
-                if (entry.isDir)
-                  onEnterDirectory(entry.path);
-                else onInsertPath(entry.path);
+          /* 虚拟滚动：外层撑满「总行数 × 行高」，内层整体平移到当前
+             起始行。几万个文件的目录也只渲染视口里那几十行。 */
+          <div
+            className="directory-vlist"
+            style={{
+              height: entries.length * ROW_HEIGHT
+            }}
+          >
+            <div
+              className="directory-vrows"
+              style={{
+                transform: `translateY(${start * ROW_HEIGHT}px)`
               }}
-              title={entry.path}
             >
-              {/* 与 SFTP 面板同一套图标：后端给的系统原生 PNG，
-                  取不到时退回内置线性图标 */}
-              <EntryIcon
-                entry={entry}
-                icons={listing?.icons}
-              />
-              <span className="directory-name">
-                {entry.name}
-              </span>
-            </button>
-          ))
+              {visible.map(entry => (
+                <button
+                  key={entry.path}
+                  type="button"
+                  className="directory-row"
+                  data-selected={
+                    selected === entry.path
+                  }
+                  data-busy={loading}
+                  // 单击只选中：双击才是动作（目录 cd / 文件插路径），
+                  // 避免手滑就把命令敲进终端
+                  onClick={() =>
+                    setSelected(entry.path)
+                  }
+                  onDoubleClick={() => {
+                    if (entry.isDir)
+                      onEnterDirectory(
+                        entry.path
+                      );
+                    else onInsertPath(entry.path);
+                  }}
+                  title={entry.path}
+                >
+                  {/* 与 SFTP 面板同一套图标：后端给的系统原生 PNG，
+                      取不到时退回内置线性图标 */}
+                  <EntryIcon
+                    entry={entry}
+                    icons={listing?.icons}
+                  />
+                  {/* 单行：图标 + 名称。侧栏窄，放不下大小/时间/权限列
+                      （需要时看 SFTP 面板或 ls -l） */}
+                  <span className="directory-name">
+                    {entry.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </aside>

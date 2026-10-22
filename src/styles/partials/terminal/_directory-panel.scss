@@ -80,19 +80,31 @@
 
 .directory-list {
   flex: 1;
-  padding: 4px;
+  padding: 4px 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
 
   @include thin-scrollbar;
 }
 
+// 虚拟滚动：外层高度 = 总行数 × 行高（内联 style 给），内层整体位移
+.directory-vlist {
+  position: relative;
+}
+
+.directory-vrows {
+  will-change: transform;
+}
+
+// ⚠️ 行高必须固定：虚拟滚动按 ROW_HEIGHT 计算偏移，
+// 改动这里要同步 components/directory/virtual.ts
 .directory-row {
   display: flex;
   gap: 8px;
   align-items: center;
   width: 100%;
-  padding: 4px 8px;
+  height: 26px;
+  padding: 0 8px;
   font-size: 12px;
   color: var(--foreground);
   text-align: left;
