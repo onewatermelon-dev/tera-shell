@@ -21,7 +21,12 @@ import { buildRemoteConnection } from "@/sftp/lib/sftpConnection";
  * 所以组件内不需要用 effect 拉数据（首屏那一次除外，见文件末尾）。
  */
 export function useSftpNavigation(
-  session: SavedSession | null
+  session: SavedSession | null,
+  /**
+   * 首屏要定位到的目录（从目录栏点进来时带的就是终端当前目录）。
+   * 空串 = 走默认目录（远程登录目录 / 本地主目录）。
+   */
+  initialPath = ""
 ) {
   const [local, setLocal] =
     useState<PaneListing | null>(null);
@@ -163,12 +168,25 @@ export function useSftpNavigation(
     // 放进微任务：加载首屏会写状态，直接在 effect 体内调用会被
     // react-hooks/set-state-in-effect 判为级联渲染
     void Promise.resolve().then(() => {
-      void navigateLocal();
+      // 给了初始目录就跟过去：本地会话定位本地栏，SSH 定位远程栏
+      void navigateLocal(
+        session.kind === "local" && initialPath
+          ? initialPath
+          : undefined
+      );
       // 本机终端没有远程目录，只有 SSH 会话才连 SFTP
       if (session.kind === "ssh")
-        void navigateRemote(session);
+        void navigateRemote(
+          session,
+          initialPath || undefined
+        );
     });
-  }, [session, navigateLocal, navigateRemote]);
+  }, [
+    session,
+    initialPath,
+    navigateLocal,
+    navigateRemote
+  ]);
 
   return {
     local,

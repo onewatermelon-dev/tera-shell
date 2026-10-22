@@ -29,6 +29,8 @@ type PendingTransfer = {
 type SftpWindowProps = {
   /** 这个窗口绑定的会话（决定 SFTP 连到哪台机器） */
   session: SavedSession;
+  /** 从目录栏带过来的初始目录；空串 = 默认目录 */
+  initialPath?: string;
   /** 错误提示出口（窗口内的提示条） */
   onError: (message: string) => void;
 };
@@ -42,9 +44,10 @@ type SftpWindowProps = {
  */
 export default function SftpWindow({
   session,
+  initialPath = "",
   onError
 }: SftpWindowProps) {
-  const sftp = useSftp(session);
+  const sftp = useSftp(session, initialPath);
   // 等用户选策略的传输：有同名冲突时才挂起
   const [pendingTransfer, setPendingTransfer] =
     useState<PendingTransfer | null>(null);

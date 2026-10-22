@@ -54,6 +54,41 @@ export function parseOsc7(
 }
 
 /**
+ * 判断一行像不像「停着的提示符」。
+ *
+ * 本地会话（尤其 Windows 上的 PowerShell）没有钩子，既没有 OSC 7 也没有
+ * OSC 133 的 B 标记，只能靠「光标所在行看起来是不是提示符」来决定要不要
+ * 读路径。判据必须收紧：普通输出行里也常出现 `/var/log` 这类片段，宽松
+ * 匹配会让目录栏在 `ls -l` 之后跳到奇怪的地方。
+ *
+ * @param line 光标所在行的文本
+ */
+export function looksLikePrompt(
+  line: string
+): boolean {
+  // 两端都去空白：有的提示符前面带空格（`  PS C:\>`），只 trimEnd 会漏
+  const text = line.trim();
+  if (!text) return false;
+  // PowerShell 默认：`PS C:\Users\x>` 或 `PS>`
+  if (
+    /^PS(\s|>)/i.test(text) &&
+    text.endsWith(">")
+  )
+    return true;
+  // `user@host:/var/log#`
+  if (/^[\w.-]+@[\w.-]+:.*[#$%]\s*$/.test(text))
+    return true;
+  // `[user@host /srv/app]$`
+  if (
+    /^\[[\w.-]+@[\w.-]+[^\]]*\][#$%]\s*$/.test(
+      text
+    )
+  )
+    return true;
+  return false;
+}
+
+/**
  * 从提示符文本里猜当前目录（**OSC 7 没来时的兜底**）。
  *
  * 为什么需要：钩子要部署 + 新 shell 才加载，升级前的老会话没有 OSC 7，

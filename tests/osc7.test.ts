@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  looksLikePrompt,
   parseOsc7,
   parsePromptCwd
 } from "@/terminal/lib/shellIntegration/osc7";
@@ -62,6 +63,43 @@ describe("parseOsc7", () => {
       parseOsc7("http://example.com")
     ).toBeNull();
     expect(parseOsc7("relative/path")).toBeNull();
+  });
+});
+
+describe("looksLikePrompt（判断光标行是不是停着的提示符）", () => {
+  it("PowerShell 默认提示符", () => {
+    expect(
+      looksLikePrompt("PS C:\\Users\\x>")
+    ).toBe(true);
+    expect(looksLikePrompt("PS>")).toBe(true);
+  });
+
+  it("bash / zsh 的常见提示符", () => {
+    expect(
+      looksLikePrompt("root@host:/var/log#")
+    ).toBe(true);
+    expect(
+      looksLikePrompt("[user@host ~]$")
+    ).toBe(true);
+    expect(looksLikePrompt("user@host:~$")).toBe(
+      true
+    );
+  });
+
+  it("普通输出行不算（否则 ls 之后会乱跳）", () => {
+    expect(
+      looksLikePrompt(
+        "drwxr-xr-x 1 root root 4096 /var/log"
+      )
+    ).toBe(false);
+    expect(looksLikePrompt("total 0")).toBe(
+      false
+    );
+    expect(looksLikePrompt("")).toBe(false);
+    // 敲了一半的命令也不是提示符
+    expect(
+      looksLikePrompt("PS C:\\Users\\x> ls")
+    ).toBe(false);
   });
 });
 

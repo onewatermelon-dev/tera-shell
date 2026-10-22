@@ -39,7 +39,9 @@ export type {
  * 所以组件内不需要用 effect 拉数据。
  */
 export function useSftp(
-  session: SavedSession | null = null
+  session: SavedSession | null = null,
+  /** 首屏定位到的目录（空串 = 默认目录），见 useSftpNavigation */
+  initialPath = ""
 ) {
   const {
     bookmarks,
@@ -67,7 +69,7 @@ export function useSftp(
     navigateLocal,
     navigateRemote,
     patchRemoteEntries
-  } = useSftpNavigation(session);
+  } = useSftpNavigation(session, initialPath);
   const {
     transferEntries,
     clearTransfers,

@@ -469,6 +469,7 @@ const zhCN = {
   "directory.emptyDir": "空目录",
   "directory.up": "上级目录",
   "directory.refresh": "刷新",
+  "directory.openSftp": "在 SFTP 面板打开此目录",
   "terminal.passwordHint":
     "密码输入不会显示字符或 *，输入完成后直接按 Enter。",
   "terminal.exited": "[会话已结束]",
@@ -1204,6 +1205,8 @@ const enUS: Record<MessageKey, string> = {
   "directory.emptyDir": "Empty directory",
   "directory.up": "Parent directory",
   "directory.refresh": "Refresh",
+  "directory.openSftp":
+    "Open this directory in SFTP",
   "terminal.passwordHint":
     "Password input stays hidden — no characters or asterisks. Press Enter when done.",
   "terminal.exited": "[session ended]",

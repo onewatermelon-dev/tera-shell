@@ -19,6 +19,15 @@ export default function SftpApp({
     () => loadSession(sessionId),
     [sessionId]
   );
+  // 目录栏点「打开 SFTP」时会把当前目录编码在 `?path=` 上；
+  // URLSearchParams 会自动解码，所以这里拿到的是原始路径
+  const initialPath = useMemo(
+    () =>
+      new URLSearchParams(
+        window.location.search
+      ).get("path") ?? "",
+    []
+  );
   const [error, setError] = useState("");
 
   // 会话可能已被主窗口删掉，此时给个明确提示而不是白屏
@@ -43,6 +52,7 @@ export default function SftpApp({
     <div className="sftp-standalone">
       <SftpWindow
         session={session}
+        initialPath={initialPath}
         onError={setError}
       />
       {error && (

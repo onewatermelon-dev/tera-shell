@@ -25,6 +25,10 @@ import type { CompletionController } from "@/terminal/lib/commandCompletion";
 import { attachShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
 import { readRecentOutput } from "@/terminal/lib/failureDiagnosis";
 import {
+  looksLikePrompt,
+  parsePromptCwd
+} from "@/terminal/lib/shellIntegration/osc7";
+import {
   resolveColorScheme,
   toXtermTheme
 } from "@/terminal/lib/pane/colorSchemes";
@@ -259,7 +263,67 @@ export function createTerminalInstance(
   terminal.onWriteParsed(() => {
     if (integration.available) return;
     commandTimer.poke();
+    scheduleProbeCwd();
   });
+
+  // ---- 没有钩子的会话怎么跟随目录（本地 PowerShell 等）----
+  /** 输出停下来多久再探测（尾触发，见 scheduleProbeCwd） */
+  const PROBE_DELAY_MS = 300;
+  let probeTimer: ReturnType<
+    typeof setTimeout
+  > | null = null;
+  let probedCwd = "";
+  /** 排查用：前几次把光标行原样打出来（回调有没有跑、行长什么样） */
+  let probeLogged = 0;
+  /**
+   * 从「光标所在的提示符行」推断 cwd。
+   *
+   * ⚠️ 本地会话既没有 OSC 7、也没有 OSC 133 的 B 标记（integration 里的
+   * 提示符推断挂在 B 上，那条路在这里根本不会跑），所以只能每写完一块
+   * 输出看一眼：光标所在行像不像停着的提示符（`PS C:\Users\x>`）。
+   * `looksLikePrompt` 卡得比较紧，否则 `ls -l` 的输出行也会被当成路径。
+   */
+  function probeCwdFromPrompt() {
+    const buffer = terminal.buffer.active;
+    const line =
+      buffer
+        .getLine(buffer.baseY + buffer.cursorY)
+        ?.translateToString(true) ?? "";
+    // 排查用：没有这一行 = 回调根本没跑（前端没重载 / 不是本地会话）；
+    // 有这一行但后面没有「提示符推断」= 行文本不匹配 looksLikePrompt
+    if (probeLogged < 5) {
+      probeLogged += 1;
+      console.info(
+        "[cwd] probe 行:",
+        JSON.stringify(line)
+      );
+    }
+    if (!looksLikePrompt(line)) return;
+    const guess = parsePromptCwd(line);
+    if (!guess || guess === probedCwd) return;
+    probedCwd = guess;
+    console.info(
+      "[cwd] 提示符推断（无钩子）→",
+      guess
+    );
+    options.onCwdChange?.(guess);
+  }
+
+  /**
+   * 排一次尾探测：输出**停下来** 300ms 后再读。
+   *
+   * ⚠️ 不能在 onWriteParsed 里直接读：输出是分块到达的，第一块往往只有
+   * 提示符的前半截（甚至什么都还没到），后面几块又落在节流窗口里被丢掉，
+   * 等提示符画完时已经没有任何回调了 —— 症状就是日志里只有 notify、
+   * 没有 cwd。尾触发保证「最后一块输出之后」一定会读一次。
+   */
+  function scheduleProbeCwd() {
+    if (probeTimer !== null) return;
+    probeTimer = setTimeout(() => {
+      probeTimer = null;
+      probeCwdFromPrompt();
+    }, PROBE_DELAY_MS);
+  }
   // 输入管线：补全 + /? 解释 + vim 配色 + cat 高亮（见 terminalInput）
   const input = attachTerminalInput(
     terminal,
@@ -442,6 +506,10 @@ export function createTerminalInstance(
     execTarget: options.execTarget,
     // window 监听不会随 DOM 移除失效：关闭会话时由 useTerminalPaneOps 调用
     disposeListeners: () => {
+      if (probeTimer !== null) {
+        clearTimeout(probeTimer);
+        probeTimer = null;
+      }
       window.removeEventListener(
         "paste",
         onPaste,

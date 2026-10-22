@@ -214,6 +214,27 @@ export default function App() {
   }
 
   /**
+   * 目录栏的「打开 SFTP」：带着当前目录开一个独立 SFTP 窗口。
+   *
+   * 路径在这里就编码好：后端只把字符串拼到 URL 上，重复编码会把中文
+   * 目录名写成 %25E4%25B8…，那边就打不开了。
+   */
+  function openSftpAt(path: string) {
+    const target = terminals.active;
+    if (!target) return;
+    invoke("open_sftp_window", {
+      // 传 sourceSessionId：复制出来的会话 id 是临时的，独立窗口取不到
+      sessionId: target.sourceSessionId,
+      title: target.name,
+      initialPath: path
+        ? encodeURIComponent(path)
+        : ""
+    }).catch((reason: unknown) =>
+      setError(String(reason))
+    );
+  }
+
+  /**
    * 目录栏双击文件：把路径插进终端（不执行）。
    *
    * 含空格的路径加引号，否则粘进 shell 会被拆成多个参数。
@@ -482,6 +503,7 @@ export default function App() {
             cwd={terminals.activeCwd}
             onInsertPath={insertPath}
             onEnterDirectory={enterDirectory}
+            onOpenSftp={openSftpAt}
           />
         )}
         <TerminalWorkspace

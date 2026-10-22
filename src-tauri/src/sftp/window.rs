@@ -19,23 +19,32 @@ const WINDOW_HEIGHT: f64 = 800.0;
 ///
 /// 标签带上毫秒时间戳，保证同一个会话可以反复开多个窗口
 /// （Tauri 要求每个窗口的 label 唯一）。
+///
+/// `initial_path` 是打开时该栏要定位到的目录（前端已 `encodeURIComponent`）：
+/// 从目录栏点过来时带去终端当前目录，窗口一开就是同一个位置。
 #[tauri::command(rename = "open_sftp_window")]
 pub async fn open_sftp_window(
 	app: AppHandle,
 	session_id: String,
 	title: String,
+	initial_path: Option<String>,
 ) -> Result<(), String> {
 	let stamp = SystemTime::now()
 		.duration_since(UNIX_EPOCH)
 		.map(|value| value.as_millis())
 		.unwrap_or_default();
 	let label = format!("sftp-{stamp}");
+	// ⚠️ 这里不再对 path 做一次编码：前端传过来时已经编码过，
+	// 重复编码会让中文目录名变成 %25E4%25B8…（打不开）
+	let mut url = format!("index.html?sftp={session_id}");
+	if let Some(path) = initial_path.filter(|value| !value.is_empty()) {
+		url.push_str("&path=");
+		url.push_str(&path);
+	}
 	WebviewWindowBuilder::new(
 		&app,
 		label,
-		WebviewUrl::App(
-			format!("index.html?sftp={session_id}").into(),
-		),
+		WebviewUrl::App(url.into()),
 	)
 	.title(format!("SFTP · {title}"))
 	// 不要系统标题栏：主窗口也是自绘的（tauri.conf.json 里 decorations: false），

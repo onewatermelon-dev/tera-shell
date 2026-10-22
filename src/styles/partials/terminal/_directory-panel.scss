@@ -37,6 +37,37 @@
   gap: 2px;
 }
 
+// 头部小图标按钮：22×22、图标 12px —— 比 HeroUI 的 sm 按钮更紧凑，
+// 三个并排也吃得下
+.directory-icon-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+
+  &:hover:not(:disabled) {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
 // 面包屑：一条横向可滚动的窄条，路径深了也不换行占两行高度
 .directory-crumbs {
   display: flex;

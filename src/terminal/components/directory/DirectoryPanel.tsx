@@ -17,10 +17,10 @@ import {
   useState
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "@heroui/react";
 import {
   ArrowUpOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  SwapOutlined
 } from "@ant-design/icons";
 import EntryIcon from "@/sftp/components/panes/EntryIcon";
 import { useT } from "@/settings/lib/i18n";
@@ -64,7 +64,8 @@ export default function DirectoryPanel({
   session,
   cwd,
   onInsertPath,
-  onEnterDirectory
+  onEnterDirectory,
+  onOpenSftp
 }: {
   /** 活动会话；没有活动会话时显示空状态 */
   session?: OpenSession;
@@ -79,6 +80,13 @@ export default function DirectoryPanel({
    * 视图随后由 cwd 跟随自动切过去，不会出现「栏里在 A、终端在 B」。
    */
   onEnterDirectory: (path: string) => void;
+  /**
+   * 在当前目录打开 SFTP 面板。
+   *
+   * 传 path 而不是让上层自己去取：目录栏知道「用户现在看的这一层」，
+   * 上层不需要再猜。
+   */
+  onOpenSftp: (path: string) => void;
 }) {
   const t = useT();
   // 初值取当前 cwd；cwd 变化由父级换 key 重挂载（见 App），所以这里
@@ -205,6 +213,20 @@ export default function DirectoryPanel({
   );
   const visible = entries.slice(start, end);
 
+  /**
+   * 跳到一个目录：**先本地切，再让终端 cd 过去**。
+   *
+   * 为什么要两边都做：
+   * - 只 cd 不切：钩子没生效（OSC 7 没来）时目录栏不动，点了像没反应；
+   * - 只切不 cd：终端还留在原地，栏里在 A、终端在 B，跟随关系就断了。
+   * 先 setPath 保证「点了立刻能看到内容」，再 cd 让终端跟上；cwd 上报
+   * 之后父级换 key 重挂，两边自然一致。
+   */
+  function goTo(target: string) {
+    setPath(target);
+    onEnterDirectory(target);
+  }
+
   return (
     // 复用 .sidebar 类：收起侧栏（.workspace.sidebar-closed）时靠它
     // 一起隐藏，网格也从两列变一列 —— 否则目录栏会顶到整宽的位置上
@@ -218,30 +240,40 @@ export default function DirectoryPanel({
             t("directory.noSession")}
         </span>
         <span className="directory-actions">
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
+          <button
+            type="button"
+            className="directory-icon-btn"
             aria-label={t("directory.up")}
-            isDisabled={!currentPath}
-            onPress={() =>
-              setPath(parentOf(currentPath))
+            disabled={!currentPath}
+            onClick={() =>
+              goTo(parentOf(currentPath))
             }
           >
             <ArrowUpOutlined />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
+          </button>
+          <button
+            type="button"
+            className="directory-icon-btn"
             aria-label={t("directory.refresh")}
-            isDisabled={!currentPath}
-            onPress={() =>
+            disabled={!currentPath}
+            onClick={() =>
               setReloadToken(n => n + 1)
             }
           >
             <ReloadOutlined />
-          </Button>
+          </button>
+          {/* 去 SFTP 面板：带上当前目录，那边一开就在同一位置 */}
+          <button
+            type="button"
+            className="directory-icon-btn"
+            aria-label={t("directory.openSftp")}
+            disabled={!session}
+            onClick={() =>
+              onOpenSftp(currentPath)
+            }
+          >
+            <SwapOutlined />
+          </button>
         </span>
       </div>
 
@@ -249,7 +281,7 @@ export default function DirectoryPanel({
         <button
           type="button"
           className="directory-crumb"
-          onClick={() => setPath(root)}
+          onClick={() => goTo(root)}
         >
           {root}
         </button>
@@ -272,7 +304,7 @@ export default function DirectoryPanel({
               <button
                 type="button"
                 className="directory-crumb"
-                onClick={() => setPath(target)}
+                onClick={() => goTo(target)}
                 title={target}
               >
                 {part}
@@ -338,9 +370,7 @@ export default function DirectoryPanel({
                   }
                   onDoubleClick={() => {
                     if (entry.isDir)
-                      onEnterDirectory(
-                        entry.path
-                      );
+                      goTo(entry.path);
                     else onInsertPath(entry.path);
                   }}
                   title={entry.path}
