@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
+import { notifyDirectoryDirty } from "@/terminal/lib/directory/dirty";
 
 /** 一次命令执行的产物。 */
 export type AiExecResult = {
@@ -19,7 +20,7 @@ export type AiExecResult = {
  * `execId` 是「停止」的把手：带上它，`cancelAiExec` 才能把这条命令
  * 从后端读循环里掐掉（关 exec 通道）。不带的命令取消不了。
  */
-export function aiRunCommand(
+export async function aiRunCommand(
   /** 启动会话时解析好的连接目标（含跳板链、私钥与明文密码） */
   target: SshTarget,
   command: string,
@@ -36,18 +37,25 @@ export function aiRunCommand(
     suPassword?: string;
   }
 ): Promise<AiExecResult> {
-  return invoke("ai_run_command", {
-    target: {
-      ...target,
-      command,
-      stdin: stdin ?? null,
-      execId: execId ?? null,
-      escalateSudoPassword:
-        escalate?.sudoPassword || null,
-      escalateSuPassword:
-        escalate?.suPassword || null
+  const result = await invoke<AiExecResult>(
+    "ai_run_command",
+    {
+      target: {
+        ...target,
+        command,
+        stdin: stdin ?? null,
+        execId: execId ?? null,
+        escalateSudoPassword:
+          escalate?.sudoPassword || null,
+        escalateSuPassword:
+          escalate?.suPassword || null
+      }
     }
-  });
+  );
+  // AI 命令可能建删文件（不产生终端的 OSC 7 / OSC 133）：
+  // 完成后广播一次，目录栏据此重读
+  notifyDirectoryDirty();
+  return result;
 }
 
 /**

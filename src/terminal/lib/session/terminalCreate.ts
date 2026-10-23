@@ -24,6 +24,7 @@ import { attachFontZoom } from "@/terminal/lib/fontZoom";
 import { CommandTimer } from "@/lib/notify";
 import type { CompletionController } from "@/terminal/lib/commandCompletion";
 import { attachShellIntegration } from "@/terminal/lib/shellIntegration/shellIntegration";
+import { notifyDirectoryDirty } from "@/terminal/lib/directory/dirty";
 import { readRecentOutput } from "@/terminal/lib/failureDiagnosis";
 import {
   looksLikePrompt,
@@ -232,6 +233,9 @@ export function createTerminalInstance(
         commandTimer.finishNow();
         // 退出码回填到刚记下的那条历史（面板里据此标红失败命令）
         completion?.pushExitCode(exitCode);
+        // 命令可能改了目录内容（rm/touch 等，不触发 OSC 7）：
+        // 广播一次让目录栏重读（无目录栏挂着时是空操作）
+        notifyDirectoryDirty();
         // 排查用锚点：D 标记到没到、退出码是多少，一行看清。
         // 稳定后可降为 debug。
         console.info(

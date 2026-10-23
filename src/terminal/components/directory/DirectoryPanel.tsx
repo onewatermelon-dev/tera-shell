@@ -34,9 +34,13 @@ import {
   ROW_HEIGHT,
   visibleRange
 } from "@/terminal/components/directory/virtual";
+import { onDirectoryDirty } from "@/terminal/lib/directory/dirty";
 
 /**
  * 读一个目录：本地走 `fs_list_dir`，远程走 `sftp_list`。
+ *
+ * 远程恒 `refresh: true`：SFTP 后端按路径缓存列表，终端里删了文件后
+ * 缓存还是旧的 —— 手动点刷新要的是**现在**的内容，必须绕开缓存。
  *
  * @param session 目标会话
  * @param path 绝对路径
@@ -55,7 +59,7 @@ async function listDirectory(
     request: {
       ...connection,
       path,
-      refresh: false
+      refresh: true
     }
   });
 }
@@ -172,6 +176,17 @@ export default function DirectoryPanel({
       alive = false;
     };
   }, [session, path, reloadToken]);
+
+  // 终端里 rm/touch、AI 建删文件这类不换目录的操作不会触发 OSC 7：
+  // 它们完成时广播「目录可能变了」，这里收到就重读一次当前目录
+  // （复用 reloadToken，effect 的在途丢弃逻辑原样生效）
+  useEffect(
+    () =>
+      onDirectoryDirty(() =>
+        setReloadToken(n => n + 1)
+      ),
+    []
+  );
 
   // 当前实际显示的目录：列表回来之前先用请求的路径（null 时为空串）
   // ⚠️ Windows 本地后端给的是**反斜杠**路径（`C:\Users\x`，来自

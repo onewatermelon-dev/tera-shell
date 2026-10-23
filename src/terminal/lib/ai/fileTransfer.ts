@@ -18,6 +18,7 @@
  */
 import { logError } from "@/shared/lib/log";
 import { invoke } from "@tauri-apps/api/core";
+import { notifyDirectoryDirty } from "@/terminal/lib/directory/dirty";
 import {
   execTargetOf,
   type SshTarget
@@ -173,6 +174,8 @@ async function runUpload(
       policy: "overwrite"
     }
   });
+  // 上传完成远端多了文件，广播一次让目录栏重读
+  notifyDirectoryDirty();
   // 记下源文件路径：卡片展示「本地 ⇄ 服务器」两端时要用，
   // 回填给模型的文本里也带上，方便模型确认传的是哪个文件
   call.localPath = picked.path;
@@ -212,6 +215,8 @@ async function runDownload(
       policy: "overwrite"
     }
   });
+  // 下载在本地落了文件，广播一次（本地目录栏若正看这层就重读）
+  notifyDirectoryDirty();
   call.localPath = target;
 }
 
