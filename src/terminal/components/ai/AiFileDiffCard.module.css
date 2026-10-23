@@ -184,6 +184,9 @@
 
 .stats {
   display: flex;
+  /* 允许收缩：备份提示长文案在窄面板下截断，别把卡片撑破 */
+  min-width: 0;
+  overflow: hidden;
   gap: 8px;
   margin-right: auto;
   font:
@@ -209,9 +212,14 @@
 
 .btnGhost,
 .btnPrimary {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  flex: none;
   padding: 4px 12px;
   font-size: 11px;
   cursor: pointer;
+  white-space: nowrap;
   border: 1px solid var(--border);
   border-radius: 6px;
 

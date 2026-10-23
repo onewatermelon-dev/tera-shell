@@ -325,6 +325,10 @@ const zhCN = {
   "ai.edit.applied": "已应用",
   "ai.edit.cancelled": "已取消",
   "ai.edit.failed": "未应用",
+  "ai.editHistory.rollback": "回滚",
+  "ai.editHistory.confirm": "再点一次确认",
+  "ai.editHistory.hostMismatch":
+    "当前会话不是这台主机，无法回滚",
   "ai.usage.input": "输入",
   "ai.usage.output": "输出",
   "ai.usage.cached": "缓存",
@@ -1078,6 +1082,11 @@ const enUS: Record<MessageKey, string> = {
   "ai.edit.applied": "Applied",
   "ai.edit.cancelled": "Cancelled",
   "ai.edit.failed": "Not applied",
+  "ai.editHistory.rollback": "Roll back",
+  "ai.editHistory.confirm":
+    "Click again to confirm",
+  "ai.editHistory.hostMismatch":
+    "Not connected to this host; rollback unavailable",
   "ai.usage.input": "in",
   "ai.usage.output": "out",
   "ai.usage.cached": "cached",

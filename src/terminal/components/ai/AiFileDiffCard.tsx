@@ -10,7 +10,8 @@ import {
   CheckCircleFilled,
   CloseCircleFilled,
   FileTextOutlined,
-  LoadingOutlined
+  LoadingOutlined,
+  UndoOutlined
 } from "@ant-design/icons";
 import { useT } from "@/settings/lib/i18n";
 import Hint from "@/shared/components/Hint";
@@ -63,7 +64,8 @@ export function AiFileDiffCard({
   busy,
   onLoad,
   onApprove,
-  onCancel
+  onCancel,
+  onRollback
 }: {
   call: AiFileEditCall;
   busy: boolean;
@@ -71,8 +73,22 @@ export function AiFileDiffCard({
   onLoad: () => void;
   onApprove: () => void;
   onCancel: () => void;
+  /** 应用后反悔：一键回滚到改动前（无 historyId 时按钮不出现） */
+  onRollback?: (
+    call: AiFileEditCall
+  ) => Promise<void>;
 }) {
   const t = useT();
+  // 回滚是写后动作，状态留在卡片本地就够（历史面板里同一条已同步落盘）
+  const [rollbackBusy, setRollbackBusy] =
+    useState(false);
+  // 回滚成功后置灰：原文已经写回去了，再点只会重复写
+  const [rolledBack, setRolledBack] =
+    useState(false);
+  const [confirmRollback, setConfirmRollback] =
+    useState(false);
+  const [rollbackError, setRollbackError] =
+    useState("");
   // 进视野就加载 diff（loading 态幂等，重复触发无害）
   useEffect(() => {
     onLoad();
@@ -287,7 +303,8 @@ export function AiFileDiffCard({
 
       {/* 统计 + 操作 */}
       <div className={styles.actions}>
-        {call.state === "ready" && (
+        {(call.state === "ready" ||
+          call.state === "applied") && (
           <span className={styles.stats}>
             <span className={styles.added}>
               +{call.addedLines ?? 0}
@@ -297,16 +314,46 @@ export function AiFileDiffCard({
             </span>
           </span>
         )}
-        {call.state === "applied" && (
-          <span className={styles.stats}>
-            <span className={styles.added}>
-              +{call.addedLines ?? 0}
-            </span>
-            <span className={styles.removed}>
-              −{call.removedLines ?? 0}
-            </span>
-          </span>
-        )}
+        {/* 应用后反悔入口：回滚到改动前（两击确认，防手滑覆盖远端文件）。
+            stats 的 auto 外边距把统计推到左端，回滚按钮独占行最右侧 */}
+        {call.state === "applied" &&
+          call.historyId &&
+          onRollback && (
+            <button
+              type="button"
+              className={styles.btnGhost}
+              disabled={
+                busy || rollbackBusy || rolledBack
+              }
+              title={rollbackError || undefined}
+              onClick={() => {
+                if (!confirmRollback) {
+                  setConfirmRollback(true);
+                  return;
+                }
+                setConfirmRollback(false);
+                setRollbackBusy(true);
+                setRollbackError("");
+                onRollback(call)
+                  .then(() => setRolledBack(true))
+                  .catch(reason =>
+                    setRollbackError(
+                      String(reason)
+                    )
+                  )
+                  .finally(() =>
+                    setRollbackBusy(false)
+                  );
+              }}
+            >
+              <UndoOutlined />
+              {rollbackBusy
+                ? t("ai.edit.applying")
+                : confirmRollback
+                  ? t("ai.editHistory.confirm")
+                  : t("ai.editHistory.rollback")}
+            </button>
+          )}
         {call.state === "ready" ? (
           <>
             <button
@@ -327,15 +374,17 @@ export function AiFileDiffCard({
             </button>
           </>
         ) : (
-          <span className={styles.planState}>
-            {call.state === "applied"
-              ? t("ai.edit.applied")
-              : call.state === "cancelled"
-                ? t("ai.edit.cancelled")
-                : call.state === "error"
-                  ? t("ai.edit.failed")
-                  : ""}
-          </span>
+          <>
+            {/* applied 不显示状态字：行尾只有回滚按钮（用户要求） */}
+            {(call.state === "cancelled" ||
+              call.state === "error") && (
+              <span className={styles.planState}>
+                {call.state === "cancelled"
+                  ? t("ai.edit.cancelled")
+                  : t("ai.edit.failed")}
+              </span>
+            )}
+          </>
         )}
       </div>
     </div>

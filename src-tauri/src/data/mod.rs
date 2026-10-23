@@ -33,7 +33,7 @@ const SUBDIR: &str = ".tera-shell";
 const LOCATION_FILE: &str = "location.json";
 
 /// 允许被读写的逻辑数据名。限定白名单，避免前端传任意文件名。
-const ALLOWED: [&str; 10] = [
+const ALLOWED: [&str; 11] = [
 	"sessions",
 	"groups",
 	"settings",
@@ -44,6 +44,7 @@ const ALLOWED: [&str; 10] = [
 	"ai_prefs",
 	"sftp_bookmarks",
 	"shell_integration",
+	"edit_history",
 ];
 
 fn ensure_name(name: &str) -> Result<(), String> {

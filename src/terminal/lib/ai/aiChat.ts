@@ -62,6 +62,7 @@ import {
   readRemoteFileText,
   writeRemoteFileText
 } from "./fileEditExec";
+import { recordEditHistory } from "./editHistory";
 import {
   applyEdits,
   buildHunks,
@@ -2040,10 +2041,42 @@ export function useAiChat(
       } catch (reason) {
         call.state = "error";
         call.error = String(reason);
+        // diff 失败也要回填 tool 结果并续轮（同取消路径）：模型上下文里的
+        // 文件版本可能已过时（用户刚手动改过 / 回滚过），它给的 old_string
+        // 匹配不上。不回填模型就不知道失败，对话卡死在等批准上；回填后
+        // 模型会重新查看文件实际内容再修正。
+        pendingRef.current.delete(callId);
+        resumeRef.current?.();
+        setEntries(list => [...list]);
+        messagesRef.current.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: `[文件修改未能应用：${String(reason)}。文件当前内容与你记忆中的可能不一致（可能被手动修改或回滚过），请先重新查看该文件的实际内容，再基于实际内容重新发起修改]`
+        });
+        const option = optionRef.current;
+        if (option) {
+          beginRound();
+          const round = (roundRef.current += 1);
+          setBusy(true);
+          try {
+            await runLoop(option);
+          } catch (loopReason) {
+            logError("[ai] 请求失败", loopReason);
+            setError(String(loopReason));
+          } finally {
+            if (
+              ownsRound(round, roundRef.current)
+            ) {
+              setBusy(false);
+              setStream(null);
+              streamIdRef.current = null;
+            }
+          }
+        }
       }
       setEntries(list => [...list]);
     },
-    [session]
+    [session, runLoop, beginRound]
   );
 
   /**
@@ -2081,6 +2114,15 @@ export function useAiChat(
           call.newContent ?? ""
         );
         call.state = "applied";
+        // 变更保险：原文/新文落盘本机 edit_history，卡片一键回滚
+        call.historyId = recordEditHistory({
+          session,
+          path: call.path,
+          oldContent: call.oldContent ?? "",
+          newContent: call.newContent ?? "",
+          added: call.addedLines ?? 0,
+          removed: call.removedLines ?? 0
+        });
         messagesRef.current.push({
           role: "tool",
           tool_call_id: call.id,

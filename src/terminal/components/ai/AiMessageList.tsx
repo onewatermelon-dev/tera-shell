@@ -26,6 +26,7 @@ import { AiFileDiffCard } from "./AiFileDiffCard";
 import { sanitizeToolNames } from "@/terminal/lib/ai/sanitize";
 import type {
   AiChatEntry,
+  AiFileEditCall,
   ExecCardMode
 } from "@/terminal/lib/ai/aiChat";
 
@@ -64,6 +65,7 @@ export function AiMessageList({
   onLoadFileEdit,
   onApproveFileEdit,
   onCancelFileEdit,
+  onRollbackFileEdit,
   onAddMacroCommand
 }: {
   entries: AiChatEntry[];
@@ -99,6 +101,10 @@ export function AiMessageList({
   onApproveFileEdit: (callId: string) => void;
   /** 取消一次文件改动（文件不被改动） */
   onCancelFileEdit: (callId: string) => void;
+  /** 回滚一次已应用的文件改动（写回改动前原文） */
+  onRollbackFileEdit: (
+    call: AiFileEditCall
+  ) => Promise<void>;
   /** 把卡片命令存为快捷宏 */
   onAddMacroCommand: (
     name: string,
@@ -275,6 +281,7 @@ export function AiMessageList({
               onCancel={() =>
                 onCancelFileEdit(entry.call.id)
               }
+              onRollback={onRollbackFileEdit}
             />
           );
         }

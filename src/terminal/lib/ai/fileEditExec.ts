@@ -48,6 +48,9 @@ export async function readRemoteFileText(
  *
  * `cat >` 是截断重写：保留 inode 与权限（比 mv 覆盖安全，symlink 也
  * 跟着写进目标而不是替换链接本身）。
+ *
+ * 备份存本地不存服务器：原文在写回前已由 editHistory 落进本机的
+ * `edit_history.json`（回滚 = 把原文再写一次），不在远端留备份文件。
  */
 export async function writeRemoteFileText(
   session: OpenSession | undefined,

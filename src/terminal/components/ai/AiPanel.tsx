@@ -36,6 +36,11 @@ import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 import { attachStreamdownExport } from "@/terminal/lib/streamdownExport";
 import { AiMessageList } from "./AiMessageList";
 import { AiHistoryMenu } from "./AiHistoryMenu";
+import {
+  canRollback,
+  loadEditHistory,
+  rollbackEdit
+} from "@/terminal/lib/ai/editHistory";
 import { AutoExecuteRiskDialog } from "./AutoExecuteRiskDialog";
 import { PromptInput } from "./PromptInput";
 import { QueuedMessageRow } from "./QueuedMessageRow";
@@ -470,6 +475,24 @@ export default function AiPanel({
           }}
           onCancelFileEdit={callId => {
             void cancelFileEdit(callId, selected);
+          }}
+          onRollbackFileEdit={async call => {
+            // 按 historyId 从落盘历史里取回原文再写一次；
+            // 主机不匹配 / 原文未留存 / 已回滚过都在 canRollback 里拦
+            const entry = loadEditHistory().find(
+              item => item.id === call.historyId
+            );
+            if (!entry) {
+              throw new Error(
+                "找不到这条变更的历史记录"
+              );
+            }
+            if (!canRollback(entry, session)) {
+              throw new Error(
+                t("ai.editHistory.hostMismatch")
+              );
+            }
+            await rollbackEdit(entry, session);
           }}
           onAddMacroCommand={onAddMacroCommand}
         />

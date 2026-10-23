@@ -235,6 +235,8 @@ export type AiFileEditCall = {
   error?: string;
   /** 文件是否过大（超过预览上限）—— 仍允许应用，但 diff 只给统计 */
   tooLarge?: boolean;
+  /** 变更历史条目 id（applied 后卡片上的回滚按钮按它定位） */
+  historyId?: string | null;
 };
 
 /**
