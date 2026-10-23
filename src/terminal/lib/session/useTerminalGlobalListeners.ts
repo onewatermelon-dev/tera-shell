@@ -21,6 +21,7 @@ import {
   type SetStateAction
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { logInfo } from "@/shared/lib/log";
 import {
   listen,
   type UnlistenFn
@@ -138,6 +139,9 @@ export function useTerminalGlobalListeners(options: {
     );
     resizeObserverRef.current = observer;
     let disposed = false;
+    // 诊断用：每个会话只记一次「首个输出」，用来区分"事件没到"和
+    // "到了但没渲染"（白屏时这两种成因的修法完全不同）
+    const seenOutput = new Set<string>();
     const setup = async () => {
       const listeners = await Promise.all([
         listen<{ id: string; data: string }>(
@@ -148,6 +152,20 @@ export function useTerminalGlobalListeners(options: {
               openedRef.current.find(
                 ({ id }) => id === payload.id
               );
+            // 诊断放在「找不到会话就 return」**之前**：输出到了但这只
+            // 会话不在 opened 里（拆分/复制的初始化时序问题）也是白屏，
+            // 而这种成因从"有没有这行日志"就能一眼分辨
+            if (!seenOutput.has(payload.id)) {
+              seenOutput.add(payload.id);
+              logInfo(
+                "[term] 会话首个输出到达",
+                payload.id,
+                `${payload.data.length} 字节`,
+                session
+                  ? "已挂载"
+                  : "会话不在 opened 里"
+              );
+            }
             if (!session) return;
             // 指纹变更检测的样本：只存尾部，退出时查一次
             appendTail(

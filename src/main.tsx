@@ -4,8 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import App from "./app/components/App";
 import ErrorBoundary from "./app/components/ErrorBoundary";
 import SftpApp from "./sftp/components/SftpApp";
+import TerminalWindowApp from "./terminal/components/TerminalWindowApp";
 import {
   installGlobalErrorLogging,
+  logError,
   logInfo
 } from "./shared/lib/log";
 import {
@@ -29,9 +31,14 @@ installGlobalErrorLogging();
 
 // 同一个 index.html 服务两种窗口：
 // 带 ?sftp=<会话 id> 的是后端的独立 SFTP 窗口，其余是主窗口。
-const sftpSessionId = new URLSearchParams(
+const params = new URLSearchParams(
   window.location.search
-).get("sftp");
+);
+const sftpSessionId = params.get("sftp");
+// 拖出独立窗口：`?terminal=<会话 id>`，这个窗口不建 PTY，只接管。
+// `source` 是保存会话 id：dup- 临时会话按它兜底取会话名
+const detachedTerminalId = params.get("terminal");
+const detachedSourceId = params.get("source");
 
 /**
  * 启动流程：**先把数据读进内存，再渲染**。
@@ -42,7 +49,41 @@ const sftpSessionId = new URLSearchParams(
  *
  * 语言也在这里定下来：等 useSettings 的 effect 再切会让首屏用错语言闪一下。
  */
+/**
+ * 启动失败时的兜底渲染。
+ *
+ * 不依赖 React：存储/migration 任何一个环节抛错，原来整个 bootstrap 就断了，
+ * 用户看到的是**纯白窗口**——既没有日志入口也不知道发生了什么。
+ */
+function renderFatal(reason: unknown): void {
+  logError("[boot] 启动失败", reason);
+  const host = document.getElementById("app");
+  if (!host) return;
+  host.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;align-items:center;
+                justify-content:center;height:100vh;padding:24px;
+                font:13px/1.6 system-ui;color:#e6e6e6;background:#16161a;text-align:center">
+      <strong style="font-size:15px">应用启动失败 · Failed to start</strong>
+      <code style="max-width:720px;padding:8px 12px;color:#ff7875;
+                   background:#1f1f24;border-radius:8px;overflow-wrap:anywhere">
+        ${String(reason)}
+      </code>
+      <span style="color:#9a9a9a">详细信息已写入日志，可在「设置 · 关于 → 导出诊断包」反馈</span>
+    </div>`;
+  void getCurrentWindow()
+    .show()
+    .catch(() => {});
+}
+
 async function bootstrap() {
+  try {
+    await boot();
+  } catch (reason) {
+    renderFatal(reason);
+  }
+}
+
+async function boot() {
   await initStorage();
   logInfo("[boot] 应用数据已从磁盘加载");
   // 主题写在各窗口自己的 document 根元素上：主窗口靠 useSettings 的 effect，
@@ -77,6 +118,11 @@ async function bootstrap() {
     <ErrorBoundary>
       {sftpSessionId ? (
         <SftpApp sessionId={sftpSessionId} />
+      ) : detachedTerminalId ? (
+        <TerminalWindowApp
+          sessionId={detachedTerminalId}
+          sourceId={detachedSourceId}
+        />
       ) : (
         <App />
       )}

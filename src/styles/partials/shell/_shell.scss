@@ -175,3 +175,81 @@
     background: var(--surface-hover);
   }
 }
+
+// 独立终端窗口（?terminal=<id>）：整窗一只终端，没有标签栏与侧栏
+.terminal-window-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+// 自绘标题栏：窗口没有系统边框（decorations: false），这行既是标题
+// 也是拖拽把手，右边是唯一的关闭入口
+.terminal-window-bar {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+// Tauri 的拖拽判定只看 mousedown 事件目标本身是否带 drag-region 属性，
+// 标题 span 占满整条会吞掉事件导致拖不动——让子元素穿透，关闭钮恢复可点
+// （同 _titlebar.scss 里主窗口标题栏的做法）
+.terminal-window-bar * {
+  pointer-events: none;
+}
+
+.terminal-window-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-window-close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  pointer-events: auto;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 6px;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--surface-hover);
+  }
+}
+
+.terminal-window-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 0 0 8px;
+}
+
+.terminal-window-error {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: 60vw;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

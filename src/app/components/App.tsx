@@ -252,6 +252,44 @@ export default function App() {
   }
 
   /**
+   * 把标签甩到独立窗口。
+   *
+   * 顺序不能反：**先开窗、再摘标签**。反过来的话开窗失败时标签已经没了，
+   * 会话还在后台跑，用户既看不到也关不掉。
+   * 摘标签时带 `keepSession` —— 会话被新窗口接管，不能 terminal_close。
+   */
+  async function detachToWindow(id: string) {
+    const session = terminals.opened.find(
+      item => item.id === id
+    );
+    if (!session) return;
+    try {
+      await invoke("open_terminal_window", {
+        sessionId: id,
+        title: session.name,
+        // dup- 临时会话不落库，独立窗口按 source 才能取到会话信息
+        sourceSessionId: session.sourceSessionId,
+        // 落在主窗口右下方一点，避免正好盖住原来的位置
+        x: window.screenX + 120,
+        y: window.screenY + 80
+      });
+      await terminals.close(id, {
+        keepSession: true
+      });
+      console.info(
+        "[terminal] 已外置到独立窗口：",
+        id
+      );
+    } catch (reason) {
+      logError(
+        "[terminal] 外置到独立窗口失败",
+        reason
+      );
+      setError(String(reason));
+    }
+  }
+
+  /**
    * 目录栏的「打开 SFTP」：带着当前目录开一个独立 SFTP 窗口。
    *
    * 路径在这里就编码好：后端只把字符串拼到 URL 上，重复编码会把中文
@@ -586,6 +624,7 @@ export default function App() {
             terminals.activatePaneTab
           }
           onPaneRatio={terminals.setPaneRatio}
+          onDetach={id => void detachToWindow(id)}
           onSplitPane={terminals.splitPane}
           onMoveTab={terminals.moveTab}
           onReorderTab={terminals.reorderTab}

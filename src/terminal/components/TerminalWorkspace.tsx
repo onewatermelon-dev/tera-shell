@@ -112,6 +112,12 @@ type Props = {
     paneId: string,
     direction: SplitDirection
   ) => Promise<string | undefined>;
+  /**
+   * 把标签甩到独立窗口（双屏运维）。
+   *
+   * 上层负责开窗 + 主窗口摘标签；会话本身不结束，由新窗口接管。
+   */
+  onDetach: (id: string) => void;
   /** 拖标签在窗格之间搬移 */
   onMoveTab: (
     id: string,
@@ -204,6 +210,7 @@ export default function TerminalWorkspace({
   onActivatePaneTab,
   onPaneRatio,
   onSplitPane,
+  onDetach,
   onMoveTab,
   onReorderTab,
   macros,
@@ -512,6 +519,10 @@ export default function TerminalWorkspace({
                     item =>
                       item.id === tabMenu.tabId
                   );
+                  if (action === "detach") {
+                    onDetach(tabMenu.tabId);
+                    return;
+                  }
                   if (
                     action === "splitRight" ||
                     action === "splitDown"

@@ -132,11 +132,46 @@ export function toSelectionCss(
  * （terminalSelection.ts + .terminal-selection-range）负责，颜色见
  * `toSelectionCss`。
  */
+/**
+ * 配色数据里 `background` 可能是空串（463 个方案里确实有这样的，
+ * 和 `selectionBackground` 同一类数据缺口）。空串传给 xterm 等于
+ * **背景透明** —— 露出页面白底，而前景色往往是深色主题的浅灰
+ * （如 #C9D1D9），于是"浅灰字画在白底上"，看起来就是一片空白。
+ * 2026-10-23 实测白屏就是这么来的。
+ *
+ * 兜底规则：按前景亮度选对比底（浅前景配深底，反之配白底）。
+ */
+function fallbackBackground(
+  foreground: string
+): string {
+  const match =
+    /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(
+      foreground.trim()
+    );
+  if (!match) return "#0d1117";
+  let hex = match[1] ?? "";
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map(ch => ch + ch)
+      .join("");
+  }
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  // 相对亮度（sRGB 近似，够判断明暗）
+  const luminance =
+    (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? "#0d1117" : "#ffffff";
+}
+
 export function toXtermTheme(
   scheme: ColorScheme
 ): Record<string, string> {
   const theme: Record<string, string> = {
-    background: scheme.background,
+    background:
+      scheme.background.trim() ||
+      fallbackBackground(scheme.foreground),
     foreground: scheme.foreground,
     cursor: scheme.cursor,
     // 原生选区恒透明：视觉走自绘覆盖层，不能让 xterm 再画一层

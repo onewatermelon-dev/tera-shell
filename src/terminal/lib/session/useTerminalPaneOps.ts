@@ -222,8 +222,17 @@ export function useTerminalPaneOps(options: {
     [openedRef]
   );
 
+  /**
+   * 关闭标签。
+   *
+   * `keepSession = true` 时**不结束后端会话** —— 拖出独立窗口用：会话被
+   * 新窗口接管继续跑，主窗口这边只把标签和本地 xterm 拆掉。
+   */
   const close = useCallback(
-    async (id: string) => {
+    async (
+      id: string,
+      options?: { keepSession?: boolean }
+    ) => {
       const index = openedRef.current.findIndex(
         session => session.id === id
       );
@@ -260,9 +269,10 @@ export function useTerminalPaneOps(options: {
           )
         );
       }
-      await invoke("terminal_close", {
-        id
-      }).catch(onError);
+      if (!options?.keepSession)
+        await invoke("terminal_close", {
+          id
+        }).catch(onError);
       const closing = openedRef.current[index];
       // 先摘 WebGL 再 dispose 终端：addon 的 canvas 由它自己管，
       // 终端先 dispose 的话 addon 会对已销毁的 screenElement 操作

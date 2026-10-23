@@ -11,7 +11,9 @@ export type TabAction =
   | "closeOthers"
   | "closeAll"
   | "splitRight"
-  | "splitDown";
+  | "splitDown"
+  /** 把标签甩到独立窗口（双屏运维用） */
+  | "detach";
 
 type TabContextMenuProps = {
   /** 菜单左上角坐标（视口坐标，用 fixed 定位） */
@@ -167,6 +169,10 @@ export default function TabContextMenu({
       {/* 分隔线之后是布局类动作：VSCode 式拆分，可连续拆成网格；
           关窗格不走菜单 —— 窗格标签上的 × 关掉最后一个标签即折叠 */}
       <div className="context-menu-separator" />
+      {renderItem(
+        "detach",
+        t("terminal.detachWindow")
+      )}
       {renderItem(
         "splitRight",
         t("terminal.splitRight")

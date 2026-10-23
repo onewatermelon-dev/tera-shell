@@ -14,7 +14,10 @@
  * - useTerminalSessions.ts 会话生命周期（开/复制/密码补验）
  * - useTerminalPaneOps.ts 会话关闭/批量关闭、拆分窗格、焦点交回
  */
-import { logWarn } from "@/shared/lib/log";
+import {
+  logInfo,
+  logWarn
+} from "@/shared/lib/log";
 import {
   useCallback,
   useEffect,
@@ -25,7 +28,10 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedSession } from "@/sessions/lib/session";
 import { useT } from "@/settings/lib/i18n";
-import { enableWebgl } from "@/terminal/lib/webglRenderer";
+import {
+  disableWebgl,
+  enableWebgl
+} from "@/terminal/lib/webglRenderer";
 import { createTerminalMenu } from "@/terminal/lib/terminalContextMenu";
 import { useTerminalSearch } from "@/terminal/lib/search/useTerminalSearch";
 import { hostKeyOf } from "@/terminal/lib/commandHistory";
@@ -647,9 +653,85 @@ export function useTerminals(
       // 放在 `first` 之外是必要的 —— 设置里把硬件加速打开时，
       // 已存在的终端也要补上。enableWebgl 幂等，重复调用无副作用。
       // 失败时内部静默降级，这里不会中断挂载。
+      if (first) {
+        // 容器刚被 replaceChildren 搬进这个宿主：WebGL 的 canvas 若在
+        // 旧宿主或 0 尺寸状态下建立，搬过来就再也画不出来（症状：缓冲
+        // 有内容、fit 正常、屏幕空白）。拆掉重建一次，canvas 才会长在
+        // 新宿主里。只在首次挂载做，切换标签不会闪。
+        disableWebgl(session.terminal);
+      }
       enableWebgl(session.terminal);
       resizeObserver.current?.observe(host);
       resize(session);
+      // 白屏排查：宿主 0×0 或 cols/rows 为 0 说明 fit 时还没有尺寸，
+      // 后续没有尺寸变化就不会再 fit，屏幕就一直是空的
+      if (first) {
+        logInfo(
+          "[term] 挂载会话",
+          session.id,
+          `pane=${paneItem.id}`,
+          `host=${host.clientWidth}x${host.clientHeight}`,
+          `cols=${session.terminal.cols}`,
+          `rows=${session.terminal.rows}`
+        );
+        // ⚠️ 挂载后的自检 + 自愈。
+        //
+        // 症状很刁钻：终端缓冲区里有内容（`[cwd] probe 行` 能读出提示符）、
+        // fit 日志的 cols/rows 也对，但屏幕一片空白。两种成因都在这里兜：
+        // ① xterm 的 DOM 没进 element（open 没跑或跑在 detached 节点上）
+        // ② WebGL 的 canvas 停在 0×0（宿主经历过「尺寸 0 → 有尺寸」）
+        requestAnimationFrame(() => {
+          if (
+            !session.element.querySelector(
+              ".xterm"
+            )
+          ) {
+            session.terminal.open(
+              session.element
+            );
+            session.mounted = true;
+            logWarn(
+              "[term] 补 open：element 里没有 xterm DOM",
+              session.id
+            );
+          }
+          const canvas =
+            session.element.querySelector(
+              "canvas"
+            );
+          if (canvas) {
+            // ⚠️ 白屏的真正成因（2026-10-23 实测）：WebGL addon 把 canvas
+            // 建出来了，但 context 创建失败 —— canvas 尺寸正常、完全覆盖
+            // 在渲染区上、却什么都不画。只查"尺寸为 0"根本查不出来，
+            // 必须查**有没有 GL 上下文**。
+            const gl =
+              canvas.getContext("webgl2") ??
+              canvas.getContext("webgl");
+            if (!gl) {
+              logWarn(
+                "[term] canvas 没有 GL 上下文，回退 DOM 渲染",
+                session.id,
+                `${canvas.width}x${canvas.height}`
+              );
+              disableWebgl(session.terminal);
+            } else if (
+              canvas.width === 0 ||
+              canvas.height === 0
+            ) {
+              logWarn(
+                "[term] canvas 尺寸为 0，回退 DOM 渲染",
+                session.id,
+                `${canvas.width}x${canvas.height}`
+              );
+              disableWebgl(session.terminal);
+            }
+          }
+          session.terminal.refresh(
+            0,
+            Math.max(0, session.terminal.rows - 1)
+          );
+        });
+      }
       // 只让活动窗格抢键盘焦点：挂载时顺带 focus 活动那只，
       // 其余窗格保持安静（否则新开一个窗格会把正在输入的那只抢走）
       if (paneItem.id === activePane?.id)
@@ -665,6 +747,202 @@ export function useTerminals(
     resize,
     paneHostRefs,
     appearance.webglRender
+  ]);
+
+  /**
+   * 挂载兜底：layout effect 之后再看一眼，把「还没挂进宿主」的会话补上。
+   *
+   * 新窗格的宿主登记与 React 提交之间有一小段窗口期（PaneGrid 的 ref
+   * 回调、树结构更新、`setPanes` 三者谁先谁后并不保证），漏一次的表现
+   * 就是**整块窗格空白，而 xterm 内部其实已有内容**（`[cwd] probe 行`
+   * 能读出提示符，屏幕却是白的）。这里 300ms 后再校一遍，代价可以忽略。
+   */
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      for (const paneItem of panesRef.current) {
+        const session = openedRef.current.find(
+          item => item.id === paneItem.visibleId
+        );
+        const host = paneHostRefs.current.get(
+          paneItem.id
+        );
+        if (!session || !host) continue;
+        if (!host.contains(session.element)) {
+          host.replaceChildren(session.element);
+          if (!session.mounted) {
+            session.terminal.open(
+              session.element
+            );
+            session.mounted = true;
+          }
+          logWarn(
+            "[term] 兜底挂载（layout effect 漏掉的窗格）",
+            session.id,
+            `pane=${paneItem.id}`
+          );
+        }
+        // **无论漏没漏都再校一次**：首次挂载时布局可能还没稳定，fit 出来
+        // 的是中间态尺寸（`.xterm` 用了 fit-content，塌成 0 也可能），
+        // 之后没有尺寸变化就不再重算 —— 屏幕于是永远空着。
+        resize(session);
+        session.terminal.refresh(
+          0,
+          Math.max(0, session.terminal.rows - 1)
+        );
+        const xtermEl =
+          session.element.querySelector(".xterm");
+        if (
+          xtermEl &&
+          xtermEl.getBoundingClientRect()
+            .height === 0
+        ) {
+          logWarn(
+            "[term] .xterm 高度为 0（fit-content 塌了）",
+            session.id,
+            `host=${host.clientWidth}x${host.clientHeight}`
+          );
+        }
+      }
+      // 300ms 时只够校正尺寸；SSH 登录要几秒，真正的白屏是之后才稳定下来的
+      // 状态。3 秒后再补一次重绘 + 布局校正，并打完整诊断。
+      setTimeout(() => {
+        for (const paneItem of panesRef.current) {
+          const session = openedRef.current.find(
+            item => item.id === paneItem.visibleId
+          );
+          const host = paneHostRefs.current.get(
+            paneItem.id
+          );
+          if (!session || !host) continue;
+          resize(session);
+          const active =
+            session.terminal.buffer.active;
+          // 视口停在前面的空行上时，缓冲区再满也是"一片空白"
+          if (active.viewportY !== active.baseY) {
+            session.terminal.scrollToBottom();
+            logWarn(
+              "[term] 视口不在底部，已滚到最新",
+              session.id,
+              `${active.viewportY}/${active.baseY}`
+            );
+          }
+          session.terminal.refresh(
+            0,
+            Math.max(0, session.terminal.rows - 1)
+          );
+          // 3 秒后（SSH 登录已完成）的完整体检：几何、可见性、
+          // canvas 的像素/CSS 尺寸、滚动位置一次打全
+          const xtermEl =
+            session.element.querySelector(
+              ".xterm"
+            );
+          const screenEl =
+            session.element.querySelector(
+              ".xterm-screen"
+            );
+          const canvas =
+            session.element.querySelector(
+              "canvas"
+            );
+          const rect =
+            session.element.getBoundingClientRect();
+          logInfo("[term] 白屏诊断", {
+            id: session.id,
+            element: `${rect.width}x${rect.height}@${rect.left},${rect.top}`,
+            xterm: xtermEl
+              ? `${xtermEl.getBoundingClientRect().width}x${xtermEl.getBoundingClientRect().height}`
+              : "无",
+            screen: screenEl
+              ? `${screenEl.getBoundingClientRect().width}x${screenEl.getBoundingClientRect().height}`
+              : "无",
+            canvas: canvas
+              ? `${canvas.width}x${canvas.height} / css ${Math.round(canvas.getBoundingClientRect().width)}x${Math.round(canvas.getBoundingClientRect().height)}`
+              : "无",
+            opacity: xtermEl
+              ? getComputedStyle(xtermEl).opacity
+              : "",
+            cursor: `${active.cursorX},${active.cursorY}`,
+            viewport: `${active.viewportY}/${active.baseY}`,
+            bufferLength: active.length,
+            text: active
+              .getLine(
+                active.baseY + active.cursorY
+              )
+              ?.translateToString(true)
+              .trim(),
+            rows: session.terminal.rows,
+            cols: session.terminal.cols,
+            // 终极两问：① 这个点上最顶层的元素是不是我们的
+            // ② 文字颜色和背景色是否撞了
+            topElement: (() => {
+              const point = {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2
+              };
+              const top =
+                document.elementFromPoint(
+                  point.x,
+                  point.y
+                );
+              if (!top) return "无";
+              return `${top.tagName}.${String(top.className).slice(0, 40)}${session.element.contains(top) ? "（是我们的）" : "（被它盖住！）"}`;
+            })(),
+            rowsLayer: (() => {
+              const rowsEl =
+                screenEl?.querySelector(
+                  ".xterm-rows"
+                );
+              if (!rowsEl)
+                return "无 .xterm-rows";
+              const firstRow =
+                rowsEl.firstElementChild as HTMLElement | null;
+              const style = firstRow
+                ? getComputedStyle(firstRow)
+                : null;
+              const rect =
+                rowsEl.getBoundingClientRect();
+              return `行数=${rowsEl.childElementCount} 文本="${(rowsEl.textContent ?? "").trim().slice(0, 40)}" color=${style?.color ?? ""} 行高=${style?.lineHeight ?? ""} rect=${Math.round(rect.width)}x${Math.round(rect.height)}@${Math.round(rect.left)},${Math.round(rect.top)} transform=${getComputedStyle(rowsEl).transform}`;
+            })(),
+            viewportBg: (() => {
+              const vp =
+                session.element.querySelector(
+                  ".xterm-viewport"
+                );
+              if (!vp)
+                return "无 .xterm-viewport";
+              const style = getComputedStyle(vp);
+              return `bg=${style.backgroundColor} scrollTop=${vp.scrollTop}`;
+            })(),
+            // 祖先链上任何一层 display:none / visibility:hidden 都会让
+            // 子树整体不可见，而子树自己的 computed style 仍是正常的
+            hiddenAncestor: (() => {
+              let el: HTMLElement | null =
+                session.element;
+              while (el) {
+                const style =
+                  getComputedStyle(el);
+                if (
+                  style.display === "none" ||
+                  style.visibility === "hidden" ||
+                  style.opacity === "0"
+                ) {
+                  return `${el.tagName}.${String(el.className).slice(0, 40)}`;
+                }
+                el = el.parentElement;
+              }
+              return "无（祖先均可见）";
+            })()
+          });
+        }
+      }, 6000);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [
+    opened,
+    panes,
+    resize,
+    paneHostRefs,
+    panesRef
   ]);
 
   // ---- 终端实例组装（见 terminalCreate） ----

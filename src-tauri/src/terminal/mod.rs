@@ -12,7 +12,7 @@ use std::{
 	thread,
 	time::Duration,
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tracing::{debug, error, info, warn};
 
@@ -33,6 +33,31 @@ struct Session {
 	/// 当前 PTY 尺寸：resize 收到同尺寸直接跳过 —— ConPTY 对 resize（哪怕
 	/// 等尺寸）可能整屏重绘，会抹掉前端画的欢迎横幅。
 	size: Mutex<(u16, u16)>,
+	/// 输出事件发往哪个窗口。多窗口（拖出独立窗口）时按它定向，
+	/// 否则每个窗口都要收全部终端的输出再自己丢掉。
+	///
+	/// 用 `Arc<Mutex<_>>` 而不是 String：读线程是 `move` 闭包，值捕获之后
+	/// 改字段它看不见 —— 拖出窗口时"接管"就改不动归属，输出还发回老窗口。
+	window_label: Arc<Mutex<String>>,
+	/// 最近若干 KB 的原始输出（含 ANSI）：独立窗口接管时要先把这些写进
+	/// 它那只全新的 xterm，否则用户看到一个空白终端，只剩提示符之后的内容。
+	recent: Arc<Mutex<Vec<u8>>>,
+}
+
+/// 回放缓冲上限：够重画一次全屏（vim / top 的整屏重绘通常也就几十 KB）。
+const REPLAY_LIMIT: usize = 256 * 1024;
+
+/// 往回放缓冲里追加，超上限就丢掉最老的一半。
+fn push_recent(recent: &Arc<Mutex<Vec<u8>>>, chunk: &[u8]) {
+	let Ok(mut buffer) = recent.lock() else {
+		return;
+	};
+	buffer.extend_from_slice(chunk);
+	if buffer.len() > REPLAY_LIMIT {
+		// 一次砍掉前半：逐字节 drain 太慢，且旧内容本来就要丢
+		let cut = buffer.len() - REPLAY_LIMIT / 2;
+		buffer.drain(..cut);
+	}
 }
 
 #[derive(Default)]
@@ -283,7 +308,17 @@ struct Exit {
 const PASSWORD_HINT_TAIL: usize = 256;
 
 #[tauri::command(rename = "terminal_start")]
-pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Result<(), String> {
+pub fn start(
+	app: AppHandle,
+	window: tauri::Window,
+	config: Config,
+	terminals: State<Terminals>,
+) -> Result<(), String> {
+	// 注入的 Window 就是发起调用的那个窗口：输出只发回它。
+	// 包成 Arc<Mutex<_>>：拖出独立窗口时会改归属，读线程要能读到新值
+	let window_label = Arc::new(Mutex::new(
+		window.label().to_string(),
+	));
 	let rows = config.rows.unwrap_or(30);
 	let cols = config.cols.unwrap_or(100);
 	// 只记录连接目标，密码和终端输入内容一律不进日志。
@@ -338,6 +373,8 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 	let expecting_password = Arc::new(AtomicBool::new(false));
 	let exited = Arc::new(AtomicBool::new(false));
 	let log = Arc::new(Mutex::new(Log::default()));
+	// 回放缓冲：读线程写、接管时读
+	let recent = Arc::new(Mutex::new(Vec::new()));
 	// 同 id 重复 start 时 HashMap.insert 会静默覆盖旧 Session：旧 master 一被
 	// drop，旧 ConPTY 关闭、旧子进程退出，旧读取线程随即 EOF 并发出
 	// terminal-exit —— 前端把这次退出算到刚建立的新会话头上，表现为
@@ -358,6 +395,8 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 				input_buf,
 				expecting_password: expecting_password.clone(),
 				size: Mutex::new((rows, cols)),
+				window_label: window_label.clone(),
+				recent: recent.clone(),
 			},
 		)
 	{
@@ -389,8 +428,37 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 		thread::sleep(Duration::from_millis(200));
 	});
 	let read_exited = exited.clone();
+	// 登录/启动卡住时的现场快照：3 秒后把这个会话已有的输出尾部打一条
+	// info。SSH 新会话白屏十有八九是卡在交互提示上（host key 确认、
+	// keyboard-interactive），而 PTY 读循环是阻塞的、没法自己设超时查。
+	{
+		let probe_id = id.clone();
+		let probe_recent = recent.clone();
+		thread::spawn(move || {
+			thread::sleep(Duration::from_secs(3));
+			let tail = probe_recent
+				.lock()
+				.map(|buffer| {
+					let start =
+						buffer.len().saturating_sub(400);
+					String::from_utf8_lossy(
+						&buffer[start..],
+					)
+					.into_owned()
+				})
+				.unwrap_or_default();
+			info!(
+				session = %probe_id,
+				bytes = tail.len(),
+				tail = %tail.trim(),
+				"会话启动 3 秒后的输出尾部"
+			);
+		});
+	}
+
 	// 读取线程收尾时也要能问到退出码（进程可能已经死透）
 	let read_child = child.clone();
+	let read_recent = recent.clone();
 	thread::spawn(move || {
 		let mut buffer = [0_u8; 8192];
 		// 保存的密码自动应答：累积输出尾部，识别 ssh 登录提示后一次性写入密码。
@@ -450,6 +518,11 @@ pub fn start(app: AppHandle, config: Config, terminals: State<Terminals>) -> Res
 					}
 				}
 			}
+			push_recent(&read_recent, chunk);
+			// ⚠️ 这里刻意用**广播**而不是 `emit_to(window_label)`：
+			// 定向发一次实测会让窗格/新窗口里的终端收不到输出（白屏），
+			// 而 `listen` 本身是 per-webview 的，多窗口各收一份再按 id
+			// 过滤完全无害。window_label 仍然记着，将来真要定向再打开。
 			if let Err(error) = app.emit(
 				"terminal-output",
 				Output {
@@ -685,6 +758,144 @@ pub fn resize(id: String, rows: u16, cols: u16, terminals: State<Terminals>) -> 
 	})
 	.map_err(|error| error.to_string())?;
 	*session.size.lock().map_err(|_| "尺寸状态不可用")? = (rows, cols);
+	Ok(())
+}
+
+/// 把已有会话「接管」到当前窗口（拖出独立窗口用）。
+///
+/// **不能重启 PTY**：那会丢掉正在跑的进程。这里只做两件事 ——
+/// 改输出归属、回放最近的原始输出，让新窗口那只全新的 xterm 先长成
+/// 和原来一样的画面。返回的回放内容由前端直接 `terminal.write()`。
+#[tauri::command(rename = "terminal_attach")]
+pub fn attach(
+	terminals: State<Terminals>,
+	window: tauri::Window,
+	id: String,
+) -> Result<String, String> {
+	let sessions = terminals
+		.0
+		.lock()
+		.map_err(|_| "终端状态不可用")?;
+	let session = sessions
+		.get(&id)
+		.ok_or_else(|| {
+			format!("终端会话不存在：{id}")
+		})?;
+	// 先改归属再读缓冲：反过来的话，这中间产生的输出会发到老窗口，
+	// 新窗口拿到的快照正好缺一段
+	{
+		let mut label = session
+			.window_label
+			.lock()
+			.map_err(|_| "会话状态不可用")?;
+		*label = window.label().to_string();
+	}
+	let replay = session
+		.recent
+		.lock()
+		.map(|buffer| {
+			String::from_utf8_lossy(&buffer).into_owned()
+		})
+		.unwrap_or_default();
+	info!(
+		session = %id,
+		window = window.label(),
+		bytes = replay.len(),
+		"终端会话已接管到独立窗口"
+	);
+	Ok(replay)
+}
+
+/// 为一个已有会话开独立窗口（标签拖出时调用）。
+///
+/// `x` / `y` 是拖出点的屏幕坐标：双屏场景下窗口要出现在鼠标那一侧，
+/// 交给系统居中反而会跑到主屏。
+///
+/// 必须是 **async 命令**：Windows 上在同步命令里创建 webview 会死锁
+/// （tauri WebviewBuilder 的已知问题，见其文档注释）——表现是命令永不
+/// 返回、新窗口永远白屏、主窗口一起冻住。SFTP 的 `open_sftp_window`
+/// 同理是 async。
+#[tauri::command(rename = "open_terminal_window")]
+pub async fn open_terminal_window(
+	app: AppHandle,
+	session_id: String,
+	title: String,
+	// 复制出来的会话 id（dup-…）不落库，独立窗口按它查不到保存的会话；
+	// source 指向真正落库的那个 id，新窗口拿它兜底取会话名（同 SFTP 窗口）
+	source_session_id: Option<String>,
+	x: Option<f64>,
+	y: Option<f64>,
+) -> Result<(), String> {
+	use std::time::{SystemTime, UNIX_EPOCH};
+	use tauri::WebviewWindowBuilder;
+
+	let stamp = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.map(|value| value.as_millis())
+		.unwrap_or_default();
+	let label = format!("term-{stamp}");
+	let mut url = format!("index.html?terminal={session_id}");
+	if let Some(source) =
+		source_session_id.filter(|v| !v.is_empty())
+	{
+		url.push_str("&source=");
+		url.push_str(&source);
+	}
+	let mut builder = WebviewWindowBuilder::new(
+		&app,
+		label,
+		tauri::WebviewUrl::App(url.into()),
+	)
+	.title(format!("终端 · {title}"))
+	// 与主窗口一致：自绘标题栏
+	.decorations(false)
+	.resizable(true)
+	.inner_size(1000.0, 700.0)
+	.min_inner_size(520.0, 320.0);
+	builder = match (x, y) {
+		(Some(x), Some(y)) => builder.position(x, y),
+		_ => builder.center(),
+	};
+	let window = builder.build().map_err(|error| {
+		format!("打开终端窗口失败：{error}")
+	})?;
+	// 关窗 = 会话结束（产品决定）：在**后端**监听窗口销毁，比前端
+	// onCloseRequested 可靠 —— 窗口销毁时前端的异步调用可能已经来不及发
+	let app_for_close = app.clone();
+	let session_for_close = session_id.clone();
+	window.on_window_event(move |event| {
+		if !matches!(
+			event,
+			tauri::WindowEvent::Destroyed
+		) {
+			return;
+		}
+		let Some(state) =
+			app_for_close.try_state::<Terminals>()
+		else {
+			return;
+		};
+		let Ok(mut sessions) = state.0.lock() else {
+			return;
+		};
+		let Some(session) =
+			sessions.remove(&session_for_close)
+		else {
+			return;
+		};
+		// 与 terminal_close 一致：标记静默退出，再杀进程
+		session.exited.store(true, Ordering::Relaxed);
+		let _ = session
+			.child
+			.lock()
+			.unwrap_or_else(|error| error.into_inner())
+			.kill();
+		info!(
+			session = %session_for_close,
+			"独立窗口关闭，会话已结束"
+		);
+	});
+	info!(session = %session_id, "已为会话打开独立终端窗口");
 	Ok(())
 }
 

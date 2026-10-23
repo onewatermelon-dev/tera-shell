@@ -80,6 +80,9 @@ pub fn run() {
             terminal::write,
             terminal::resize,
             terminal::close,
+            // 拖出独立窗口：接管已有会话 + 开窗
+            terminal::attach,
+            terminal::open_terminal_window,
             terminal::log_status,
             terminal::log_start,
             terminal::log_action,
@@ -175,6 +178,19 @@ pub fn run() {
                 }
             }
             Ok(())
+        })
+        // 主窗口关闭 → 连带关掉独立的终端窗口并退出。
+        // 否则那些 `term-*` 窗口还活着，进程不退出，用户看到的是
+        // 「点了关闭但软件还在」—— 关窗即结束会话的语义也顺带兑现。
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let tauri::WindowEvent::Destroyed = event {
+                tracing::info!("主窗口已关闭，退出应用");
+                // Manager trait 提供 app_handle()，退出即连带销毁所有窗口
+                tauri::Manager::app_handle(window).exit(0);
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

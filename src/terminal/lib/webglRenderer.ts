@@ -57,6 +57,29 @@ let degradedCount = 0;
 let webglEnabled = true;
 
 /**
+ * 这台机器上 WebGL 建不出 context 的标记（设备级）。
+ *
+ * 虚拟机的显卡、远程桌面的会话、驱动缺失的机器都会这样：addon 能装上，
+ * canvas 也建出来了，但 `getContext` 返回 null —— 每次尝试都要先闪一下
+ * 空画布再降级。记住一次，后续会话直接走 DOM 渲染。
+ *
+ * 只在**用户主动重新打开硬件加速开关**时清掉，否则一次失败就永久禁用了。
+ */
+const UNAVAILABLE_KEY = "tera.webglUnavailable";
+
+/** 本机是否已知建不出 GL 上下文。 */
+function knownUnavailable(): boolean {
+  try {
+    return (
+      localStorage.getItem(UNAVAILABLE_KEY) ===
+      "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 设置项变更时调用；关 → 顺带释放传入的那些终端上的 addon。
  *
  * ⚠️ 关闭时**必须由调用方把终端传进来**：addon 存在 WeakMap 里，
@@ -69,6 +92,14 @@ export function setWebglEnabled(
   if (webglEnabled === on) return;
   webglEnabled = on;
   if (!on) disposeAll(terminals);
+  if (on) {
+    // 用户主动重新开启 = 想再试一次（换了机器/装了驱动），清掉旧标记
+    try {
+      localStorage.removeItem(UNAVAILABLE_KEY);
+    } catch {
+      // 隐私模式下 localStorage 不可用，忽略
+    }
+  }
 }
 
 /**
@@ -89,6 +120,8 @@ export function enableWebgl(
   // 设置里关掉了硬件加速：退回 DOM 渲染器（终端照常可用）
   if (!webglEnabled) return;
   if (webglByTerminal.has(terminal)) return;
+  // 已经确认这台机器建不出 context：别每个会话都再试一次
+  if (knownUnavailable()) return;
   try {
     const addon = new WebglAddon();
     addon.onContextLoss(() => {
@@ -107,6 +140,39 @@ export function enableWebgl(
     });
     terminal.loadAddon(addon);
     webglByTerminal.set(terminal, addon);
+    // ⚠️ 主动校验（2026-10-23 实测踩到）：addon 有时会把 canvas 建出来、
+    // 却没拿到 GL 上下文 —— 构造函数和 loadAddon 都不报错，canvas 透明地
+    // 盖在渲染区上，界面就是一片空白。DOM 渲染器其实在下面正常画，
+    // 只是被这块空画布遮住了。这里发现没有 context 就立刻拆掉。
+    const canvas =
+      terminal.element?.querySelector("canvas");
+    if (canvas) {
+      const gl =
+        canvas.getContext("webgl2") ??
+        canvas.getContext("webgl");
+      if (!gl) {
+        disableWebgl(terminal);
+        degradedCount += 1;
+        try {
+          localStorage.setItem(
+            UNAVAILABLE_KEY,
+            "1"
+          );
+        } catch {
+          // 隐私模式下不可用，忽略
+        }
+        // ⚠️ 拆掉 canvas 只是"不再遮挡"，DOM 渲染器不会自己重画 ——
+        // 屏幕仍是空的。必须补一次全量 refresh，内容才会重新出现。
+        terminal.refresh(
+          0,
+          Math.max(0, terminal.rows - 1)
+        );
+        logWarn(
+          "[terminal] WebGL 画布没有 GL 上下文，已拆掉并回退 DOM 渲染" +
+            `（第 ${degradedCount} 次）`
+        );
+      }
+    }
   } catch (reason) {
     degradedCount += 1;
     logWarn(

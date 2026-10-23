@@ -7,6 +7,7 @@ import {
 import {
   resolveColorScheme,
   toSelectionCss,
+  toXtermTheme,
   COLOR_SCHEMES,
   DEFAULT_COLOR_SCHEME
 } from "@/terminal/lib/pane/colorSchemes";
@@ -149,5 +150,43 @@ describe("toSelectionCss", () => {
     expect(
       scheme.selectionBackground
     ).toBeTruthy();
+  });
+});
+
+describe("toXtermTheme 的背景兜底", () => {
+  /** 只有前景色的残缺方案：background 为空串（数据里的真实缺口） */
+  const broken = {
+    name: "残缺",
+    background: "",
+    foreground: "#c9d1d9",
+    cursor: "#c9d1d9",
+    selectionBackground: "",
+    ansi: Array.from(
+      { length: 16 },
+      () => "#000000"
+    )
+  } as never;
+
+  it("background 为空时按前景亮度补对比底（浅前景→深底）", () => {
+    const theme = toXtermTheme(broken);
+    // #c9d1d9 是浅灰（深色主题的前景），兜底必须是深底，
+    // 否则就是"浅灰字画在白底上"——白屏
+    expect(theme.background).toBe("#0d1117");
+  });
+
+  it("深前景时兜底为白底", () => {
+    const theme = toXtermTheme({
+      ...(broken as Record<string, unknown>),
+      foreground: "#1f2328"
+    } as never);
+    expect(theme.background).toBe("#ffffff");
+  });
+
+  it("背景有值时原样使用，不覆盖用户的配色", () => {
+    const theme = toXtermTheme({
+      ...(broken as Record<string, unknown>),
+      background: "#0b0b0c"
+    } as never);
+    expect(theme.background).toBe("#0b0b0c");
   });
 });
