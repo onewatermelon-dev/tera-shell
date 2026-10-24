@@ -329,6 +329,11 @@ const zhCN = {
   "ai.editHistory.confirm": "再点一次确认",
   "ai.editHistory.hostMismatch":
     "当前会话不是这台主机，无法回滚",
+  "ai.hostNotes": "主机档案",
+  "ai.hostNotes.save": "保存",
+  "ai.hostNotes.saved": "已保存",
+  "ai.hostNotes.placeholder":
+    "沉淀这台机器的备忘，AI 每次对话都会带上（截断注入前 800 字）：\n\n## 角色\n生产 / 测试\n\n## 入口\nssh 端口、跳板、Web 地址\n\n## 关键路径\nnginx: /etc/nginx/conf.d\n应用: /srv/app\n\n## 已知坑\n重启前先停 worker…\n\n## 常用命令",
   "ai.usage.input": "输入",
   "ai.usage.output": "输出",
   "ai.usage.cached": "缓存",
@@ -1087,6 +1092,11 @@ const enUS: Record<MessageKey, string> = {
     "Click again to confirm",
   "ai.editHistory.hostMismatch":
     "Not connected to this host; rollback unavailable",
+  "ai.hostNotes": "Host notes",
+  "ai.hostNotes.save": "Save",
+  "ai.hostNotes.saved": "Saved",
+  "ai.hostNotes.placeholder":
+    "Notes about this machine, fed to every AI request (first 800 chars):\n\n## Role\nProduction / staging\n\n## Access\nSSH port, jump host, web URL\n\n## Key paths\nnginx: /etc/nginx/conf.d\napp: /srv/app\n\n## Gotchas\nStop workers before restart…\n\n## Common commands",
   "ai.usage.input": "in",
   "ai.usage.output": "out",
   "ai.usage.cached": "cached",

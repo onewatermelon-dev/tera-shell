@@ -170,6 +170,56 @@
   color: var(--muted);
 }
 
+// 主机档案抽屉：比历史菜单宽一号放编辑器，textarea 占满剩下的高度
+.ai-hostnotes-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 340px;
+  max-height: 460px;
+}
+
+.ai-hostnotes-editor {
+  flex: 1;
+  min-height: 240px;
+  padding: 8px 10px;
+  font:
+    12px/1.6 Consolas,
+    monospace;
+  color: var(--foreground);
+  resize: vertical;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+.ai-hostnotes-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ai-hostnotes-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ai-hostnotes-save {
+  padding: 4px 14px;
+  font-size: 11px;
+  color: var(--accent-foreground);
+  cursor: pointer;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+
 // 行悬停才露出的重命名 / 删除操作
 .ai-history-ops {
   display: flex;

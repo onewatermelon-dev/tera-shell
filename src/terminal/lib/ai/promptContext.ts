@@ -1,4 +1,8 @@
 import type { OpenSession } from "../session/terminalTypes";
+import {
+  hostKeyOfSession,
+  hostNoteSummary
+} from "./hostNotes";
 
 /** 助手系统提示词。导出供测试断言（渲染层还有一道围栏兜底）。 */
 export const SYSTEM_PROMPT = `你是终端应用里的运维 AI 助手，运行在用户的 SSH 服务器环境中。
@@ -104,12 +108,20 @@ export function workspaceContext(
         ]
       : []
   );
+  // 主机档案：用户沉淀的「这台机器的角色/路径/坑」，模型开口前先知道，
+  // 不用每轮重新踩。没写档案就不注入这段（省 token，也少一层噪音）。
+  const note = hostNoteSummary(
+    hostKeyOfSession(session)
+  );
+  const hostNotesBlock = note
+    ? `\n主机档案（用户维护的这台机器的备忘，可信度高）:\n  - ${note.replace(/\n/g, "\n  ")}`
+    : "";
   return `<current_workspace>
 当前时间: ${now}
 当前打开的服务器会话:
   - 名称: ${session.name} (ip: ${session.host}) <- [当前]
   - 登录目标: ${target}
 运行身份:
-  - ${identity.join("\n  - ")}
+  - ${identity.join("\n  - ")}${hostNotesBlock}
 </current_workspace>`;
 }

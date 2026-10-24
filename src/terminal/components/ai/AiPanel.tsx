@@ -36,6 +36,7 @@ import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 import { attachStreamdownExport } from "@/terminal/lib/streamdownExport";
 import { AiMessageList } from "./AiMessageList";
 import { AiHistoryMenu } from "./AiHistoryMenu";
+import { AiHostNotes } from "./AiHostNotes";
 import {
   canRollback,
   loadEditHistory,
@@ -358,6 +359,7 @@ export default function AiPanel({
             renameCurrent={renameCurrent}
             onExportRunbook={exportRunbook}
           />
+          <AiHostNotes session={session} />
           <button
             type="button"
             className="ai-panel-clear"
