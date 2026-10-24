@@ -175,7 +175,7 @@ fn rule(kind: &str, listen: u16, host: Option<&str>, port: Option<u16>) -> Forwa
 }
 
 #[test]
-fn 会话级转发拼进L_R_D参数() {
+fn 会话级转发拼进_l_r_d参数() {
 	let mut config = ssh_config(None, None);
 	config.forwards = Some(vec![
 		rule("L", 8080, Some("localhost"), Some(80)),
@@ -185,7 +185,12 @@ fn 会话级转发拼进L_R_D参数() {
 	let command = command(&config).unwrap();
 	let argv = command.get_argv();
 	assert_eq!(arg_value(argv, "-L").as_deref(), Some("8080:localhost:80"));
-	assert_eq!(arg_value(argv, "-R").as_deref(), Some("2222:127.0.0.1:22"));
+	// R 绑 0.0.0.0：让「服务器IP:端口」外部可达（sshd 未开 GatewayPorts
+	// 时 sshd 会降级回 loopback，与不写前缀等价）
+	assert_eq!(
+		arg_value(argv, "-R").as_deref(),
+		Some("0.0.0.0:2222:127.0.0.1:22")
+	);
 	assert_eq!(arg_value(argv, "-D").as_deref(), Some("1080"));
 	// 转发不改变交互语义：-tt 仍在、-N 不出现
 	assert!(argv.iter().any(|arg| arg == "-tt"));

@@ -145,7 +145,7 @@ const zhCN = {
   "session.forward.label": "端口转发",
   "session.forward.add": "添加规则",
   "session.forward.desc":
-    "会话连接期间生效：L 本地端口→服务器目标；R 服务器端口→本地目标；D 本地 SOCKS5 代理。",
+    "会话连接期间生效：L 本地端口→服务器目标；R 服务器IP:端口→本地目标（公网可达需服务器 sshd 开 GatewayPorts）；D 本地 SOCKS5 代理。",
   "session.forward.listenPort": "本地端口",
   "session.forward.remotePort": "远程端口",
   "session.forward.targetHost": "目标主机",
@@ -914,7 +914,7 @@ const enUS: Record<MessageKey, string> = {
   "session.forward.label": "Port forwards",
   "session.forward.add": "Add rule",
   "session.forward.desc":
-    "Active while connected: L local→server; R server→local; D local SOCKS5 proxy.",
+    "Active while connected: L local→server; R server-ip:port→local (public access needs sshd GatewayPorts); D local SOCKS5 proxy.",
   "session.forward.listenPort": "Local port",
   "session.forward.remotePort": "Remote port",
   "session.forward.targetHost": "Target host",

@@ -275,6 +275,27 @@ pub struct ForwardRule {
 }
 
 impl ForwardRule {
+	/// L/R 共用的目标段：校验主机/端口，IPv6 目标包方括号。
+	fn l_r_target(&self) -> Result<(String, u16), String> {
+		let host = self
+			.target_host
+			.as_deref()
+			.map(str::trim)
+			.filter(|v| !v.is_empty())
+			.ok_or("转发缺少目标主机")?;
+		let port = self
+			.target_port
+			.filter(|v| *v != 0)
+			.ok_or("转发缺少目标端口")?;
+		// IPv6 目标要方括号包起来：裸冒号会破坏 spec 的端口分隔
+		// （ssh 里的写法就是 [::1]:80）。已包的不再重复。
+		if host.contains(':') && !host.starts_with('[') {
+			Ok((format!("[{host}]"), port))
+		} else {
+			Ok((host.to_string(), port))
+		}
+	}
+
 	/// 拼成 ssh 的单条参数（不含 -L/-R/-D 本身）。
 	///
 	/// 非法规则返回 Err（端口 0 / L·R 缺目标）：拼出残缺参数会让 ssh
@@ -285,26 +306,22 @@ impl ForwardRule {
 		}
 		match self.kind.as_str() {
 			"D" => Ok(self.listen_port.to_string()),
-			"L" | "R" => {
-				let host = self
-					.target_host
-					.as_deref()
-					.map(str::trim)
-					.filter(|v| !v.is_empty())
-					.ok_or("转发缺少目标主机")?;
-				let port = self
-					.target_port
-					.filter(|v| *v != 0)
-					.ok_or("转发缺少目标端口")?;
-				// IPv6 目标要方括号包起来：裸冒号会破坏 spec 的端口分隔
-				// （ssh 里的写法就是 [::1]:80）。已包的不再重复。
-				let host = if host.contains(':') && !host.starts_with('[') {
-					format!("[{host}]")
-				} else {
-					host.to_string()
-				};
+			"L" => {
+				let (host, port) = self.l_r_target()?;
 				Ok(format!(
 					"{}:{}:{}",
+					self.listen_port, host, port
+				))
+			}
+			"R" => {
+				let (host, port) = self.l_r_target()?;
+				// 监听地址显式绑 0.0.0.0：不写的话 sshd 默认只绑服务器的
+				// loopback，「服务器IP:端口」从外部根本连不上。sshd 未开
+				// GatewayPorts 时它会把 0.0.0.0 降级回 loopback（不报错），
+				// 行为与不写前缀一致 —— 想真公网可达需服务器开
+				// GatewayPorts clientspecified/yes
+				Ok(format!(
+					"0.0.0.0:{}:{}:{}",
 					self.listen_port, host, port
 				))
 			}
