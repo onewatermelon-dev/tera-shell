@@ -21,6 +21,8 @@ fn ssh_config(key_path: Option<&str>, use_ssh_config: Option<bool>) -> Config {
 		use_ssh_config,
 		host_key_policy: None,
 		jump: None,
+		forwards: None,
+		tunnel_mode: None,
 	}
 }
 
@@ -160,4 +162,87 @@ fn 目标与端口仍在argv里() {
 	let joined: Vec<&str> = argv.iter().filter_map(|arg| arg.to_str()).collect();
 	assert!(joined.contains(&"root@example.com"));
 	assert_eq!(joined[joined.iter().position(|a| *a == "-p").unwrap() + 1], "22");
+}
+
+/// 造转发规则；target 两个字段 L/R 才用。
+fn rule(kind: &str, listen: u16, host: Option<&str>, port: Option<u16>) -> ForwardRule {
+	ForwardRule {
+		kind: kind.into(),
+		listen_port: listen,
+		target_host: host.map(Into::into),
+		target_port: port,
+	}
+}
+
+#[test]
+fn 会话级转发拼进L_R_D参数() {
+	let mut config = ssh_config(None, None);
+	config.forwards = Some(vec![
+		rule("L", 8080, Some("localhost"), Some(80)),
+		rule("R", 2222, Some("127.0.0.1"), Some(22)),
+		rule("D", 1080, None, None),
+	]);
+	let command = command(&config).unwrap();
+	let argv = command.get_argv();
+	assert_eq!(arg_value(argv, "-L").as_deref(), Some("8080:localhost:80"));
+	assert_eq!(arg_value(argv, "-R").as_deref(), Some("2222:127.0.0.1:22"));
+	assert_eq!(arg_value(argv, "-D").as_deref(), Some("1080"));
+	// 转发不改变交互语义：-tt 仍在、-N 不出现
+	assert!(argv.iter().any(|arg| arg == "-tt"));
+	assert!(!argv.iter().any(|arg| arg == "-N"));
+}
+
+#[test]
+fn 非法转发规则跳过不让连接失败() {
+	let mut config = ssh_config(None, None);
+	config.forwards = Some(vec![
+		rule("L", 0, Some("localhost"), Some(80)), // 端口 0
+		rule("L", 8080, Some(""), Some(80)),       // 空目标主机
+		rule("L", 9999, Some("localhost"), Some(0)), // 目标端口 0
+		rule("X", 7000, None, None),               // 未知类型
+	]);
+	let command = command(&config).unwrap();
+	let argv = command.get_argv();
+	for flag in ["-L", "-R", "-D"] {
+		assert!(!argv.iter().any(|arg| arg == flag), "{flag} 不应出现");
+	}
+	// 非法规则只丢弃自身，ssh 本体参数原样保留
+	assert!(argv.iter().any(|arg| arg == "root@example.com"));
+}
+
+#[test]
+fn 隧道模式去tt加N() {
+	let mut config = ssh_config(None, None);
+	config.tunnel_mode = Some(true);
+	config.forwards = Some(vec![rule("L", 8080, Some("localhost"), Some(80))]);
+	let command = command(&config).unwrap();
+	let argv = command.get_argv();
+	assert!(argv.iter().any(|arg| arg == "-N"), "隧道要 -N");
+	assert!(!argv.iter().any(|arg| arg == "-tt"), "隧道不申请 PTY");
+	assert_eq!(arg_value(argv, "-L").as_deref(), Some("8080:localhost:80"));
+	// 隧道也必须有 destination 与端口：args 块曾被整段挪进非隧道分支，
+	// 隧道丢了 target 直接打 usage —— 这里钉死
+	assert!(argv.iter().any(|arg| arg == "root@example.com"), "隧道不能丢目标");
+	assert_eq!(arg_value(argv, "-p").as_deref(), Some("22"));
+}
+
+/// IPv6 目标必须方括号包起来，否则冒号会破坏 -L spec 的端口分隔，
+/// ssh 直接打 usage（%接口后缀由隧道的归一化剥掉，到不了 spec）。
+#[test]
+fn 转发目标_ipv6正确加方括号() {
+	let rule = ForwardRule {
+		kind: "L".into(),
+		listen_port: 8080,
+		target_host: Some("::1".into()),
+		target_port: Some(80),
+	};
+	assert_eq!(rule.spec().unwrap(), "8080:[::1]:80");
+}
+
+#[test]
+fn 隧道模式缺省时保持交互语义() {
+	let command = command(&ssh_config(None, None)).unwrap();
+	let argv = command.get_argv();
+	assert!(!argv.iter().any(|arg| arg == "-N"));
+	assert!(argv.iter().any(|arg| arg == "-tt"));
 }

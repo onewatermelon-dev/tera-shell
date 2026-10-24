@@ -209,6 +209,31 @@ body.sftp-dragging {
   display: flex;
   flex-direction: column;
   gap: 14px;
+
+  // 弹窗限高时字段不许被压扁（flex 子项默认可收缩）：全部保持固有
+  // 高度，超出部分交给 .modal__body 滚动 —— 否则底部的密码框被压缩
+  // 成 0 高「消失」，且 scrollHeight==clientHeight 滚无可滚（探针实锤）
+  & > * {
+    flex-shrink: 0;
+  }
+}
+
+// 会话编辑弹窗的字段滚动容器（.dialog-fields 的自控版本）：
+// HeroUI body 的滚动链在 WebView2 实测不稳（viewport 变量/限高/overflow
+// 四环都验过仍滚不到底），干脆自己限高自己滚，与其机制彻底解耦
+.dialog-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: min(62vh, 540px);
+  padding-right: 6px;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+
+  & > * {
+    flex-shrink: 0;
+  }
 }
 
 .dialog-eyebrow {

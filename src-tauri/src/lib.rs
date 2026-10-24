@@ -64,6 +64,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         // 所有终端共享同一份后端 PTY 会话表，命令通过 session id 定位具体会话。
         .manage(terminal::Terminals::default())
+        // 临时端口隧道（网络抽屉「在本地打开」）：id → ssh -N -L 进程。
+        .manage(terminal::tunnel::Tunnels::default())
         // SFTP 连接按目标缓存，避免每次进目录都重新握手认证。
         .manage(sftp::SftpPool::default())
         // 进行中的传输任务表，供暂停 / 恢复 / 取消命令定位任务。
@@ -83,6 +85,10 @@ pub fn run() {
             // 拖出独立窗口：接管已有会话 + 开窗
             terminal::attach,
             terminal::open_terminal_window,
+            // 临时端口隧道：网络抽屉一键把远端端口转到本地
+            terminal::tunnel::open_tunnel,
+            terminal::tunnel::close_tunnel,
+            terminal::tunnel::list_tunnels,
             terminal::log_status,
             terminal::log_start,
             terminal::log_action,

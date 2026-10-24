@@ -16,6 +16,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tracing::{debug, error, info, warn};
 
+pub mod tunnel;
+
 struct Session {
 	log: Arc<Mutex<Log>>,
 	writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -258,6 +260,89 @@ pub fn log_action(id: String, action: String, terminals: State<Terminals>) -> Re
 #[derive(Default)]
 pub struct Terminals(Mutex<HashMap<String, Session>>);
 
+/// 一条端口转发规则（与前端 PortForward 字段对齐，serde camelCase）。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForwardRule {
+	/// L 本地转发 / R 远程转发 / D 动态转发（SOCKS5）。
+	/// alias：前端字段名是 `type`（TS 里是关键字味的常用名，改名
+	/// 不如后端兼容），缺了别名 terminal_start 反序列化直接失败
+	#[serde(alias = "type")]
+	kind: String,
+	listen_port: u16,
+	target_host: Option<String>,
+	target_port: Option<u16>,
+}
+
+impl ForwardRule {
+	/// 拼成 ssh 的单条参数（不含 -L/-R/-D 本身）。
+	///
+	/// 非法规则返回 Err（端口 0 / L·R 缺目标）：拼出残缺参数会让 ssh
+	/// 整个拒启，宁可这条不生效也要让会话照常起来。
+	fn spec(&self) -> Result<String, String> {
+		if self.listen_port == 0 {
+			return Err("监听端口不能为 0".into());
+		}
+		match self.kind.as_str() {
+			"D" => Ok(self.listen_port.to_string()),
+			"L" | "R" => {
+				let host = self
+					.target_host
+					.as_deref()
+					.map(str::trim)
+					.filter(|v| !v.is_empty())
+					.ok_or("转发缺少目标主机")?;
+				let port = self
+					.target_port
+					.filter(|v| *v != 0)
+					.ok_or("转发缺少目标端口")?;
+				// IPv6 目标要方括号包起来：裸冒号会破坏 spec 的端口分隔
+				// （ssh 里的写法就是 [::1]:80）。已包的不再重复。
+				let host = if host.contains(':') && !host.starts_with('[') {
+					format!("[{host}]")
+				} else {
+					host.to_string()
+				};
+				Ok(format!(
+					"{}:{}:{}",
+					self.listen_port, host, port
+				))
+			}
+			other => Err(format!(
+				"未知转发类型：{other}"
+			)),
+		}
+	}
+}
+
+/// 把规则列表拼进命令：-L / -R / -D 各一段。
+/// 单条非法规则记日志跳过（见 ForwardRule::spec），不让整条连接失败。
+fn apply_forwards(
+	command: &mut CommandBuilder,
+	forwards: &[ForwardRule],
+) {
+	for rule in forwards {
+		match rule.spec() {
+			Ok(spec) => {
+				let flag = match rule.kind.as_str() {
+					"L" => "-L",
+					"R" => "-R",
+					_ => "-D",
+				};
+				command.arg(flag);
+				command.arg(&spec);
+			}
+			Err(reason) => {
+				warn!(
+					listen = rule.listen_port,
+					%reason,
+					"忽略非法端口转发规则"
+				);
+			}
+		}
+	}
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -285,6 +370,11 @@ pub struct Config {
 	/// 首跳在前，如 `ops@10.0.0.1,root@10.0.0.2:2222`）。
 	/// 空/缺省不传 —— 会话没配跳板时与旧行为一致。
 	jump: Option<String>,
+	/// 会话级端口转发规则（ssh -L/-R/-D）。空/缺省不传任何转发参数。
+	forwards: Option<Vec<ForwardRule>>,
+	/// 临时隧道模式：不申请远端 PTY（-N 无 shell），只跑转发。
+	/// 「网络抽屉 → 在本地打开」的隐藏隧道用，与交互会话互斥。
+	tunnel_mode: Option<bool>,
 }
 
 #[derive(Clone, Serialize)]
@@ -621,8 +711,21 @@ fn command(config: &Config) -> Result<CommandBuilder, String> {
 		command.arg("-J");
 		command.arg(jump);
 	}
+	// 端口转发：会话级规则与临时隧道共用这一处拼装
+	if let Some(forwards) = &config.forwards {
+		apply_forwards(&mut command, forwards);
+	}
+	// 临时隧道：-N 不执行远端命令、不开 PTY，纯转发进程；
+	// 交互会话的 -tt（强制远端 PTY）与之冲突，二者二选一。
+	// ⚠️ 其余参数（-o 心跳 / -p / target）是两条路径共用的 —— 放分支里
+	// 会让隧道丢掉 destination，ssh 直接打 usage。
+	let tunnel = config.tunnel_mode == Some(true);
+	if tunnel {
+		command.arg("-N");
+	} else {
+		command.arg("-tt");
+	}
 	command.args([
-		"-tt",
 		"-o",
 		&format!(
 			"StrictHostKeyChecking={}",

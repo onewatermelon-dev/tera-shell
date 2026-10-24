@@ -119,6 +119,8 @@ export function useTerminalReconnect({
             port: session.port,
             username: session.username,
             password: session.password,
+            // 会话级端口转发：与首连同源（SavedSession 展开字段）
+            forwards: session.forwards,
             // 与首连同一套连接层设置：认证方式/配置读取/密钥策略不因重连而变
             sshKeyPath,
             useSshConfig,

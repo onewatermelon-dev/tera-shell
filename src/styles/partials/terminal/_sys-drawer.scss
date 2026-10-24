@@ -368,3 +368,51 @@
     transparent
   );
 }
+
+// 临时隧道列表（网络抽屉顶部）与端口行的「在本地打开」按钮
+.tunnel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.tunnel-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font:
+    11px/1.5 Consolas,
+    monospace;
+  color: var(--foreground);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.tunnel-mapping {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tunnel-cell {
+  white-space: nowrap;
+
+  .sys-icon-btn {
+    margin-left: 4px;
+  }
+}
+
+.net-spinning {
+  display: inline-block;
+  animation: net-spin 0.9s linear infinite;
+}
+
+@keyframes net-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

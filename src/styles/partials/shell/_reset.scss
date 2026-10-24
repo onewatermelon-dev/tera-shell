@@ -7,6 +7,13 @@
   font-synthesis: none;
   color: var(--foreground);
   background: var(--background);
+
+  // HeroUI Modal 的滚动链依赖它（.modal__container 的 height 与
+  // .modal__dialog--scroll-inside 的 max-height:100% 都按它算），但
+  // 样式包里从未定义、运行时主题也没写入 —— 缺了它 container 塌成
+  // 内容高度，弹窗内容超高时 body 的 overflow-y 永远不触发，底部
+  // 字段被顶出视口（会话编辑弹窗踩过）
+  --visual-viewport-height: 100vh;
 }
 
 * {

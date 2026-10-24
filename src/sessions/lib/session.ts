@@ -1,5 +1,22 @@
 import type { ColorTag } from "@/sessions/lib/sessionGroup";
 
+/**
+ * 一条端口转发规则（ssh -L/-R/-D 的会话级持久化）。
+ *
+ * - L 本地转发：本地 listenPort → 经服务器访问 targetHost:targetPort；
+ * - R 远程转发：服务器 listenPort → 经本机访问 targetHost:targetPort；
+ * - D 动态转发（SOCKS5）：本地 listenPort 起一个 SOCKS 代理。
+ */
+export type PortForward = {
+  type: "L" | "R" | "D";
+  /** 监听端口（L/D 在本机、R 在服务器） */
+  listenPort: number;
+  /** 目标主机（L/R 必填；相对服务器解析，localhost 即服务器自身） */
+  targetHost?: string;
+  /** 目标端口（L/R 必填） */
+  targetPort?: number;
+};
+
 export type SavedSession = {
   id: string;
   name: string;
@@ -21,6 +38,8 @@ export type SavedSession = {
    * ⚠️ 不参与导出/导入 —— 导出文件不带 id（重导会重新生成），引用必然悬空。
    */
   jumpHostId?: string;
+  /** 会话级端口转发规则（ssh -L/-R/-D），随终端连接生效、断开即止。 */
+  forwards?: PortForward[];
 };
 
 export const localSession: SavedSession = {

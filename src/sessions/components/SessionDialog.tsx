@@ -154,12 +154,25 @@ export default function SessionDialog({
     }
     const { groupId, pending } =
       resolveGroup(groupName);
+    // 转发规则清洗：端口缺 0、L/R 缺目标的行丢弃；空列表不落字段
+    const forwards = (form.forwards ?? []).filter(
+      rule =>
+        rule.listenPort > 0 &&
+        (rule.type === "D" ||
+          ((rule.type === "L" ||
+            rule.type === "R") &&
+            !!rule.targetHost?.trim() &&
+            (rule.targetPort ?? 0) > 0))
+    );
     const next: SavedSession = {
       ...form,
       name: form.name.trim() || form.host.trim(),
       username: form.username.trim() || "root",
       groupId,
-      color: normalizeColorTag(form.color)
+      color: normalizeColorTag(form.color),
+      ...(forwards.length
+        ? { forwards }
+        : { forwards: undefined })
     };
     // 编辑会话时新填的密码加密后写回；留空保持原密码。
     if (newPassword) {
@@ -207,280 +220,535 @@ export default function SessionDialog({
                   )}
                 />
               </Modal.Header>
-              <Modal.Body className="dialog-fields">
-                <TextField
-                  name="name"
-                  value={form.name}
-                  onChange={v =>
-                    setForm({ ...form, name: v })
-                  }
-                >
-                  <Label>
-                    {t("session.name")}
-                  </Label>
-                  <Input
-                    autoFocus
-                    /**
-                     * 关掉 WebView2 的表单自动填充。
-                     *
-                     * 不关的话，用户在某个字段输入过一次后，浏览器会把
-                     * 值存进 profile，之后**点该输入框**就弹出「保存的
-                     * 值」下拉（历史记录），盖住下方字段 —— 截图里
-                     * 会话名称框弹出的就是这个。它把 IP 之类的历史值
-                     * 混进来，选错了很难察觉。
-                     *
-                     * ⚠️ 应用自己管会话数据，不需要浏览器记忆；
-                     * 项目里 PasswordDialog 早用同样的办法治过。
-                     */
-                    autoComplete="off"
-                    placeholder={t(
-                      "session.namePlaceholder"
-                    )}
-                  />
-                </TextField>
-                <div className="form-row">
+              <Modal.Body>
+                {/* 字段区自带滚动：HeroUI Modal 的 body 滚动链
+                    （viewport 变量 → dialog 限高 → body overflow）在
+                    WebView2 里实测不稳定，字段多时滚不到底；这里自己
+                    包一层滚动容器，与它的机制解耦 */}
+                <div className="dialog-scroll">
                   <TextField
-                    className="grow"
-                    name="host"
-                    value={form.host}
+                    name="name"
+                    value={form.name}
                     onChange={v =>
                       setForm({
                         ...form,
-                        host: v
+                        name: v
                       })
                     }
                   >
                     <Label>
-                      {t("session.host")}
+                      {t("session.name")}
                     </Label>
                     <Input
+                      autoFocus
+                      /**
+                       * 关掉 WebView2 的表单自动填充。
+                       *
+                       * 不关的话，用户在某个字段输入过一次后，浏览器会把
+                       * 值存进 profile，之后**点该输入框**就弹出「保存的
+                       * 值」下拉（历史记录），盖住下方字段 —— 截图里
+                       * 会话名称框弹出的就是这个。它把 IP 之类的历史值
+                       * 混进来，选错了很难察觉。
+                       *
+                       * ⚠️ 应用自己管会话数据，不需要浏览器记忆；
+                       * 项目里 PasswordDialog 早用同样的办法治过。
+                       */
                       autoComplete="off"
-                      placeholder="192.168.1.10"
-                    />
-                  </TextField>
-                  <TextField
-                    name="port"
-                    className="port-field"
-                    value={String(form.port)}
-                    onChange={v =>
-                      setForm({
-                        ...form,
-                        port: Number(v) || 0
-                      })
-                    }
-                  >
-                    <Label>
-                      {t("session.port")}
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={65535}
-                      autoComplete="off"
-                    />
-                  </TextField>
-                </div>
-                <TextField
-                  name="username"
-                  value={form.username}
-                  onChange={v =>
-                    setForm({
-                      ...form,
-                      username: v
-                    })
-                  }
-                >
-                  <Label>
-                    {t("session.username")}
-                  </Label>
-                  <Input
-                    autoComplete="off"
-                    placeholder="root"
-                  />
-                </TextField>
-                {/**
-                 * 跳板机：其他 SSH 会话的下拉（存引用 id，连接时解析成 `-J` 链）。
-                 * 只排除自己 —— 成环（A 跳 B、B 跳 A）交给连接时的
-                 * resolveJumpChain 兕住，这里再算传递闭包不划算。
-                 * 本机会话（local）没有 ssh 端口，不能当跳板，一并排除。
-                 */}
-                {(() => {
-                  const candidates =
-                    sessions.filter(
-                      item =>
-                        item.kind === "ssh" &&
-                        item.id !== session?.id
-                    );
-                  if (!candidates.length)
-                    return null;
-                  return (
-                    <div className="jump-host-field">
-                      <span className="form-label">
-                        {t("session.jump.label")}
-                      </span>
-                      <SettingsSelect
-                        value={
-                          form.jumpHostId ?? ""
-                        }
-                        options={[
-                          {
-                            value: "",
-                            label: t(
-                              "session.jump.none"
-                            )
-                          },
-                          ...candidates.map(
-                            item => ({
-                              value: item.id,
-                              label: `${item.name}（${item.host}）`
-                            })
-                          )
-                        ]}
-                        ariaLabel={t(
-                          "session.jump.label"
-                        )}
-                        onChange={jumpHostId =>
-                          setForm({
-                            ...form,
-                            jumpHostId:
-                              jumpHostId ||
-                              undefined
-                          })
-                        }
-                      />
-                      <p className="dialog-hint">
-                        {t("session.jump.desc")}
-                      </p>
-                    </div>
-                  );
-                })()}
-                {/**
-                 * 分组选择：可输入的 TextField + HeroUI Dropdown 候选菜单。
-                 *
-                 * 不用原生 <datalist>：那个下拉由**系统绘制**，改不了样式，
-                 * 与界面主题不一致。走 Dropdown 后弹层用 HeroUI token，
-                 * 深浅主题都对得上（与设置页 SettingsSelect 同一套做法）。
-                 *
-                 * 触发时机：点输入框或点右侧箭头都开菜单 —— 候选通常只有
-                 * 几条，点开比「记得按箭头」顺手。
-                 *
-                 * 仍然允许手输新名字：选不中就当新分组，提交时建组
-                 * （见 resolveGroup / App 的 pendingGroupName）。
-                 */}
-                <TextField
-                  name="group"
-                  value={groupName}
-                  onChange={setGroupName}
-                >
-                  {/**
-                   * isRequired 挂在 Label 上：TextField 不认这个 prop，
-                   * 挂了会被静默丢弃；RAC 据此渲染必填标记。
-                   * 编辑时留空 = 保持原分组，不是必填。
-                   */}
-                  <Label isRequired={!session}>
-                    {t("session.group")}
-                  </Label>
-                  <Input
-                    autoComplete="off"
-                    placeholder={t(
-                      session
-                        ? "session.groupPlaceholder"
-                        : "session.groupPlaceholderNew"
-                    )}
-                  />
-                </TextField>
-                {/**
-                 * 已有分组的快捷选择：一排可点的胶囊，点一下填进上面的
-                 * 输入框。
-                 *
-                 * 为什么用胶囊而不是下拉菜单：下拉的定位要锚在触发器上，
-                 * 之前用 InputGroup + Dropdown 时菜单反复跑偏（锚到小箭头
-                 * 上导致溢出弹窗），而分组数量本来就少、名字短，平铺
-                 * 一眼就能看完，也省掉了「点开才知道有哪些」这一步。
-                 *
-                 * 分组很多时这里会换行占位，但那是低频情况——分组过十
-                 * 的话更该做的是折叠侧栏，不是让弹窗里选分组。
-                 */}
-                {groups.length > 0 && (
-                  <div
-                    className="group-chips"
-                    role="group"
-                    aria-label={t(
-                      "group.quickPick"
-                    )}
-                  >
-                    {groups.map(item => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={`group-chip${item.name.trim() === groupName.trim() ? " is-active" : ""}`}
-                        onClick={() =>
-                          setGroupName(item.name)
-                        }
-                      >
-                        {item.color && (
-                          <span
-                            className="group-chip-color"
-                            style={{
-                              background:
-                                colorHex(
-                                  item.color
-                                )
-                            }}
-                          />
-                        )}
-                        {item.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="form-row">
-                  <span className="form-label">
-                    {t("colorTag.label")}
-                  </span>
-                </div>
-                <ColorPicker
-                  value={form.color ?? ""}
-                  onChange={v =>
-                    setForm({
-                      ...form,
-                      color: v
-                    })
-                  }
-                />
-                {session && form.password && (
-                  <TextField
-                    name="password"
-                    value={newPassword}
-                    onChange={setNewPassword}
-                  >
-                    <Label>
-                      {t("session.password")}
-                    </Label>
-                    <Input
-                      type="password"
-                      autoComplete="new-password"
                       placeholder={t(
-                        "session.passwordPlaceholder"
+                        "session.namePlaceholder"
                       )}
                     />
                   </TextField>
-                )}
-                <Typography.Paragraph
-                  size="sm"
-                  className="dialog-hint"
-                >
-                  {t("session.authHint")}
-                </Typography.Paragraph>
-                {error && (
+                  <div className="form-row">
+                    <TextField
+                      className="grow"
+                      name="host"
+                      value={form.host}
+                      onChange={v =>
+                        setForm({
+                          ...form,
+                          host: v
+                        })
+                      }
+                    >
+                      <Label>
+                        {t("session.host")}
+                      </Label>
+                      <Input
+                        autoComplete="off"
+                        placeholder="192.168.1.10"
+                      />
+                    </TextField>
+                    <TextField
+                      name="port"
+                      className="port-field"
+                      value={String(form.port)}
+                      onChange={v =>
+                        setForm({
+                          ...form,
+                          port: Number(v) || 0
+                        })
+                      }
+                    >
+                      <Label>
+                        {t("session.port")}
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        autoComplete="off"
+                      />
+                    </TextField>
+                  </div>
+                  <TextField
+                    name="username"
+                    value={form.username}
+                    onChange={v =>
+                      setForm({
+                        ...form,
+                        username: v
+                      })
+                    }
+                  >
+                    <Label>
+                      {t("session.username")}
+                    </Label>
+                    <Input
+                      autoComplete="off"
+                      placeholder="root"
+                    />
+                  </TextField>
+                  {/**
+                   * 跳板机：其他 SSH 会话的下拉（存引用 id，连接时解析成 `-J` 链）。
+                   * 只排除自己 —— 成环（A 跳 B、B 跳 A）交给连接时的
+                   * resolveJumpChain 兕住，这里再算传递闭包不划算。
+                   * 本机会话（local）没有 ssh 端口，不能当跳板，一并排除。
+                   */}
+                  {(() => {
+                    const candidates =
+                      sessions.filter(
+                        item =>
+                          item.kind === "ssh" &&
+                          item.id !== session?.id
+                      );
+                    if (!candidates.length)
+                      return null;
+                    return (
+                      <div className="jump-host-field">
+                        <span className="form-label">
+                          {t(
+                            "session.jump.label"
+                          )}
+                        </span>
+                        <SettingsSelect
+                          value={
+                            form.jumpHostId ?? ""
+                          }
+                          options={[
+                            {
+                              value: "",
+                              label: t(
+                                "session.jump.none"
+                              )
+                            },
+                            ...candidates.map(
+                              item => ({
+                                value: item.id,
+                                label: `${item.name}（${item.host}）`
+                              })
+                            )
+                          ]}
+                          ariaLabel={t(
+                            "session.jump.label"
+                          )}
+                          onChange={jumpHostId =>
+                            setForm({
+                              ...form,
+                              jumpHostId:
+                                jumpHostId ||
+                                undefined
+                            })
+                          }
+                        />
+                        <p className="dialog-hint">
+                          {t("session.jump.desc")}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                  {/**
+                   * 端口转发规则：ssh -L/-R/-D 的会话级持久化，随连接生效。
+                   * 行内编辑：类型切换时 D 不需要目标（本机起 SOCKS 代理）。
+                   * 提交时清洗：端口无效或 L/R 缺目标的行直接丢弃（见 submit）。
+                   */}
+                  {form.kind === "ssh" && (
+                    <div className="jump-host-field">
+                      <span className="form-label">
+                        {t(
+                          "session.forward.label"
+                        )}
+                      </span>
+                      {(form.forwards ?? []).map(
+                        (rule, index) => (
+                          <div
+                            className="forward-row"
+                            key={index}
+                          >
+                            {/* 类型下拉：SettingsSelect（HeroUI 弹层，系统
+                              原生 <select> 的菜单样式改不了）。宽度约束
+                              走 scss 里的 .forward-row 作用域，不传
+                              className —— 传了会同时挂到弹出菜单上 */}
+                            <SettingsSelect
+                              ariaLabel={t(
+                                "session.forward.label"
+                              )}
+                              value={rule.type}
+                              options={[
+                                {
+                                  value: "L",
+                                  label: "L"
+                                },
+                                {
+                                  value: "R",
+                                  label: "R"
+                                },
+                                {
+                                  value: "D",
+                                  label: "D"
+                                }
+                              ]}
+                              onChange={type =>
+                                setForm({
+                                  ...form,
+                                  forwards: (
+                                    form.forwards ??
+                                    []
+                                  ).map(
+                                    (item, at) =>
+                                      at === index
+                                        ? {
+                                            ...item,
+                                            type: type as
+                                              | "L"
+                                              | "R"
+                                              | "D"
+                                          }
+                                        : item
+                                  )
+                                })
+                              }
+                            />
+                            <input
+                              className="forward-num"
+                              type="number"
+                              min={1}
+                              max={65535}
+                              aria-label={t(
+                                "session.forward.listenPort"
+                              )}
+                              placeholder={t(
+                                rule.type === "R"
+                                  ? "session.forward.remotePort"
+                                  : "session.forward.listenPort"
+                              )}
+                              value={
+                                rule.listenPort ||
+                                ""
+                              }
+                              onChange={event =>
+                                setForm({
+                                  ...form,
+                                  forwards: (
+                                    form.forwards ??
+                                    []
+                                  ).map(
+                                    (item, at) =>
+                                      at === index
+                                        ? {
+                                            ...item,
+                                            listenPort:
+                                              Number(
+                                                event
+                                                  .target
+                                                  .value
+                                              ) ||
+                                              0
+                                          }
+                                        : item
+                                  )
+                                })
+                              }
+                            />
+                            {rule.type !==
+                              "D" && (
+                              <>
+                                <input
+                                  className="grow"
+                                  aria-label={t(
+                                    "session.forward.targetHost"
+                                  )}
+                                  placeholder="localhost"
+                                  value={
+                                    rule.targetHost ??
+                                    ""
+                                  }
+                                  onChange={event =>
+                                    setForm({
+                                      ...form,
+                                      forwards: (
+                                        form.forwards ??
+                                        []
+                                      ).map(
+                                        (
+                                          item,
+                                          at
+                                        ) =>
+                                          at ===
+                                          index
+                                            ? {
+                                                ...item,
+                                                targetHost:
+                                                  event
+                                                    .target
+                                                    .value
+                                              }
+                                            : item
+                                      )
+                                    })
+                                  }
+                                />
+                                <input
+                                  className="forward-num"
+                                  type="number"
+                                  min={1}
+                                  max={65535}
+                                  aria-label={t(
+                                    "session.forward.targetPort"
+                                  )}
+                                  placeholder={t(
+                                    "session.forward.targetPort"
+                                  )}
+                                  value={
+                                    // || 而不是 ??：0 也要显示为空（未填），
+                                    // ?? 会把 0 原样显示且删不掉
+                                    rule.targetPort ||
+                                    ""
+                                  }
+                                  onChange={event =>
+                                    setForm({
+                                      ...form,
+                                      forwards: (
+                                        form.forwards ??
+                                        []
+                                      ).map(
+                                        (
+                                          item,
+                                          at
+                                        ) =>
+                                          at ===
+                                          index
+                                            ? {
+                                                ...item,
+                                                targetPort:
+                                                  Number(
+                                                    event
+                                                      .target
+                                                      .value
+                                                  ) ||
+                                                  0
+                                              }
+                                            : item
+                                      )
+                                    })
+                                  }
+                                />
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              className="sys-icon-btn"
+                              aria-label={t(
+                                "session.remove"
+                              )}
+                              onClick={() =>
+                                setForm({
+                                  ...form,
+                                  forwards: (
+                                    form.forwards ??
+                                    []
+                                  ).filter(
+                                    (_, at) =>
+                                      at !== index
+                                  )
+                                })
+                              }
+                            >
+                              ×
+                            </button>
+                          </div>
+                        )
+                      )}
+                      <button
+                        type="button"
+                        className="forward-add"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            forwards: [
+                              ...(form.forwards ??
+                                []),
+                              {
+                                type: "L",
+                                listenPort: 0,
+                                targetHost:
+                                  "localhost",
+                                targetPort: 0
+                              }
+                            ]
+                          })
+                        }
+                      >
+                        +{" "}
+                        {t("session.forward.add")}
+                      </button>
+                      <p className="dialog-hint">
+                        {t(
+                          "session.forward.desc"
+                        )}
+                      </p>
+                    </div>
+                  )}
+                  {/**
+                   * 分组选择：可输入的 TextField + HeroUI Dropdown 候选菜单。
+                   *
+                   * 不用原生 <datalist>：那个下拉由**系统绘制**，改不了样式，
+                   * 与界面主题不一致。走 Dropdown 后弹层用 HeroUI token，
+                   * 深浅主题都对得上（与设置页 SettingsSelect 同一套做法）。
+                   *
+                   * 触发时机：点输入框或点右侧箭头都开菜单 —— 候选通常只有
+                   * 几条，点开比「记得按箭头」顺手。
+                   *
+                   * 仍然允许手输新名字：选不中就当新分组，提交时建组
+                   * （见 resolveGroup / App 的 pendingGroupName）。
+                   */}
+                  <TextField
+                    name="group"
+                    value={groupName}
+                    onChange={setGroupName}
+                  >
+                    {/**
+                     * isRequired 挂在 Label 上：TextField 不认这个 prop，
+                     * 挂了会被静默丢弃；RAC 据此渲染必填标记。
+                     * 编辑时留空 = 保持原分组，不是必填。
+                     */}
+                    <Label isRequired={!session}>
+                      {t("session.group")}
+                    </Label>
+                    <Input
+                      autoComplete="off"
+                      placeholder={t(
+                        session
+                          ? "session.groupPlaceholder"
+                          : "session.groupPlaceholderNew"
+                      )}
+                    />
+                  </TextField>
+                  {/**
+                   * 已有分组的快捷选择：一排可点的胶囊，点一下填进上面的
+                   * 输入框。
+                   *
+                   * 为什么用胶囊而不是下拉菜单：下拉的定位要锚在触发器上，
+                   * 之前用 InputGroup + Dropdown 时菜单反复跑偏（锚到小箭头
+                   * 上导致溢出弹窗），而分组数量本来就少、名字短，平铺
+                   * 一眼就能看完，也省掉了「点开才知道有哪些」这一步。
+                   *
+                   * 分组很多时这里会换行占位，但那是低频情况——分组过十
+                   * 的话更该做的是折叠侧栏，不是让弹窗里选分组。
+                   */}
+                  {groups.length > 0 && (
+                    <div
+                      className="group-chips"
+                      role="group"
+                      aria-label={t(
+                        "group.quickPick"
+                      )}
+                    >
+                      {groups.map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`group-chip${item.name.trim() === groupName.trim() ? " is-active" : ""}`}
+                          onClick={() =>
+                            setGroupName(
+                              item.name
+                            )
+                          }
+                        >
+                          {item.color && (
+                            <span
+                              className="group-chip-color"
+                              style={{
+                                background:
+                                  colorHex(
+                                    item.color
+                                  )
+                              }}
+                            />
+                          )}
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="form-row">
+                    <span className="form-label">
+                      {t("colorTag.label")}
+                    </span>
+                  </div>
+                  <ColorPicker
+                    value={form.color ?? ""}
+                    onChange={v =>
+                      setForm({
+                        ...form,
+                        color: v
+                      })
+                    }
+                  />
+                  {session && form.password && (
+                    <TextField
+                      name="password"
+                      value={newPassword}
+                      onChange={setNewPassword}
+                    >
+                      <Label>
+                        {t("session.password")}
+                      </Label>
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={t(
+                          "session.passwordPlaceholder"
+                        )}
+                      />
+                    </TextField>
+                  )}
                   <Typography.Paragraph
                     size="sm"
-                    className="dialog-error"
+                    className="dialog-hint"
                   >
-                    {error}
+                    {t("session.authHint")}
                   </Typography.Paragraph>
-                )}
+                  {error && (
+                    <Typography.Paragraph
+                      size="sm"
+                      className="dialog-error"
+                    >
+                      {error}
+                    </Typography.Paragraph>
+                  )}
+                </div>
               </Modal.Body>
               <Modal.Footer>
                 <Button

@@ -139,6 +139,17 @@ const zhCN = {
   "net.colConn": "连接数",
   "net.colRecv": "接收",
   "net.colSend": "发送",
+  "net.openLocal":
+    "在本地打开（起临时隧道并开浏览器）",
+  "net.tunnelClose": "关闭隧道",
+  "session.forward.label": "端口转发",
+  "session.forward.add": "添加规则",
+  "session.forward.desc":
+    "会话连接期间生效：L 本地端口→服务器目标；R 服务器端口→本地目标；D 本地 SOCKS5 代理。",
+  "session.forward.listenPort": "本地端口",
+  "session.forward.remotePort": "远程端口",
+  "session.forward.targetHost": "目标主机",
+  "session.forward.targetPort": "目标端口",
   "sys.tip.core":
     "CPU、内存、磁盘三项最关键资源用量的概览",
   "sys.tip.system":
@@ -897,6 +908,17 @@ const enUS: Record<MessageKey, string> = {
   "net.colConn": "Conns",
   "net.colRecv": "RX",
   "net.colSend": "TX",
+  "net.openLocal":
+    "Open locally (tunnel + browser)",
+  "net.tunnelClose": "Close tunnel",
+  "session.forward.label": "Port forwards",
+  "session.forward.add": "Add rule",
+  "session.forward.desc":
+    "Active while connected: L local→server; R server→local; D local SOCKS5 proxy.",
+  "session.forward.listenPort": "Local port",
+  "session.forward.remotePort": "Remote port",
+  "session.forward.targetHost": "Target host",
+  "session.forward.targetPort": "Target port",
   "sys.tip.core":
     "Overview of the three key resources: CPU, memory and disk usage",
   "sys.tip.system":

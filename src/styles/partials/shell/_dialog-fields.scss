@@ -67,3 +67,61 @@
     margin: 0;
   }
 }
+
+// 端口转发规则行：类型 + 本地端口 + 目标主机 + 目标端口 + 删除
+.forward-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+
+  // 目标主机输入框：布局吃剩余空间，外观与两侧端口框同款
+  .grow {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    color: var(--foreground);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  // 类型下拉触发器在行内收窄。作用域挂在 .forward-row 上而不是给
+  // SettingsSelect 传 className —— 传的类会同时落到弹出菜单上，把菜单
+  // 裁窄压扁（踩过）。min-width 必须连着压，settings-select 自带 132px 下限
+  .settings-select {
+    flex: none;
+    gap: 2px;
+    width: 60px;
+    min-width: 60px;
+    height: 28px;
+    padding: 0 6px;
+
+    .settings-select-caret {
+      font-size: 9px;
+    }
+  }
+}
+
+.forward-num {
+  width: 76px;
+  padding: 4px 6px;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.forward-add {
+  align-self: flex-start;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}

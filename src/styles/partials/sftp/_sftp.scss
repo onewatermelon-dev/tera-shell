@@ -11,6 +11,20 @@
 
 .session-dialog {
   width: 430px;
+
+  // 端口转发规则多行时内容会超过视口：限高 + Body 内滚，
+  // 底部的密码框与保存按钮不再被顶出可视区。
+  // ⚠️ Body 的真实类名是 BEM 的 .modal__body（默认 overflow:visible），
+  // 写成 .heroui--modal-body 之类不会命中；min-height:0 是 flex 子项
+  // 允许收缩的关键，缺了它内容照样把限高顶穿
+  max-height: min(86vh, 760px);
+
+  .modal__body {
+    min-height: 0;
+    overflow-y: auto;
+
+    @include thin-scrollbar;
+  }
 }
 
 // SFTP 面板顶部兼作窗口拖动区：Tauri 判定的是 mousedown 事件目标本身是否带

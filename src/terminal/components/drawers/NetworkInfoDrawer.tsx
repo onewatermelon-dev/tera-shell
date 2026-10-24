@@ -10,7 +10,10 @@ import {
   ReloadOutlined,
   WifiOutlined
 } from "@ant-design/icons";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 import { useT } from "@/settings/lib/i18n";
+import { loadSettings } from "@/settings/lib/settings";
 import { aiRunCommand } from "@/terminal/lib/ai/aiExec";
 import {
   fmtBytes,
@@ -19,6 +22,14 @@ import {
   type NetInfo
 } from "@/terminal/lib/sysInfo";
 import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
+
+/** 一条活跃临时隧道（tunnel_list 的返回行）。 */
+type TunnelInfo = {
+  id: string;
+  localPort: number;
+  remotePort: number;
+  target: string;
+};
 
 /** 自动轮询间隔：抽屉打开期间每 2s 重新采集一次。 */
 const NET_REFRESH_MS = 2000;
@@ -61,6 +72,80 @@ export default function NetworkInfoDrawer({
   const [copiedPid, setCopiedPid] = useState<
     number | null
   >(null);
+  /** 活跃的临时隧道列表（每次开新隧道 / 打开抽屉时拉取） */
+  const [tunnels, setTunnels] = useState<
+    TunnelInfo[]
+  >([]);
+  /** 正在开隧道的那一行远端端口（按钮转圈用；NetInfo.port 是 ss 解析出的字符串） */
+  const [openingPort, setOpeningPort] = useState<
+    string | null
+  >(null);
+  const [tunnelError, setTunnelError] =
+    useState("");
+
+  const refreshTunnels = useCallback(() => {
+    invoke<TunnelInfo[]>("tunnel_list")
+      .then(setTunnels)
+      .catch(() => setTunnels([]));
+  }, []);
+
+  // 打开抽屉时拉一次隧道列表
+  useEffect(refreshTunnels, [refreshTunnels]);
+
+  /** 一键本地打开：起临时隧道 → 默认浏览器打开对应本地地址。 */
+  async function openTunnel(row: NetInfo) {
+    setOpeningPort(row.port);
+    setTunnelError("");
+    try {
+      // ⚠️ 只传连接字段，绝不能整个 session 传 —— OpenSession 带着
+      // xterm 的 terminal 实例（循环引用），invoke 序列化直接炸
+      const {
+        sshKeyPath,
+        useSshConfig,
+        hostKeyPolicy
+      } = loadSettings();
+      const tunnel = await invoke<TunnelInfo>(
+        "tunnel_open",
+        {
+          config: {
+            id: `tunnel-${session.id}`,
+            kind: session.kind,
+            host: session.host,
+            port: session.port,
+            username: session.username,
+            password: session.password,
+            sshKeyPath,
+            useSshConfig,
+            hostKeyPolicy
+          },
+          remotePort: Number(row.port),
+          // 转发目标用该行的监听 IP：服务可能只绑在网卡 IP 上，
+          // 硬编码 localhost 会「拒绝连接」（通配地址由后端归一）
+          targetHost: row.ip
+        }
+      );
+      refreshTunnels();
+      // 只对 HTTP 端口开浏览器没有判断依据 —— 统一开
+      // http://localhost:port，非 Web 服务由浏览器自然显示连接失败
+      await openUrl(
+        `http://localhost:${tunnel.localPort}`
+      );
+    } catch (reason) {
+      logError("[tunnel] 开启失败", reason);
+      setTunnelError(String(reason));
+    } finally {
+      setOpeningPort(null);
+    }
+  }
+
+  async function closeTunnel(id: string) {
+    try {
+      await invoke("tunnel_close", { id });
+    } catch (reason) {
+      logError("[tunnel] 关闭失败", reason);
+    }
+    refreshTunnels();
+  }
 
   const fetchNet = useCallback(
     () =>
@@ -201,6 +286,41 @@ export default function NetworkInfoDrawer({
         </div>
       </div>
       <div className="sys-drawer-body">
+        {tunnelError && (
+          <p className="sys-loading is-error">
+            {tunnelError}
+          </p>
+        )}
+        {tunnels.length > 0 && (
+          <div className="tunnel-list">
+            {tunnels.map(tunnel => (
+              <div
+                className="tunnel-row"
+                key={tunnel.id}
+              >
+                <span className="tunnel-mapping">
+                  localhost:
+                  {tunnel.localPort} →{" "}
+                  {tunnel.target.split("@")[1]}:
+                  {tunnel.remotePort}
+                </span>
+                <button
+                  type="button"
+                  className="sys-icon-btn"
+                  aria-label={t(
+                    "net.tunnelClose"
+                  )}
+                  title={t("net.tunnelClose")}
+                  onClick={() =>
+                    void closeTunnel(tunnel.id)
+                  }
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {busy && !rows && (
           <p className="sys-loading">
             {t("sys.loading")}
@@ -266,7 +386,31 @@ export default function NetworkInfoDrawer({
                     </td>
                     <td>{row.name}</td>
                     <td>{row.ip}</td>
-                    <td>{row.port}</td>
+                    <td className="tunnel-cell">
+                      {row.port}
+                      {/* 一键本地打开：监听端口 → 临时隧道 → 浏览器 */}
+                      <button
+                        type="button"
+                        className="sys-icon-btn"
+                        aria-label={t(
+                          "net.openLocal"
+                        )}
+                        title={t("net.openLocal")}
+                        disabled={
+                          openingPort !== null
+                        }
+                        onClick={() =>
+                          void openTunnel(row)
+                        }
+                      >
+                        {openingPort ===
+                        row.port ? (
+                          <ReloadOutlined className="net-spinning" />
+                        ) : (
+                          "↗"
+                        )}
+                      </button>
+                    </td>
                     <td>{row.ipCount}</td>
                     <td>{row.connCount}</td>
                     <td>{fmtBytes(row.recv)}</td>

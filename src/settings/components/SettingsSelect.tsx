@@ -69,7 +69,10 @@ export default function SettingsSelect<
         <DownOutlined className="settings-select-caret" />
       </Dropdown.Trigger>
       <Dropdown.Popover
-        placement="bottom end"
+        // 左缘对齐展开：小触发器（如端口转发的 L/R/D，60px）配 132px 菜单
+        // 时，bottom end 会让菜单向左伸出弹窗外。设置页等宽场景下两种
+        // 对齐视觉相同，不受影响
+        placement="bottom start"
         className={
           className
             ? `settings-select-menu ${className}`
