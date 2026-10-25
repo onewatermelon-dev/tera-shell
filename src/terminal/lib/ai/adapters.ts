@@ -242,6 +242,55 @@ export const TOOL_PROPOSE_PLAN = "propose_plan";
 export const TOOL_ASK_QUESTIONS = "ask_questions";
 export const TOOL_EDIT_FILE = "edit_remote_file";
 
+/** 外部 MCP 工具名的 `mcp__` 前缀（与后端 client.rs 一致）。 */
+export const MCP_TOOL_PREFIX = "mcp__";
+
+/**
+ * 把外部 MCP 工具转成 OpenAI 系的 function 工具定义。
+ *
+ * 外部工具的 input_schema 就是 JSON Schema（后端从 rmcp 的 Tool 直接
+ * 转来），这里原样放进 `parameters`，三家格式共用这套结构（Anthropic
+ * 的 input_schema 也是同一份）。
+ */
+function externalToolDef(tool: ExternalTool): {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+} {
+  return {
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.input_schema
+  };
+}
+
+/**
+ * 把外部工具并进内置工具数组（OpenAI 系：`{ type:"function", function:{...} }`）。
+ */
+function mergeOpenAiTools(
+  externalTools: ExternalTool[] | undefined
+): unknown[] {
+  if (!externalTools?.length) return [];
+  return externalTools.map(tool => ({
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema
+    }
+  }));
+}
+
+/**
+ * 把外部工具并进内置工具数组（Anthropic：`{ name, description, input_schema }`）。
+ */
+function mergeAnthropicTools(
+  externalTools: ExternalTool[] | undefined
+): unknown[] {
+  if (!externalTools?.length) return [];
+  return externalTools.map(externalToolDef);
+}
+
 /** 模型的最大输出 Token：取模型配置，没填给 4096 兜底。 */
 function maxTokensOf(
   option: AiModelOption
@@ -256,13 +305,21 @@ function maxTokensOf(
   );
 }
 
+/** 外部 MCP 工具（后端 mcp_client_list_tools 返回，name 已带 mcp__ 前缀）。 */
+export type ExternalTool = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
+
 /** 三种 API 格式的请求构造与响应解析（内部流转统一为 OpenAI 消息形态）。 */
 type FormatAdapter = {
   endpoint(baseUrl: string): string;
   headers(apiKey: string): Record<string, string>;
   buildBody(
     option: AiModelOption,
-    messages: ProtocolMessage[]
+    messages: ProtocolMessage[],
+    externalTools?: ExternalTool[]
   ): unknown;
   parse(text: string): ProtocolMessage;
 };
@@ -274,7 +331,11 @@ const openAiAdapter: FormatAdapter = {
     Authorization: `Bearer ${apiKey}`
   }),
   // reasoning_content 只用于展示：回传请求时剥离（DeepSeek 等不接受回传）
-  buildBody: (option, messages) => ({
+  buildBody: (
+    option,
+    messages,
+    externalTools
+  ) => ({
     model: option.model.name.trim(),
     messages: messages.map(
       ({
@@ -357,7 +418,8 @@ const openAiAdapter: FormatAdapter = {
             "修改服务器上的文件：给出路径与「查找/替换」块，用户会在 diff 卡上审查并批准后才写回。不要给出整份文件内容",
           parameters: EDIT_FILE_PARAMETERS
         }
-      }
+      },
+      ...mergeOpenAiTools(externalTools)
     ],
     tool_choice: "auto"
   }),
@@ -412,7 +474,11 @@ export const anthropicAdapter: FormatAdapter = {
     "x-api-key": apiKey,
     "anthropic-version": "2023-06-01"
   }),
-  buildBody: (option, messages) => {
+  buildBody: (
+    option,
+    messages,
+    externalTools
+  ) => {
     // system 只有一条且在最前（引擎保证），拆出来放顶层字段
     const system =
       messages[0]?.role === "system"
@@ -530,7 +596,8 @@ export const anthropicAdapter: FormatAdapter = {
           description:
             "修改服务器上的文件：给出路径与「查找/替换」块，用户会在 diff 卡上审查并批准后才写回。不要给出整份文件内容",
           input_schema: EDIT_FILE_PARAMETERS
-        }
+        },
+        ...mergeAnthropicTools(externalTools)
       ],
       tool_choice: { type: "auto" }
     };
@@ -588,7 +655,11 @@ export const responsesAdapter: FormatAdapter = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`
   }),
-  buildBody: (option, messages) => {
+  buildBody: (
+    option,
+    messages,
+    externalTools
+  ) => {
     const system =
       messages[0]?.role === "system"
         ? (messages[0].content ?? "")
@@ -692,7 +763,8 @@ export const responsesAdapter: FormatAdapter = {
           description:
             "修改服务器上的文件：给出路径与「查找/替换」块，用户会在 diff 卡上审查并批准后才写回。不要给出整份文件内容",
           parameters: EDIT_FILE_PARAMETERS
-        }
+        },
+        ...mergeOpenAiTools(externalTools)
       ],
       tool_choice: "auto"
     };

@@ -819,3 +819,60 @@
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+
+.mcp-servers-input {
+  width: 100%;
+  padding: 8px 10px;
+  font:
+    12px Consolas,
+    "Cascadia Code",
+    monospace;
+  line-height: 1.6;
+  color: var(--foreground);
+  resize: vertical;
+  outline: none;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &:focus {
+    border-color: var(--accent);
+  }
+}
+
+.mcp-client-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mcp-test-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.mcp-test-result {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.5;
+
+  &.is-ok {
+    color: var(--success);
+  }
+
+  &.is-fail {
+    color: var(--danger, #f56565);
+  }
+}
+
+.mcp-test-name {
+  flex: none;
+  font-weight: 600;
+}
+
+.mcp-test-error {
+  word-break: break-all;
+}

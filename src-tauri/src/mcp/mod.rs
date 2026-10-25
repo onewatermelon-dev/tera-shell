@@ -14,6 +14,7 @@
 pub mod approval;
 pub mod audit;
 pub mod bridge;
+pub mod client;
 pub mod policy;
 pub mod remote;
 pub mod sessions;
@@ -204,4 +205,65 @@ pub fn reset_token(app: tauri::AppHandle) -> Result<String, String> {
 	let _ = std::fs::remove_file(&bridge_path);
 	tracing::info!("MCP 令牌已重置（重启应用后生效）");
 	Ok(fresh)
+}
+
+/// 列出某个外部 MCP server 的全部工具（name 已加 `mcp__<server>__` 前缀）。
+///
+/// 供 AI 面板在发送前拉取工具清单、注入 tool schema。
+#[tauri::command(rename = "mcp_client_list_tools")]
+pub async fn client_list_tools(
+	app: tauri::AppHandle,
+	server: String,
+) -> Result<Vec<client::ExternalTool>, String> {
+	use tauri::Manager;
+	let data_dir = crate::data::resolve_data_dir_from(
+		&app.path().home_dir().unwrap_or_default(),
+	);
+	client::list_tools(&data_dir, &server).await
+}
+
+/// 调用某个外部 MCP 工具，返回文本结果。
+///
+/// `name` 是带前缀的完整工具名（如 `mcp__filesystem__read_file`），
+/// `arguments` 是 JSON 对象（前端把模型给的参数原样传进来）。
+#[tauri::command(rename = "mcp_client_call_tool")]
+pub async fn client_call_tool(
+	app: tauri::AppHandle,
+	name: String,
+	arguments: serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+	use tauri::Manager;
+	let data_dir = crate::data::resolve_data_dir_from(
+		&app.path().home_dir().unwrap_or_default(),
+	);
+	client::call_tool(&data_dir, &name, arguments).await
+}
+
+/// 列出**所有**外部 MCP server 的全部工具（合并，name 各带前缀）。
+///
+/// 供 AI 面板发送前一次性拉取。单个 server 失败时跳过，不整体报错。
+#[tauri::command(rename = "mcp_client_list_all_tools")]
+pub async fn client_list_all_tools(
+	app: tauri::AppHandle,
+) -> Result<Vec<client::ExternalTool>, String> {
+	use tauri::Manager;
+	let data_dir = crate::data::resolve_data_dir_from(
+		&app.path().home_dir().unwrap_or_default(),
+	);
+	Ok(client::list_all_tools(&data_dir).await)
+}
+
+/// 检测某个外部 MCP server 的连通性（连接 + 列工具）。
+///
+/// 返回结构化结果（ok/error/toolCount），供设置页「检测」按钮展示。
+#[tauri::command(rename = "mcp_client_test_connection")]
+pub async fn client_test_connection(
+	app: tauri::AppHandle,
+	server: String,
+) -> Result<client::ConnectionTest, String> {
+	use tauri::Manager;
+	let data_dir = crate::data::resolve_data_dir_from(
+		&app.path().home_dir().unwrap_or_default(),
+	);
+	Ok(client::test_connection(&data_dir, &server).await)
 }

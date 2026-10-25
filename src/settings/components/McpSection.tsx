@@ -4,6 +4,11 @@ import { Button } from "@heroui/react";
 import { useT } from "@/settings/lib/i18n";
 import Toggle from "@/shared/components/Toggle";
 import SettingsRow from "@/settings/components/SettingsRow";
+import {
+  DataName,
+  readData,
+  writeData
+} from "@/settings/lib/storage";
 import type { AppSettings } from "@/settings/lib/settings";
 
 type McpSectionProps = {
@@ -65,6 +70,100 @@ export default function McpSection({
     } catch (reason) {
       console.warn("[mcp] 重置令牌失败", reason);
     }
+  }
+
+  // 外部 MCP server 配置：存 mcp_servers.json，JSON 数组。
+  const [serversText, setServersText] = useState(
+    () => readData(DataName.mcpServers) ?? "[]"
+  );
+  const [serversSaved, setServersSaved] =
+    useState(false);
+  // 连通性检测结果（按 server 名 → 结果）。
+  const [testResults, setTestResults] = useState<
+    {
+      name: string;
+      ok: boolean;
+      error: string | null;
+      toolCount: number;
+    }[]
+  >([]);
+  const [testing, setTesting] = useState(false);
+
+  /** 保存外部 server 配置（校验 JSON 数组后写盘）。 */
+  function saveServers() {
+    try {
+      const parsed: unknown =
+        JSON.parse(serversText);
+      if (!Array.isArray(parsed)) {
+        console.warn(
+          "[mcp] 外部 server 配置必须是数组"
+        );
+        return;
+      }
+      writeData(
+        DataName.mcpServers,
+        JSON.stringify(parsed)
+      );
+      setServersSaved(true);
+      setTimeout(
+        () => setServersSaved(false),
+        1500
+      );
+    } catch (reason) {
+      console.warn(
+        "[mcp] 外部 server 配置 JSON 无效",
+        reason
+      );
+    }
+  }
+
+  /** 检测所有配置的外部 server 连通性。 */
+  async function testServers() {
+    let names: string[];
+    try {
+      const parsed: unknown =
+        JSON.parse(serversText);
+      if (!Array.isArray(parsed)) return;
+      names = parsed
+        .map(item =>
+          typeof item === "object" &&
+          item !== null
+            ? String(
+                (item as { name?: unknown })
+                  .name ?? ""
+              )
+            : ""
+        )
+        .filter(Boolean);
+    } catch {
+      return;
+    }
+    if (names.length === 0) return;
+    setTesting(true);
+    setTestResults([]);
+    const results = [];
+    for (const name of names) {
+      try {
+        const result = await invoke<{
+          name: string;
+          ok: boolean;
+          error: string | null;
+          toolCount: number;
+        }>("mcp_client_test_connection", {
+          server: name
+        });
+        results.push(result);
+      } catch (reason) {
+        results.push({
+          name,
+          ok: false,
+          error: String(reason),
+          toolCount: 0
+        });
+      }
+    }
+    setTestResults(results);
+    setTesting(false);
   }
 
   return (
@@ -183,6 +282,74 @@ export default function McpSection({
           </Button>
         }
       />
+      <SettingsRow
+        title={t("settings.mcp.clientTitle")}
+        description={t("settings.mcp.clientDesc")}
+        control={
+          <div className="mcp-client-actions">
+            <Button
+              variant="tertiary"
+              size="sm"
+              onPress={saveServers}
+            >
+              {serversSaved
+                ? t("settings.mcp.copied")
+                : t("settings.mcp.saveServers")}
+            </Button>
+            <Button
+              variant="tertiary"
+              size="sm"
+              isDisabled={testing}
+              onPress={() => void testServers()}
+            >
+              {testing
+                ? t("settings.mcp.testing")
+                : t("settings.mcp.test")}
+            </Button>
+          </div>
+        }
+      >
+        <textarea
+          className="mcp-servers-input"
+          value={serversText}
+          spellCheck={false}
+          aria-label={t(
+            "settings.mcp.clientTitle"
+          )}
+          rows={6}
+          onChange={event =>
+            setServersText(event.target.value)
+          }
+        />
+        {testResults.length > 0 && (
+          <div className="mcp-test-results">
+            {testResults.map(result => (
+              <div
+                key={result.name}
+                className={`mcp-test-result ${
+                  result.ok ? "is-ok" : "is-fail"
+                }`}
+              >
+                <span className="mcp-test-name">
+                  {result.name}
+                </span>
+                {result.ok ? (
+                  <span className="mcp-test-ok">
+                    {t("settings.mcp.testOk", {
+                      count: result.toolCount
+                    })}
+                  </span>
+                ) : (
+                  <span className="mcp-test-error">
+                    {result.error ??
+                      t("settings.mcp.testFail")}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </SettingsRow>
     </>
   );
 }

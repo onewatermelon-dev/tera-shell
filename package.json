@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:mcp": "node scripts/build-mcp-sidecar.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint:prettier": "prettier --write \"**/*.{js,ts,mjs,cjs,json,tsx,html,md}\"",

@@ -42,7 +42,9 @@ export const DataName = {
   /** 启动还原：上次开着的标签与分屏，见 terminal/lib/session/terminalLayout.ts */
   terminalLayout: "terminal_layout",
   /** 窗口在桌面的位置与大小，见 app/lib/windowState.ts */
-  windowState: "window_state"
+  windowState: "window_state",
+  /** MCP Client：外部 MCP server 配置，见 terminal/lib/ai/mcpTools.ts */
+  mcpServers: "mcp_servers"
 } as const;
 
 /**

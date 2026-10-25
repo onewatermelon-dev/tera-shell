@@ -949,7 +949,18 @@ const zhCN = {
   "settings.mcp.blacklistDesc":
     "命中这些命令名的调用永远弹审批（即使开了上面的自动执行）。逗号分隔，如 rm, mkfs, dd。",
   "settings.mcp.blacklistPlaceholder":
-    "rm, mkfs, dd"
+    "rm, mkfs, dd",
+
+  "settings.mcp.clientTitle":
+    "外部 MCP 服务器（内置 AI 调用）",
+  "settings.mcp.clientDesc":
+    "让内置 AI 面板调用外部 MCP 工具。JSON 数组，每项 { name, command, args }（stdio）或 { name, url }（HTTP）。",
+  "settings.mcp.saveServers": "保存",
+  "settings.mcp.test": "检测连通性",
+  "settings.mcp.testing": "检测中…",
+  "settings.mcp.testOk":
+    "连接成功（{count} 个工具）",
+  "settings.mcp.testFail": "连接失败"
 } as const;
 
 export type MessageKey = keyof typeof zhCN;
@@ -1914,7 +1925,18 @@ const enUS: Record<MessageKey, string> = {
   "settings.mcp.blacklistDesc":
     "Calls matching these command names always require approval (even with auto-run on). Comma-separated, e.g. rm, mkfs, dd.",
   "settings.mcp.blacklistPlaceholder":
-    "rm, mkfs, dd"
+    "rm, mkfs, dd",
+
+  "settings.mcp.clientTitle":
+    "External MCP servers (for built-in AI)",
+  "settings.mcp.clientDesc":
+    "Let the built-in AI panel call external MCP tools. JSON array of { name, command, args } (stdio) or { name, url } (HTTP).",
+  "settings.mcp.saveServers": "Save",
+  "settings.mcp.test": "Test connection",
+  "settings.mcp.testing": "Testing…",
+  "settings.mcp.testOk":
+    "Connected ({count} tools)",
+  "settings.mcp.testFail": "Connection failed"
 };
 
 const DICTIONARIES: Record<

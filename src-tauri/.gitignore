@@ -3,3 +3,6 @@
 
 # 将具有用于功能自动完成的模式文件
 /gen/schemas
+
+# MCP sidecar 二进制（由 pnpm build:mcp 生成，见 scripts/build-mcp-sidecar.mjs）
+/binaries/*.exe

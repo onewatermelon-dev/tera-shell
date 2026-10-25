@@ -9,7 +9,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiModelOption } from "./tools";
 import {
   accumulatorOf,
-  adapterOf
+  adapterOf,
+  type ExternalTool
 } from "./adapters";
 import type {
   AiUsage,
@@ -38,6 +39,10 @@ export async function streamChatCompletion(
    * 生成的，调用方拿不到，所以开这个口子把它透出去。
    */
   onStreamId?: (streamId: string) => void,
+  /**
+   * 外部 MCP 工具（name 已带 `mcp__` 前缀），并进内置工具一起注入。
+   */
+  externalTools?: ExternalTool[],
   /**
    * 流正常结束时的回调（系统通知用）。
    *
@@ -118,7 +123,8 @@ export async function streamChatCompletion(
   try {
     const built = adapter.buildBody(
       option,
-      messages
+      messages,
+      externalTools
     ) as Record<string, unknown>;
     if (!withTools) {
       delete built.tools;

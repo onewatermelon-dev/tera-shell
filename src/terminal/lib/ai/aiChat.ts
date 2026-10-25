@@ -54,6 +54,11 @@ import {
   streamChatCompletion,
   cancelChatStream
 } from "./stream";
+import {
+  loadExternalTools,
+  callExternalTool,
+  isExternalTool
+} from "./mcpTools";
 import { executeToolCard } from "./cardExec";
 import { hasEscalationPassword } from "./escalation";
 import { cancelAiExec } from "./aiExec";
@@ -531,6 +536,10 @@ export function useAiChat(
       // 纯工具调用跳（模型只回 tool_calls、没正文也没思考）不建条目，
       // 其 token 用量结转到下一条可见回复，别让成本可视漏账
       let carriedUsage: AiUsage | undefined;
+      // 外部 MCP 工具：一轮对话内拉取一次即可（外部 server 不会中途变）。
+      // 失败返回空数组，内置工具照常可用。
+      const externalTools =
+        await loadExternalTools();
       for (
         let hop = 0;
         hop < MAX_HOPS;
@@ -567,6 +576,7 @@ export function useAiChat(
             id => {
               streamIdRef.current = id;
             },
+            externalTools,
             info => {
               // 通知只在「本轮真正产出可见回复」时发：下面若因用户点了
               // 停止而提前收工，那不是「回答完成」，不该弹通知
@@ -652,6 +662,50 @@ export function useAiChat(
         for (const call of calls) {
           const toolCallId = call.id;
           const toolName = call.function.name;
+          // ---- 外部 MCP 工具：`mcp__` 前缀，经后端转发给外部 server ----
+          // ⚠️ 必须在所有内置工具判断之前：外部工具名带 mcp__ 前缀，
+          // 不先判会被 parseToolArguments 当成 run_command 解析失败。
+          if (isExternalTool(toolName)) {
+            let args: Record<string, unknown> =
+              {};
+            try {
+              args = JSON.parse(
+                call.function.arguments || "{}"
+              ) as Record<string, unknown>;
+            } catch {
+              /* 参数解析失败按空对象处理，让外部工具自己报错 */
+            }
+            try {
+              const output =
+                await callExternalTool(
+                  toolName,
+                  args
+                );
+              messagesRef.current.push({
+                role: "tool",
+                content: output,
+                tool_call_id: toolCallId
+              });
+              console.info(
+                "[mcp] 外部工具结果：",
+                toolName
+              );
+            } catch (reason) {
+              messagesRef.current.push({
+                role: "tool",
+                content: `[外部工具调用失败：${String(
+                  reason
+                )}]`,
+                tool_call_id: toolCallId
+              });
+              console.warn(
+                "[mcp] 外部工具调用失败",
+                toolName,
+                reason
+              );
+            }
+            continue;
+          }
           // ---- 文件传输工具：结构与命令卡片不同，单独分支 ----
           // ⚠️ 必须先判工具名：`parseToolArguments` 只认 command 字段，
           // 拿传输工具的参数去解会得到 null，白白回填一条「参数解析失败」。
