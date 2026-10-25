@@ -577,6 +577,7 @@ const zhCN = {
   "settings.nav.colorScheme": "配色方案",
   "settings.nav.models": "模型设置",
   "settings.nav.shortcuts": "快捷键",
+  "settings.nav.mcp": "MCP",
   "settings.nav.about": "关于",
   "about.desc":
     "SSH 终端 · AI 助手（Tauri + React）",
@@ -920,7 +921,35 @@ const zhCN = {
   "mcp.approval.writeHint":
     "这条命令会修改服务器状态，请确认命令内容后执行。",
   "mcp.approval.reject": "拒绝",
-  "mcp.approval.approve": "执行"
+  "mcp.approval.approve": "执行",
+
+  "settings.mcp.enableTitle": "启用 MCP Server",
+  "settings.mcp.enableDesc":
+    "让 Claude Code / Cursor 等外部 agent 调用本应用的会话查询与命令执行（命令必须经主窗口审批）。改动重启后生效。",
+  "settings.mcp.configTitle": "接入配置",
+  "settings.mcp.configDesc":
+    "复制到外部 agent 的 MCP 配置。command 路径改成你机器上 tera-shell-mcp 的实际位置（开发时在 src-tauri/target/debug/）。",
+  "settings.mcp.copyConfig": "复制配置",
+  "settings.mcp.copied": "已复制",
+  "settings.mcp.resetTitle": "访问令牌",
+  "settings.mcp.resetDesc":
+    "重置后旧令牌立即作废，需重启应用使新令牌生效。",
+  "settings.mcp.reset": "重置令牌",
+  "settings.mcp.resetDone": "已重置（重启生效）",
+
+  "settings.mcp.autoExecuteTitle":
+    "只读命令自动执行",
+  "settings.mcp.autoExecuteDesc":
+    "外部 agent 发起的只读命令（查状态、列目录等）跳过审批直接执行。默认关，保持每次审批。",
+  "settings.mcp.autoApplyTitle":
+    "读写命令自动执行",
+  "settings.mcp.autoApplyDesc":
+    "外部 agent 发起的读写命令（会改服务器状态）跳过审批直接执行。⚠️ 风险更高，谨慎开启。",
+  "settings.mcp.blacklistTitle": "危险命令黑名单",
+  "settings.mcp.blacklistDesc":
+    "命中这些命令名的调用永远弹审批（即使开了上面的自动执行）。逗号分隔，如 rm, mkfs, dd。",
+  "settings.mcp.blacklistPlaceholder":
+    "rm, mkfs, dd"
 } as const;
 
 export type MessageKey = keyof typeof zhCN;
@@ -1495,6 +1524,7 @@ const enUS: Record<MessageKey, string> = {
   "settings.nav.colorScheme": "Color scheme",
   "settings.nav.models": "Model providers",
   "settings.nav.shortcuts": "Keyboard shortcuts",
+  "settings.nav.mcp": "MCP",
   "settings.nav.about": "About",
   "about.desc":
     "SSH terminal with an AI assistant (Tauri + React)",
@@ -1853,7 +1883,38 @@ const enUS: Record<MessageKey, string> = {
   "mcp.approval.writeHint":
     "This command will change server state. Review it before running.",
   "mcp.approval.reject": "Reject",
-  "mcp.approval.approve": "Run"
+  "mcp.approval.approve": "Run",
+
+  "settings.mcp.enableTitle": "Enable MCP Server",
+  "settings.mcp.enableDesc":
+    "Let Claude Code, Cursor, etc. call this app's session queries and command execution (commands require approval in the main window). Takes effect after restart.",
+  "settings.mcp.configTitle":
+    "Integration config",
+  "settings.mcp.configDesc":
+    "Copy into your agent's MCP config. Replace the command path with the real location of tera-shell-mcp (during development: src-tauri/target/debug/).",
+  "settings.mcp.copyConfig": "Copy config",
+  "settings.mcp.copied": "Copied",
+  "settings.mcp.resetTitle": "Access token",
+  "settings.mcp.resetDesc":
+    "Resetting invalidates the old token immediately; restart the app for the new token to take effect.",
+  "settings.mcp.reset": "Reset token",
+  "settings.mcp.resetDone":
+    "Reset (restart to apply)",
+
+  "settings.mcp.autoExecuteTitle":
+    "Auto-run read-only commands",
+  "settings.mcp.autoExecuteDesc":
+    "Skip approval for read-only commands from external agents (status checks, directory listings). Off by default.",
+  "settings.mcp.autoApplyTitle":
+    "Auto-run write commands",
+  "settings.mcp.autoApplyDesc":
+    "Skip approval for write commands (which change server state). Higher risk — enable with care.",
+  "settings.mcp.blacklistTitle":
+    "Dangerous command blacklist",
+  "settings.mcp.blacklistDesc":
+    "Calls matching these command names always require approval (even with auto-run on). Comma-separated, e.g. rm, mkfs, dd.",
+  "settings.mcp.blacklistPlaceholder":
+    "rm, mkfs, dd"
 };
 
 const DICTIONARIES: Record<

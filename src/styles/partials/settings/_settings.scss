@@ -801,3 +801,21 @@
   line-height: 1.5;
   color: var(--muted);
 }
+
+// ---- MCP 配置片段 ----
+
+.mcp-config-snippet {
+  padding: 10px 12px;
+  margin: 0;
+  font:
+    12px Consolas,
+    "Cascadia Code",
+    monospace;
+  line-height: 1.6;
+  color: var(--foreground);
+  word-break: break-all;
+  white-space: pre-wrap;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

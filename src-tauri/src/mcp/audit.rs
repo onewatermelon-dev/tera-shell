@@ -111,7 +111,9 @@ pub fn record_decision(
 	}
 }
 
-/// 记录一条已执行命令的结果（批准且执行后调用）。
+/// 记录一条已执行命令的结果（批准 / 自动执行后调用）。
+///
+/// `decision`：`approved`（用户批准）或 `auto`（命中自动执行策略）。
 #[allow(clippy::too_many_arguments)]
 pub fn record_executed(
 	data_dir: &Path,
@@ -119,6 +121,7 @@ pub fn record_executed(
 	target: &str,
 	command: &str,
 	is_read_only: bool,
+	decision: &str,
 	exit_code: i32,
 	output_tail: String,
 ) {
@@ -132,7 +135,7 @@ pub fn record_executed(
 		target: target.to_string(),
 		command: sanitize_command(command),
 		is_read_only,
-		decision: "approved".to_string(),
+		decision: decision.to_string(),
 		exit_code: Some(exit_code),
 		output_tail: Some(truncate_tail(&output_tail)),
 	};

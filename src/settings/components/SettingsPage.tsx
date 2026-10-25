@@ -14,6 +14,7 @@ import {
   GlobalOutlined,
   InfoCircleOutlined,
   KeyOutlined,
+  LinkOutlined,
   MoonOutlined,
   SunOutlined,
   TranslationOutlined
@@ -29,6 +30,7 @@ import { resolveColorScheme } from "@/terminal/lib/pane/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
 import ShortcutSettings from "@/settings/components/ShortcutSettings";
 import { AboutSection } from "@/settings/components/AboutSection";
+import McpSection from "@/settings/components/McpSection";
 import SettingsSelect, {
   type SelectOption
 } from "@/settings/components/SettingsSelect";
@@ -64,6 +66,7 @@ type Section =
   | "colorScheme"
   | "models"
   | "shortcuts"
+  | "mcp"
   | "about";
 
 /** 主题下拉的三项。 */
@@ -433,6 +436,18 @@ export default function SettingsPage({
         <button
           type="button"
           className={
+            section === "mcp"
+              ? "settings-nav-item is-active"
+              : "settings-nav-item"
+          }
+          onClick={() => setSection("mcp")}
+        >
+          <LinkOutlined />
+          {t("settings.nav.mcp")}
+        </button>
+        <button
+          type="button"
+          className={
             section === "about"
               ? "settings-nav-item is-active"
               : "settings-nav-item"
@@ -468,6 +483,7 @@ export default function SettingsPage({
               shortcuts: t(
                 "settings.nav.shortcuts"
               ),
+              mcp: t("settings.nav.mcp"),
               about: t("settings.nav.about")
             }[section]
           }
@@ -871,6 +887,11 @@ export default function SettingsPage({
             onChange={shortcutOverrides =>
               onChange({ shortcutOverrides })
             }
+          />
+        ) : section === "mcp" ? (
+          <McpSection
+            settings={settings}
+            onChange={onChange}
           />
         ) : section === "colorScheme" ? (
           <SettingsRow

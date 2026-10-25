@@ -184,6 +184,29 @@ export type AppSettings = {
    * 就不会有任何事件，所以默认开着也不会吵到人。
    */
   notifyWatch: boolean;
+  /**
+   * 是否启用 MCP Server（对外暴露会话查询 / 命令执行给外部 agent）。
+   *
+   * 默认开。关闭后主进程不再起本地 HTTP bridge，外部 agent 拉起的
+   * `tera-shell-mcp` 子进程会报「主程序未运行」。
+   */
+  mcpEnabled: boolean;
+  /**
+   * MCP 只读命令是否自动执行（不经审批）。
+   *
+   * 默认关 —— MCP 来自外部进程，信任度低于用户当面与 AI 对话。
+   */
+  mcpAutoExecute: boolean;
+  /**
+   * MCP 读写命令是否自动应用（不经审批）。默认关，同上。
+   */
+  mcpAutoApply: boolean;
+  /**
+   * MCP 危险命令黑名单（命令名数组，命中永不自动执行）。
+   *
+   * 与内置 AI 面板的黑名单同源语义，但独立一份。
+   */
+  mcpBlacklist: string[];
 };
 
 /** 终端字体的内置默认值：与创建 Terminal 时的取值保持一致。 */
@@ -315,6 +338,12 @@ export const defaultSettings: AppSettings = {
   notifyAi: true,
   notifyTransfer: true,
   notifyWatch: true,
+  // MCP Server 默认开：审批门禁兜底，暴露的是「查询 + 需审批的命令执行」
+  mcpEnabled: true,
+  // MCP 审批策略默认全关：外部 agent 的命令一律弹审批
+  mcpAutoExecute: false,
+  mcpAutoApply: false,
+  mcpBlacklist: [],
   shortcutOverrides: {}
 };
 
@@ -342,6 +371,23 @@ export function clampScrollback(
     MAX_SCROLLBACK,
     Math.max(MIN_SCROLLBACK, Math.round(lines))
   );
+}
+
+/** 清洗黑名单：只留非空字符串项，去重；非数组一律回空。 */
+function sanitizeBlacklist(
+  value: unknown
+): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const name = item.trim().toLowerCase();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
 }
 
 /** 读取设置；任何异常都退回默认值。 */
@@ -453,6 +499,15 @@ export function loadSettings(): AppSettings {
       notifyTransfer:
         parsed.notifyTransfer !== false,
       notifyWatch: parsed.notifyWatch !== false,
+      // MCP Server：缺省开（字段缺失 = true）
+      mcpEnabled: parsed.mcpEnabled !== false,
+      // MCP 审批策略：缺省全关（外部 agent 的命令一律弹审批）
+      mcpAutoExecute:
+        parsed.mcpAutoExecute === true,
+      mcpAutoApply: parsed.mcpAutoApply === true,
+      mcpBlacklist: sanitizeBlacklist(
+        parsed.mcpBlacklist
+      ),
       // 快捷键覆盖：手改过设置文件的话这里可能有未知 id / 撞车键位，
       // sanitizeOverrides 会剔掉（见 appShortcuts）
       shortcutOverrides: sanitizeOverrides(

@@ -149,6 +149,7 @@ pub fn run() {
             ai::chat_stream,
             ai::chat_cancel,
             mcp::approval_respond,
+            mcp::reset_token,
             infra::secret::encrypt,
             infra::secret::decrypt,
             infra::http::http_post_json,
@@ -174,11 +175,16 @@ pub fn run() {
             // 启动 MCP 本地 HTTP bridge：生成 token、起 127.0.0.1 服务、
             // 写 bridge 配置，供外部 agent 拉起的 `tera-shell-mcp` 子进程
             // 连接。app_handle 经 Manager trait 取得。
+            // 开关：settings.json 的 `mcpEnabled`（缺省开）。
             {
                 use tauri::Manager;
-                let handle = app.handle().clone();
-                let open = app.state::<mcp::bridge::OpenSessions>().inner().clone();
-                mcp::start_bridge(&handle, open);
+                if mcp::enabled_in_settings(app.handle()) {
+                    let handle = app.handle().clone();
+                    let open = app.state::<mcp::bridge::OpenSessions>().inner().clone();
+                    mcp::start_bridge(&handle, open);
+                } else {
+                    tracing::info!("MCP Server 已在设置中禁用，跳过 bridge 启动");
+                }
             }
             // WebView2 的浏览器级快捷键（Ctrl+F 页面查找栏等）会抢在页面 JS 之前
             // 响应，preventDefault 拦不住；原生禁用后查找统一走应用内实现。

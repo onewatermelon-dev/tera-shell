@@ -184,6 +184,9 @@ struct RunCommandRequest {
 }
 
 /// `POST /api/run_command`：审批后执行命令（阻塞等用户决定）。
+///
+/// 若命中了「自动执行」策略（只读 + auto_execute / 读写 + auto_apply 且
+/// 不在黑名单），则**不弹审批**直接执行；否则弹审批卡等用户决定。
 async fn run_command(
 	State(state): State<Arc<BridgeState>>,
 	headers: HeaderMap,
@@ -215,6 +218,25 @@ async fn run_command(
 		target.host,
 		target.port.unwrap_or(22)
 	);
+
+	// 审批策略：命中的命令自动执行（不弹审批）
+	let policy = super::policy::load_policy(&state.data_dir);
+	let auto = super::policy::should_auto_run(
+		&target.command,
+		req.is_read_only,
+		&policy,
+	);
+	if auto {
+		return Ok(execute_and_audit(
+			&state,
+			&client,
+			target_desc,
+			target,
+			req.is_read_only,
+			true,
+		)
+		.await?);
+	}
 
 	// 生成审批请求，登记 pending，emit 给前端
 	let request_id = format!("mcp-{}", crate::mcp::token::generate());
@@ -273,40 +295,58 @@ async fn run_command(
 			))
 		}
 		super::approval::Decision::Approved => {
-			// 执行命令
-			let command = target.command.clone();
-			let outcome = crate::ai::execute_command(
-				&state.exec,
+			execute_and_audit(
+				&state,
+				&client,
+				target_desc,
 				target,
+				req.is_read_only,
+				false,
 			)
 			.await
-			.map_err(|error| {
-				(StatusCode::INTERNAL_SERVER_ERROR, error)
-			})?;
-
-			super::audit::record_executed(
-				&state.data_dir,
-				&client,
-				&target_desc,
-				&command,
-				req.is_read_only,
-				outcome.exit_code,
-				format!("{}{}", outcome.stdout, outcome.stderr),
-			);
-
-			// 返回执行结果给子进程（文本形式）
-			let output = format!(
-				"exit_code={}\nstdout:\n{}\nstderr:\n{}",
-				outcome.exit_code,
-				outcome.stdout,
-				outcome.stderr
-			);
-			Ok(Json(serde_json::json!({
-				"requestId": request_id,
-				"output": output
-			})))
 		}
 	}
+}
+
+/// 执行命令并落审计（自动执行与审批通过两条路径共用）。
+///
+/// `auto` = true 时审计的 decision 记为 `auto`（自动执行），否则 `approved`。
+async fn execute_and_audit(
+	state: &Arc<BridgeState>,
+	client: &str,
+	target_desc: String,
+	target: crate::ai::ExecTarget,
+	is_read_only: bool,
+	auto: bool,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+	let command = target.command.clone();
+	let outcome = crate::ai::execute_command(&state.exec, target)
+		.await
+		.map_err(|error| {
+			(StatusCode::INTERNAL_SERVER_ERROR, error)
+		})?;
+
+	let decision = if auto { "auto" } else { "approved" };
+	super::audit::record_executed(
+		&state.data_dir,
+		client,
+		&target_desc,
+		&command,
+		is_read_only,
+		decision,
+		outcome.exit_code,
+		format!("{}{}", outcome.stdout, outcome.stderr),
+	);
+
+	// 返回执行结果给子进程（文本形式）
+	let output = format!(
+		"exit_code={}\nstdout:\n{}\nstderr:\n{}",
+		outcome.exit_code, outcome.stdout, outcome.stderr
+	);
+	Ok(Json(serde_json::json!({
+		"auto": auto,
+		"output": output
+	})))
 }
 
 /// 构建路由（供 mod.rs 组装 axum server）。

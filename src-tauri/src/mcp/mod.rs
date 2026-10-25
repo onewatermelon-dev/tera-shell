@@ -14,6 +14,7 @@
 pub mod approval;
 pub mod audit;
 pub mod bridge;
+pub mod policy;
 pub mod remote;
 pub mod sessions;
 pub mod target;
@@ -133,6 +134,30 @@ fn write_bridge_config(
 	std::fs::write(&path, text)
 }
 
+/// 读 settings.json 的 `mcpEnabled`：是否启用 MCP Server（缺省开）。
+///
+/// 在 `.setup` 里据此决定要不要启动 bridge。设置是前端管理的，这里直接
+/// 读盘判断（与 proxy 读取同一份 settings.json）。
+pub fn enabled_in_settings(app: &tauri::AppHandle) -> bool {
+	use tauri::Manager;
+	let data_dir = crate::data::resolve_data_dir_from(
+		&app.path().home_dir().unwrap_or_default(),
+	);
+	let path = data_dir.join("settings.json");
+	let Ok(text) = std::fs::read_to_string(&path) else {
+		// 读不到（首次启动）按缺省开处理
+		return true;
+	};
+	let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+		return true;
+	};
+	match value.get("mcpEnabled") {
+		Some(serde_json::Value::Bool(enabled)) => *enabled,
+		// 字段缺失 / 类型不对：缺省开
+		_ => true,
+	}
+}
+
 mod server;
 
 /// 前端回传 MCP 审批决定（审批卡上点「执行 / 拒绝」）。
@@ -153,4 +178,25 @@ pub fn approval_respond(
 		}
 	};
 	Ok(approvals.respond(&request_id, decision))
+}
+
+/// 重置 MCP 访问令牌：生成新 token 并持久化。
+///
+/// ⚠️ 正在运行的 bridge 仍持旧 token，**重启应用后新 token 才生效** ——
+/// 重置本身就是为了作废旧凭据，重启保证干净。返回新 token（供 UI 展示
+/// 「已重置」提示，不返回也行，这里给调用方留痕）。
+#[tauri::command(rename = "mcp_reset_token")]
+pub fn reset_token(app: tauri::AppHandle) -> Result<String, String> {
+	use tauri::Manager;
+	let data_dir = crate::data::resolve_data_dir_from(
+		&app.path().home_dir().unwrap_or_default(),
+	);
+	let fresh = token::generate();
+	token::persist(&data_dir, &fresh)
+		.map_err(|error| format!("写入新令牌失败：{error}"))?;
+	// 同时清掉 bridge 配置里的旧 token，避免重启前子进程用旧 token 连旧端口
+	let bridge_path = data_dir.join(bridge::BRIDGE_FILE);
+	let _ = std::fs::remove_file(&bridge_path);
+	tracing::info!("MCP 令牌已重置（重启应用后生效）");
+	Ok(fresh)
 }
