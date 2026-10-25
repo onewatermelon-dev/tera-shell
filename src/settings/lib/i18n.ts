@@ -356,6 +356,16 @@ const zhCN = {
     "执行中 {done}/{total}…",
   "ai.multiExec.confirm": "确认执行？",
   "ai.multiExec.run": "执行并诊断",
+  "ai.multiExec.tabMulti": "多机命令",
+  "ai.multiExec.tabRunbook": "Runbook",
+  "ai.runbook.titlePlaceholder": "Runbook 名称",
+  "ai.runbook.commandsPlaceholder":
+    "每行一条命令，按顺序执行；支持 {{参数}} 占位符（执行前填值）。示例：\nsystemctl status nginx\ntail -n 100 {{log_path}}",
+  "ai.runbook.empty":
+    "还没有 Runbook。点下方按钮新建，或从对话里的执行经验整理。",
+  "ai.runbook.new": "新建 Runbook",
+  "ai.runbook.execute": "在当前会话执行",
+  "ai.runbook.stepCount": "{count} 步",
   "ai.usage.input": "输入",
   "ai.usage.output": "输出",
   "ai.usage.cached": "缓存",
@@ -1142,6 +1152,16 @@ const enUS: Record<MessageKey, string> = {
     "Running {done}/{total}…",
   "ai.multiExec.confirm": "Confirm run?",
   "ai.multiExec.run": "Run & diagnose",
+  "ai.multiExec.tabMulti": "Multi-host",
+  "ai.multiExec.tabRunbook": "Runbook",
+  "ai.runbook.titlePlaceholder": "Runbook name",
+  "ai.runbook.commandsPlaceholder":
+    "One command per line, run in order; {{placeholders}} are prompted before run. Example:\nsystemctl status nginx\ntail -n 100 {{log_path}}",
+  "ai.runbook.empty":
+    "No runbooks yet. Create one below, or distill from past exec experience.",
+  "ai.runbook.new": "New runbook",
+  "ai.runbook.execute": "Run on current session",
+  "ai.runbook.stepCount": "{count} steps",
   "ai.usage.input": "in",
   "ai.usage.output": "out",
   "ai.usage.cached": "cached",

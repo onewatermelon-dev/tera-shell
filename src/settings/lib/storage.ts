@@ -34,7 +34,9 @@ export const DataName = {
   /** AI 改文件的变更历史（备份位置 + 原文 + 回滚标记），见 terminal/lib/ai/editHistory.ts */
   editHistory: "edit_history",
   /** 主机档案（每台主机一份 Markdown，注入 AI 上下文），见 terminal/lib/ai/hostNotes.ts */
-  hostNotes: "host_notes"
+  hostNotes: "host_notes",
+  /** Runbook 库（命名命令序列，按步执行），见 terminal/lib/ai/runbookLibrary.ts */
+  runbooks: "runbooks"
 } as const;
 
 /**

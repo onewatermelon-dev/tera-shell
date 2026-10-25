@@ -361,6 +361,7 @@ export default function AiPanel({
             onExportRunbook={exportRunbook}
           />
           <AiMultiExec
+            session={session}
             blacklist={blacklist}
             onSend={markdown => {
               // 结果表格作为用户消息进对话流，模型续一轮汇总诊断
