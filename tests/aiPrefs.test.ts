@@ -18,11 +18,13 @@ import {
 } from "@/settings/lib/storage";
 import {
   loadBlacklist,
+  loadPanelCollapsed,
   loadPanelWidth,
   loadReopenTabTop,
   loadRunFlag,
   loadSelectedModel,
   saveBlacklist,
+  savePanelCollapsed,
   savePanelWidth,
   saveReopenTabTop
 } from "@/terminal/lib/ai/aiPrefs";
@@ -143,6 +145,52 @@ describe("aiPrefs 收起浮窗位置", () => {
     put(Number.NaN);
     put(Number.POSITIVE_INFINITY);
     put("240");
+    put({});
+    put([]);
+  });
+});
+
+/**
+ * AI 面板的折叠状态。
+ *
+ * 与面板宽度同属「上次看到的样子」：收起面板是为了腾地方，重启后又
+ * 弹回来等于没收起过。缺省必须是**展开**（首次使用不该先给用户一个
+ * 藏起来的面板），脏值也一律当展开。
+ */
+describe("aiPrefs 面板折叠状态", () => {
+  it("未设置过时为展开", () => {
+    expect(loadPanelCollapsed()).toBe(false);
+  });
+
+  it("写入后能原样读回", () => {
+    savePanelCollapsed(true);
+    expect(loadPanelCollapsed()).toBe(true);
+    const persisted = JSON.parse(
+      readData(DataName.aiPrefs) ?? "{}"
+    ) as Record<string, unknown>;
+    expect(persisted.panelCollapsed).toBe(true);
+  });
+
+  it("展开也要真的存成 false（不能被 undefined 顶替）", () => {
+    savePanelCollapsed(true);
+    savePanelCollapsed(false);
+    expect(loadPanelCollapsed()).toBe(false);
+    const persisted = JSON.parse(
+      readData(DataName.aiPrefs) ?? "{}"
+    ) as Record<string, unknown>;
+    expect(persisted.panelCollapsed).toBe(false);
+  });
+
+  it("脏值一律当展开：字符串、数字、对象", () => {
+    const put = (value: unknown) => {
+      writeData(
+        DataName.aiPrefs,
+        JSON.stringify({ panelCollapsed: value })
+      );
+      expect(loadPanelCollapsed()).toBe(false);
+    };
+    put("true");
+    put(1);
     put({});
     put([]);
   });

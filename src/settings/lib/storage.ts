@@ -38,7 +38,11 @@ export const DataName = {
   /** Runbook 库（命名命令序列，按步执行），见 terminal/lib/ai/runbookLibrary.ts */
   runbooks: "runbooks",
   /** 值守巡检：每会话检查项/阈值 + 告警历史，见 watch/lib/watchStore.ts */
-  watch: "watch"
+  watch: "watch",
+  /** 启动还原：上次开着的标签与分屏，见 terminal/lib/session/terminalLayout.ts */
+  terminalLayout: "terminal_layout",
+  /** 窗口在桌面的位置与大小，见 app/lib/windowState.ts */
+  windowState: "window_state"
 } as const;
 
 /**

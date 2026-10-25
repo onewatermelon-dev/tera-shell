@@ -30,6 +30,10 @@ import type { PaneState } from "./paneGrid";
 import { waitForStableSize } from "./ptyResize";
 import { ensureShellIntegration } from "@/terminal/lib/shellIntegration/deploy";
 
+/** 打开一只会话的结果（见 `open` 的注释）。 */
+export type OpenOutcome =
+  "opened" | "password" | "failed";
+
 export function useTerminalSessions(options: {
   /** 终端实例组装（门面持有：依赖 appearance/搜索/菜单等） */
   createTerminal: (
@@ -262,20 +266,30 @@ export function useTerminalSessions(options: {
     ]
   );
 
+  /**
+   * 打开一只会话。
+   *
+   * @returns `opened` = 已启动（或本来就在跑）；`password` = 需要用户输
+   * 密码（密码框已弹出，等着用户）；`failed` = 启动失败。
+   *
+   * 为什么要三态而不是布尔：启动还原会连续开好几只，其中可能**好几只都要
+   * 密码**。密码请求是单份状态（后一个会覆盖前一个），所以调用方得知道
+   * 「这只卡在密码上了」，才能在最后把请求重新发一次、别把它弄丢。
+   */
   const open = useCallback(
     async (
       session: SavedSession,
       sourceSessionId = session.id,
       /** false 时不把新会话设为激活（拆分场景：新会话由调用方放进新窗格） */
       activate = true
-    ) => {
+    ): Promise<OpenOutcome> => {
       const current = openedRef.current.find(
         item => item.id === session.id
       );
       if (current) {
         // 已打开：切到它所在的窗格并显示（activateTab 内部会找归属）
         activateTab(session.id);
-        return;
+        return "opened";
       }
       if (session.kind === "ssh") {
         if (session.password) {
@@ -284,12 +298,13 @@ export function useTerminalSessions(options: {
               "decrypt",
               { encoded: session.password }
             );
-            await startSession(
+            return (await startSession(
               { ...session, password: plain },
               sourceSessionId,
               activate
-            );
-            return;
+            ))
+              ? "opened"
+              : "failed";
           } catch {
             /* fall through */
           }
@@ -298,13 +313,15 @@ export function useTerminalSessions(options: {
           session,
           sourceSessionId
         });
-        return;
+        return "password";
       }
-      await startSession(
+      return (await startSession(
         session,
         sourceSessionId,
         activate
-      );
+      ))
+        ? "opened"
+        : "failed";
     },
     [startSession, activateTab, openedRef]
   );

@@ -51,6 +51,8 @@ import {
   usePaneGrid,
   type PaneState
 } from "./paneGrid";
+import { applyLayout } from "./terminalRestore";
+import type { SavedLayout } from "./terminalLayout";
 import { usePtyResizeSync } from "./ptyResize";
 import {
   createTerminalInstance,
@@ -1084,6 +1086,51 @@ export function useTerminals(
     onError
   });
 
+  /**
+   * 启动还原：把上次存档的标签与分屏演回来。
+   *
+   * 逐只 `open(..., activate=false)` —— 关掉「自动进活动窗格」那条路径，
+   * 最后由 `apply` 一次性写入重建好的窗格与布局树，避免还原过程中
+   * 标签乱跳、也避免多次 setState 触发一连串 PTY 尺寸同步。
+   */
+  const restore = useCallback(
+    async (saved: SavedLayout) =>
+      applyLayout({
+        saved,
+        findSession: id =>
+          sessions.find(item => item.id === id),
+        // originId 才是来源：副本实例的 sourceSessionId 要指向原会话，
+        // 否则下一轮存档里它的来源变成自己，下次还原就丢了
+        openOne: (session, originId) =>
+          open(session, originId, false),
+        // 副本实例要另起一个名字（否则两格都叫「web-01」，
+        // 分屏后根本分不清谁是谁）
+        makeCopyName: source =>
+          nextDupName(source.name),
+        apply: (
+          nextPanes,
+          nextTree,
+          nextActive
+        ) => {
+          // 顺序要紧：先写窗格（setPanes 会同步更新 panesRef），
+          // 再写树 —— setTreeAndSync 内部按「树的叶子」对齐窗格，
+          // 它读的是 panesRef.current，颠倒顺序会把我们刚还原的
+          // 标签当成「不在树里」而清空。
+          setPanes(nextPanes);
+          setTreeAndSync(() => nextTree);
+          setActivePaneId(nextActive);
+        }
+      }),
+    [
+      sessions,
+      open,
+      nextDupName,
+      setPanes,
+      setTreeAndSync,
+      setActivePaneId
+    ]
+  );
+
   // ---- 全局监听（输出/退出事件、终端层快捷键、ResizeObserver、
   // 卸载清理），机制与搬迁理由见 useTerminalGlobalListeners ----
   useTerminalGlobalListeners({
@@ -1107,6 +1154,8 @@ export function useTerminals(
     /** 手动重连（断线后右键终端里的「重新连接」） */
     reconnect: reconnectSession,
     open,
+    /** 启动还原（见 terminalRestore.ts） */
+    restore,
     duplicate,
     activate: activateTab,
     focusTerminal,

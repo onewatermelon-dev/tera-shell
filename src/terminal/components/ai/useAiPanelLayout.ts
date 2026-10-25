@@ -9,14 +9,17 @@
  * 所以 hook 接收那两个回调，不自己碰终端。
  */
 import {
+  useCallback,
   useEffect,
   useRef,
   useState
 } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
+  loadPanelCollapsed,
   loadPanelWidth,
   loadReopenTabTop,
+  savePanelCollapsed,
   savePanelWidth,
   saveReopenTabTop
 } from "@/terminal/lib/ai/aiPrefs";
@@ -41,9 +44,25 @@ export function useAiPanelLayout(
       );
     }
   );
-  // AI 面板收起状态：收起后贴窗口右缘成浮窗按钮
-  const [aiCollapsed, setAiCollapsed] =
-    useState(false);
+  // AI 面板收起状态：收起后贴窗口右缘成浮窗按钮。
+  //
+  // 初始值取自上次的状态（ai_prefs）：用户收起面板是为了腾地方，
+  // 重启后又弹回来等于没收起过 —— 与面板宽度同一份偏好、同一个道理。
+  const [aiCollapsed, setAiCollapsedState] =
+    useState(() => loadPanelCollapsed());
+  /**
+   * 折叠状态同时落盘。
+   *
+   * 包一层而不是用 state 的 setter：只在**真的折叠/展开**时写一次，
+   * 挂载时不写（避免每次启动都往磁盘上盖一遍同样的值）。
+   */
+  const setAiCollapsed = useCallback(
+    (next: boolean) => {
+      setAiCollapsedState(next);
+      savePanelCollapsed(next);
+    },
+    []
+  );
 
   /**
    * AI 面板开合：先挂起 PTY 同步、再补一次全量 fit。

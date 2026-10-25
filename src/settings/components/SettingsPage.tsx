@@ -843,6 +843,27 @@ export default function SettingsPage({
                 />
               }
             />
+            <SettingsRow
+              title={t(
+                "settings.restoreLayout.title"
+              )}
+              description={t(
+                "settings.restoreLayout.desc"
+              )}
+              control={
+                <Toggle
+                  ariaLabel={t(
+                    "settings.restoreLayout.title"
+                  )}
+                  isSelected={
+                    settings.restoreLayout
+                  }
+                  onChange={restoreLayout =>
+                    onChange({ restoreLayout })
+                  }
+                />
+              }
+            />
           </>
         ) : section === "shortcuts" ? (
           <ShortcutSettings

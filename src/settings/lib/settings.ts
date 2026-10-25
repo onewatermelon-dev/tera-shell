@@ -162,6 +162,13 @@ export type AppSettings = {
    * 前端靠输出里的标记文本识别，不白白重连（见 reconnect.ts）。
    */
   hostKeyPolicy: HostKeyPolicy;
+  /**
+   * 启动时恢复上次的标签与分屏。
+   *
+   * 关掉就回到「只开第一个会话」的旧行为 —— 有些用户把应用当随手开一台
+   * 机器的工具，不希望每次启动都自动连上一堆服务器。
+   */
+  restoreLayout: boolean;
   /** 系统通知总开关；关掉时下面三项都不生效 */
   notifyEnabled: boolean;
   /** 长命令跑完时通知 */
@@ -299,6 +306,8 @@ export const defaultSettings: AppSettings = {
   useSshConfig: true,
   // 默认 accept-new：与此前硬编码行为一致，升级不改变连接体验
   hostKeyPolicy: "accept-new",
+  // 还原布局默认开：这是桌面终端的常识行为，关掉反而像丢了东西
+  restoreLayout: true,
   // 通知默认全关：系统通知会弹到桌面上去，属于「用户明确要求被打扰」
   // 的行为，不该由安装默认开启
   notifyEnabled: false,
@@ -432,6 +441,8 @@ export function loadSettings(): AppSettings {
       hostKeyPolicy: clampHostKeyPolicy(
         String(parsed.hostKeyPolicy ?? "")
       ),
+      restoreLayout:
+        parsed.restoreLayout !== false,
       // 通知：总开关默认关（弹到桌面上的行为不该由安装默认开启），
       // 三个分类开关默认开 —— 用户打开总开关时多半是三样都想要
       notifyEnabled:

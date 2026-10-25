@@ -33,7 +33,7 @@ const SUBDIR: &str = ".tera-shell";
 const LOCATION_FILE: &str = "location.json";
 
 /// 允许被读写的逻辑数据名。限定白名单，避免前端传任意文件名。
-const ALLOWED: [&str; 14] = [
+const ALLOWED: [&str; 16] = [
 	"sessions",
 	"groups",
 	"settings",
@@ -49,6 +49,10 @@ const ALLOWED: [&str; 14] = [
 	"runbooks",
 	// 值守巡检：每会话的检查项/阈值 + 告警历史（见 src/watch/lib/watchStore.ts）
 	"watch",
+	// 启动还原：上次开着的标签与分屏
+	"terminal_layout",
+	// 窗口在桌面的位置与大小
+	"window_state",
 ];
 
 fn ensure_name(name: &str) -> Result<(), String> {

@@ -828,6 +828,10 @@ const zhCN = {
   "settings.theme.title": "系统主题",
   "settings.theme.desc":
     "跟随系统时会随操作系统的深浅色设置自动切换。",
+  "settings.restoreLayout.title":
+    "启动时恢复标签与分屏",
+  "settings.restoreLayout.desc":
+    "重新打开应用时，恢复上次开着的标签、每个窗格显示哪一只以及分屏比例。",
   "settings.font.title": "终端字体",
   "settings.font.desc":
     "留空时使用内置字体栈；填写后作为首选，缺失时按内置列表回退。",
@@ -1740,6 +1744,10 @@ const enUS: Record<MessageKey, string> = {
   "settings.theme.title": "Theme",
   "settings.theme.desc":
     "Follow system switches automatically with the OS appearance.",
+  "settings.restoreLayout.title":
+    "Restore tabs and panes on startup",
+  "settings.restoreLayout.desc":
+    "On launch, reopen the tabs you had, which tab each pane showed, and the split ratios.",
   "settings.font.title": "Terminal font",
   "settings.font.desc":
     "Leave empty to use the built-in stack. A custom family is tried first and falls back to the built-in list.",

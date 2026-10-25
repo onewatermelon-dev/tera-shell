@@ -29,6 +29,13 @@ export type AiPrefs = {
   /** AI 面板宽度（px）。 */
   panelWidth?: number;
   /**
+   * AI 面板是否处于收起状态。
+   *
+   * 与面板宽度同一份偏好：都是「上次看到的样子」，重启后照旧。
+   * 缺省 = false（展开）—— 首次使用不该先给用户一个藏起来的面板。
+   */
+  panelCollapsed?: boolean;
+  /**
    * 收起后浮窗按钮的垂直位置（px，`top`）。
    *
    * `null`/缺省 = 不指定，按 CSS 的 `top:0;bottom:0;margin:auto` 垂直居中。
@@ -190,6 +197,23 @@ export function savePanelWidth(
   width: number
 ): void {
   writePrefs({ panelWidth: width });
+}
+
+/**
+ * 读取 AI 面板的折叠状态；未设置过时为 false（展开）。
+ *
+ * 只认 `true`：文件里被写成字符串/数字的脏值一律当「展开」——
+ * 面板开着总比莫名其妙收起来好。
+ */
+export function loadPanelCollapsed(): boolean {
+  return readPrefs().panelCollapsed === true;
+}
+
+/** 记住 AI 面板的折叠状态（用户点折叠/展开时调用）。 */
+export function savePanelCollapsed(
+  collapsed: boolean
+): void {
+  writePrefs({ panelCollapsed: collapsed });
 }
 
 /**

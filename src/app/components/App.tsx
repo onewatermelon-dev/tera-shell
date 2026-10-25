@@ -8,6 +8,10 @@ import {
   useState
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  restoreWindowState,
+  useWindowStatePersistence
+} from "@/app/lib/windowState";
 import { useSessions } from "@/sessions/lib/useSessions";
 import { useSessionGroups } from "@/sessions/lib/useSessionGroups";
 import { useTerminals } from "@/terminal/lib/session/useTerminals";
@@ -41,6 +45,11 @@ import { useTerminalSelection } from "@/app/lib/useTerminalSelection";
 import { buildHeaderActions } from "@/app/lib/headerActions";
 import { askAiFromTerminal } from "@/terminal/lib/ai/askFromTerminal";
 import { useWatch } from "@/watch/lib/useWatch";
+import {
+  layoutOf,
+  loadLayout,
+  saveLayout
+} from "@/terminal/lib/session/terminalLayout";
 import WatchDialog from "@/watch/components/WatchDialog";
 import WatchPanel from "@/watch/components/WatchPanel";
 import type { SavedSession } from "@/sessions/lib/session";
@@ -538,7 +547,99 @@ export default function App() {
     const first = sessionStore.sessions[0];
     if (first) terminals.open(first);
   };
-  const loading = useAppLoading(openFirstSession);
+  /**
+   * 布局存档是否已经「初始化完毕」。
+   *
+   * 还原**之前**不能写盘：那时的运行态是「一只都没开」或「开了一半」，
+   * 写进去就把上次的存档覆盖成空的了。用 state 而不是 ref：置为 true
+   * 会让下面的存档 effect 重新跑一次（把还原后的最终布局写下去）。
+   */
+  const [layoutReady, setLayoutReady] =
+    useState(false);
+
+  /**
+   * 开场策略：优先还原上次的标签与分屏；没有存档、或一个都没还原成功，
+   * 才回落到「开第一个会话」。
+   */
+  const restoreOrOpenFirst = () => {
+    const saved = appSettings.settings
+      .restoreLayout
+      ? loadLayout()
+      : null;
+    if (!saved) {
+      setLayoutReady(true);
+      openFirstSession();
+      return;
+    }
+    void terminals
+      .restore(saved)
+      .then(result => {
+        setLayoutReady(true);
+        if (result.restored === 0) {
+          // 存档里的会话全没了（被删了 / 都要密码）：按老规矩开第一个
+          openFirstSession();
+          return;
+        }
+        console.info(
+          `[layout] 已还原 ${result.restored} 个标签${
+            result.skipped.length
+              ? `，跳过 ${result.skipped.length} 个（会话已删除或需要密码）`
+              : ""
+          }`
+        );
+      })
+      .catch(reason => {
+        // 还原过程中出错（比如某只会话启动抛异常）：别把用户卡在
+        // 「一个标签都没有」的空状态里
+        console.warn(
+          "[layout] 还原失败，按「开第一个会话」处理",
+          reason
+        );
+        setLayoutReady(true);
+        openFirstSession();
+      });
+  };
+  const loading = useAppLoading(
+    restoreOrOpenFirst
+  );
+
+  /**
+   * 窗口在桌面的位置与大小：启动时恢复，之后移动/缩放都记着。
+   *
+   * 只对主窗口生效 —— 独立开的 SFTP / 终端窗口有自己的位置语义
+   * （贴边、临时弹出），不该被主窗口的存档覆盖。
+   */
+  useWindowStatePersistence();
+  useEffect(() => {
+    void restoreWindowState();
+  }, []);
+
+  /**
+   * 布局存档：标签/分屏一变就写盘（去抖 400ms）。
+   *
+   * 去抖是为了拖分隔条 —— 那是连续事件，每帧写一次磁盘没道理。
+   * 还原过程**不写**（layoutReady 还没置位），否则会把存档覆盖成半成品。
+   */
+  useEffect(() => {
+    if (!layoutReady) return;
+    const timer = window.setTimeout(() => {
+      saveLayout(
+        layoutOf(
+          terminals.opened,
+          terminals.panes,
+          terminals.tree,
+          terminals.activePaneId
+        )
+      );
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [
+    layoutReady,
+    terminals.opened,
+    terminals.panes,
+    terminals.tree,
+    terminals.activePaneId
+  ]);
 
   // 菜单"复制"的可用性跟随终端选区
   const hasSelection = useTerminalSelection(
