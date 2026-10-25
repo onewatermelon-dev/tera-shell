@@ -85,10 +85,10 @@
     background: var(--surface-secondary);
   }
 
-  // 助手消息是 markdown（Streamdown 渲染），排版交给它本身
-  &.is-assistant {
-    align-self: stretch;
-    padding: 0;
+  // 用户消息也走 markdown 渲染（贴代码块/表格纯文本没法看）：
+  // 排版与助手消息共用同一套（见下），气泡属性在块尾恢复
+  &.is-assistant,
+  &.is-user {
     white-space: normal;
 
     // Streamdown 给代码块/宽表格挂了 tailwind 的 overflow-x-auto、
@@ -231,6 +231,13 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+  }
+
+  // 上面的排版合并块会把 stretch/padding 抹到用户气泡上，这里恢复
+  // 用户消息的气泡形态（背景/右对齐/限宽在上方 is-user 已声明）
+  &.is-user {
+    align-self: flex-end;
+    padding: 8px 10px;
   }
 
   &.is-error {

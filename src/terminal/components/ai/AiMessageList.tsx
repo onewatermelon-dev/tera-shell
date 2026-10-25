@@ -341,7 +341,9 @@ export function AiMessageList({
                   ))}
                 </span>
               ) : null}
-              {entry.text}
+              {/* 用户消息同样走 markdown 渲染：贴代码块、表格时
+                  纯文本 pre-wrap 排版没法看 */}
+              <AiMarkdown text={entry.text} />
             </div>
             <ChatMessageActions
               text={entry.text}

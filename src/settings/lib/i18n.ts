@@ -345,6 +345,17 @@ const zhCN = {
   "ai.hostNotes.saved": "已保存",
   "ai.hostNotes.placeholder":
     "沉淀这台机器的备忘，AI 每次对话都会带上（截断注入前 800 字）：\n\n## 角色\n生产 / 测试\n\n## 入口\nssh 端口、跳板、Web 地址\n\n## 关键路径\nnginx: /etc/nginx/conf.d\n应用: /srv/app\n\n## 已知坑\n重启前先停 worker…\n\n## 常用命令",
+  "ai.multiExec": "多机执行",
+  "ai.multiExec.noSessions": "还没有 SSH 会话",
+  "ai.multiExec.noTargets":
+    "选中的会话都无法构造连接目标（密码解密失败或未配置）",
+  "ai.multiExec.placeholder":
+    "要在所选主机上执行的命令，如：df -h / && uptime",
+  "ai.multiExec.selected": "台已选",
+  "ai.multiExec.progress":
+    "执行中 {done}/{total}…",
+  "ai.multiExec.confirm": "确认执行？",
+  "ai.multiExec.run": "执行并诊断",
   "ai.usage.input": "输入",
   "ai.usage.output": "输出",
   "ai.usage.cached": "缓存",
@@ -1119,6 +1130,18 @@ const enUS: Record<MessageKey, string> = {
   "ai.hostNotes.saved": "Saved",
   "ai.hostNotes.placeholder":
     "Notes about this machine, fed to every AI request (first 800 chars):\n\n## Role\nProduction / staging\n\n## Access\nSSH port, jump host, web URL\n\n## Key paths\nnginx: /etc/nginx/conf.d\napp: /srv/app\n\n## Gotchas\nStop workers before restart…\n\n## Common commands",
+  "ai.multiExec": "Multi-host exec",
+  "ai.multiExec.noSessions":
+    "No SSH sessions yet",
+  "ai.multiExec.noTargets":
+    "Selected sessions have no usable connection target (decrypt failed or not configured)",
+  "ai.multiExec.placeholder":
+    "Command to run on the selected hosts, e.g. df -h / && uptime",
+  "ai.multiExec.selected": "selected",
+  "ai.multiExec.progress":
+    "Running {done}/{total}…",
+  "ai.multiExec.confirm": "Confirm run?",
+  "ai.multiExec.run": "Run & diagnose",
   "ai.usage.input": "in",
   "ai.usage.output": "out",
   "ai.usage.cached": "cached",

@@ -36,6 +36,7 @@ import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 import { attachStreamdownExport } from "@/terminal/lib/streamdownExport";
 import { AiMessageList } from "./AiMessageList";
 import { AiHistoryMenu } from "./AiHistoryMenu";
+import { AiMultiExec } from "./AiMultiExec";
 import { AiHostNotes } from "./AiHostNotes";
 import {
   canRollback,
@@ -358,6 +359,14 @@ export default function AiPanel({
             }}
             renameCurrent={renameCurrent}
             onExportRunbook={exportRunbook}
+          />
+          <AiMultiExec
+            blacklist={blacklist}
+            onSend={markdown => {
+              // 结果表格作为用户消息进对话流，模型续一轮汇总诊断
+              atBottomRef.current = true;
+              void send(markdown, selected);
+            }}
           />
           <AiHostNotes session={session} />
           <button
