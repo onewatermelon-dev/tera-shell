@@ -28,6 +28,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerConfig {
+	/// server 名。Claude Desktop 风格里名字在 mcpServers 的**键**上、
+	/// 条目本身没有该字段 —— 必须 default，摊平后由代码赋值
+	#[serde(default)]
 	pub name: String,
 	/// stdio 模式的启动命令（如 `npx` / `node` / 绝对路径）。
 	#[serde(default)]
@@ -41,12 +44,58 @@ pub struct McpServerConfig {
 }
 
 /// 读取外部 MCP server 配置列表；缺失 / 损坏返回空。
+///
+/// 兼容两种写法：
+/// A. 裸数组 `[{ "name": "fs", "command": "npx", ... }, ...]`（自有格式）；
+/// B. Claude Desktop 风格 `[{"mcpServers": {"名": {command, args}}}, ...]`
+///    （用户从别的工具粘贴过来最常见）—— 摊平包裹层，键名即 server 名。
 pub fn load_servers(data_dir: &Path) -> Vec<McpServerConfig> {
 	let path = data_dir.join("mcp_servers.json");
 	let Ok(text) = std::fs::read_to_string(&path) else {
 		return Vec::new();
 	};
-	serde_json::from_str(&text).unwrap_or_default()
+	let value: serde_json::Value =
+		match serde_json::from_str(&text) {
+			Ok(value) => value,
+			Err(_) => return Vec::new(),
+		};
+	let items = match value {
+		serde_json::Value::Array(items) => items,
+		serde_json::Value::Object(_) => vec![value],
+		_ => return Vec::new(),
+	};
+	let mut out = Vec::new();
+	for item in items {
+		let serde_json::Value::Object(map) = item else {
+			continue;
+		};
+		if map.contains_key("mcpServers") {
+			// B：摊平包裹层
+			if let Some(serde_json::Value::Object(servers)) =
+				map.get("mcpServers")
+			{
+				for (name, config) in servers {
+					if let Ok(mut parsed) =
+						serde_json::from_value::<
+							McpServerConfig,
+						>(config.clone())
+					{
+						parsed.name = name.clone();
+						out.push(parsed);
+					}
+				}
+			}
+			continue;
+		}
+		// A：直接一项一 server
+		if let Ok(config) = serde_json::from_value::<
+			McpServerConfig,
+		>(serde_json::Value::Object(map))
+		{
+			out.push(config);
+		}
+	}
+	out
 }
 
 /// 一个工具在 AI 面板侧的描述（name 已加 `mcp__<server>__` 前缀）。
@@ -200,24 +249,13 @@ pub struct ConnectionTest {
 
 /// 检测单个外部 server 的连通性：连接 + 列工具。
 ///
+/// 直接接收解析好的配置（前端从接入文本框摊平而来）—— 不查落盘文件，
+/// 未保存的草稿也能测，也不存在「先写盘再读」的落盘竞态。
+///
 /// 返回结构化结果（不抛错），供设置页「检测」按钮展示。
 pub async fn test_connection(
-	data_dir: &Path,
-	server_name: &str,
+	server: &McpServerConfig,
 ) -> ConnectionTest {
-	let servers = load_servers(data_dir);
-	let Some(server) = servers
-		.iter()
-		.find(|server| server.name == server_name)
-	else {
-		return ConnectionTest {
-			name: server_name.to_string(),
-			ok: false,
-			error: Some(format!("未找到 server「{server_name}」")),
-			tool_count: 0,
-		};
-	};
-
 	match connect(server).await {
 		Ok(peer) => match peer.list_all_tools().await {
 			Ok(tools) => ConnectionTest {
@@ -262,10 +300,19 @@ pub async fn call_tool(
 	let peer = connect(&server).await?;
 	let params = rmcp::model::CallToolRequestParams::new(tool_name.to_string())
 		.with_arguments(arguments);
-	let result = peer
-		.call_tool(params)
-		.await
-		.map_err(|error| format!("调用工具失败：{error}"))?;
+	// 超时上限：长任务工具（everything 的 trigger-long-running-operation）
+	// 会持续发 progress 通知，个别 server/工具组合下最终响应迟迟不落；
+	// 没有上限时前端永远「执行中」。120 秒足够任何合理长任务。
+	// ponytail: 固定 120s，出现按工具配置时长的需求再引入 per-tool 超时
+	let result = tokio::time::timeout(
+		std::time::Duration::from_secs(120),
+		peer.call_tool(params),
+	)
+	.await
+	.map_err(|_| {
+		format!("外部工具调用超时（120 秒）：{tool_name}")
+	})?
+	.map_err(|error| format!("调用工具失败：{error}"))?;
 
 	// 提取文本内容
 	let mut text = String::new();

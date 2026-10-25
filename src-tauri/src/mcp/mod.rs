@@ -255,15 +255,13 @@ pub async fn client_list_all_tools(
 
 /// 检测某个外部 MCP server 的连通性（连接 + 列工具）。
 ///
+/// 接收**完整配置**（前端从接入文本框解析摊平而来）—— 不查落盘文件，
+/// 未保存的草稿也能测，也不存在「先写盘再读」的落盘竞态。
+///
 /// 返回结构化结果（ok/error/toolCount），供设置页「检测」按钮展示。
 #[tauri::command(rename = "mcp_client_test_connection")]
 pub async fn client_test_connection(
-	app: tauri::AppHandle,
-	server: String,
+	config: client::McpServerConfig,
 ) -> Result<client::ConnectionTest, String> {
-	use tauri::Manager;
-	let data_dir = crate::data::resolve_data_dir_from(
-		&app.path().home_dir().unwrap_or_default(),
-	);
-	Ok(client::test_connection(&data_dir, &server).await)
+	Ok(client::test_connection(&config).await)
 }

@@ -956,6 +956,10 @@ const zhCN = {
   "settings.mcp.clientDesc":
     "让内置 AI 面板调用外部 MCP 工具。JSON 数组，每项 { name, command, args }（stdio）或 { name, url }（HTTP）。",
   "settings.mcp.saveServers": "保存",
+  "settings.mcp.invalidJson":
+    "配置不是有效的 JSON，请检查后重试",
+  "settings.mcp.noServers":
+    '没有找到 server 条目：支持裸数组 [{name,…}] 或 Claude Desktop 风格 [{"mcpServers":{…}}]',
   "settings.mcp.test": "检测连通性",
   "settings.mcp.testing": "检测中…",
   "settings.mcp.testOk":
@@ -1932,6 +1936,10 @@ const enUS: Record<MessageKey, string> = {
   "settings.mcp.clientDesc":
     "Let the built-in AI panel call external MCP tools. JSON array of { name, command, args } (stdio) or { name, url } (HTTP).",
   "settings.mcp.saveServers": "Save",
+  "settings.mcp.invalidJson":
+    "Config is not valid JSON; fix it and retry",
+  "settings.mcp.noServers":
+    'No server entries found: supports [{name,…}] or Claude Desktop style [{"mcpServers":{…}}]',
   "settings.mcp.test": "Test connection",
   "settings.mcp.testing": "Testing…",
   "settings.mcp.testOk":

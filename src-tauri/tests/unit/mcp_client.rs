@@ -62,3 +62,25 @@ fn load_servers_missing_file_empty() {
 	let _ = fs::remove_dir_all(&dir);
 	assert!(load_servers(&dir).is_empty());
 }
+
+/// Claude Desktop 风格（名字在 mcpServers 键上、条目无 name 字段）必须
+/// 摊平成功 —— name 必填时反序列化会在赋名前静默失败，注入 0 个工具
+#[test]
+fn load_servers_flattens_claude_desktop_style() {
+	let dir = std::env::temp_dir().join(format!(
+		"tera-mcp-client-claude-{}",
+		std::process::id()
+	));
+	let _ = fs::remove_dir_all(&dir);
+	fs::create_dir_all(&dir).unwrap();
+	fs::write(
+		dir.join("mcp_servers.json"),
+		r#"[{"mcpServers":{"everything":{"command":"npx","args":["-y","@modelcontextprotocol/server-everything"]}}}]"#,
+	)
+	.unwrap();
+	let servers = load_servers(&dir);
+	assert_eq!(servers.len(), 1, "Claude 风格要摊平出一台");
+	assert_eq!(servers[0].name, "everything", "名字取 mcpServers 的键");
+	assert_eq!(servers[0].command.as_deref(), Some("npx"));
+	let _ = fs::remove_dir_all(&dir);
+}

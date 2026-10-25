@@ -9,6 +9,7 @@ import {
   readData,
   writeData
 } from "@/settings/lib/storage";
+import { invalidateExternalToolsCache } from "@/terminal/lib/ai/mcpTools";
 import type { AppSettings } from "@/settings/lib/settings";
 
 type McpSectionProps = {
@@ -89,60 +90,132 @@ export default function McpSection({
   >([]);
   const [testing, setTesting] = useState(false);
 
-  /** 保存外部 server 配置（校验 JSON 数组后写盘）。 */
+  /** 保存外部 server 配置（JSON 有效即写盘；格式问题由检测结果反馈）。 */
   function saveServers() {
+    let parsed: unknown;
     try {
-      const parsed: unknown =
-        JSON.parse(serversText);
-      if (!Array.isArray(parsed)) {
-        console.warn(
-          "[mcp] 外部 server 配置必须是数组"
-        );
-        return;
-      }
-      writeData(
-        DataName.mcpServers,
-        JSON.stringify(parsed)
-      );
-      setServersSaved(true);
-      setTimeout(
-        () => setServersSaved(false),
-        1500
-      );
-    } catch (reason) {
-      console.warn(
-        "[mcp] 外部 server 配置 JSON 无效",
-        reason
-      );
+      parsed = JSON.parse(serversText);
+    } catch {
+      setTestResults([
+        {
+          name: "-",
+          ok: false,
+          error: t("settings.mcp.invalidJson"),
+          toolCount: 0
+        }
+      ]);
+      return;
     }
+    // 单对象（如 {"mcpServers":{…}} 或单个 server）也放行：
+    // 后端 load_servers 会归一化，这里只挡 JSON 层面的错误
+    if (
+      typeof parsed !== "object" ||
+      parsed === null
+    ) {
+      setTestResults([
+        {
+          name: "-",
+          ok: false,
+          error: t("settings.mcp.noServers"),
+          toolCount: 0
+        }
+      ]);
+      return;
+    }
+    writeData(
+      DataName.mcpServers,
+      JSON.stringify(parsed)
+    );
+    // 配置变了，AI 面板的工具清单缓存作废（下一轮对话重新拉取）
+    invalidateExternalToolsCache();
+    setTestResults([]);
+    setServersSaved(true);
+    setTimeout(
+      () => setServersSaved(false),
+      1500
+    );
   }
 
   /** 检测所有配置的外部 server 连通性。 */
   async function testServers() {
-    let names: string[];
+    // 兼容两种写法：裸数组 [{name,...}] 与 Claude Desktop 风格
+    // [{"mcpServers": {名: {...}}}]（用户从别的工具粘贴最常见）。
+    // 解析出**完整条目**直接传给后端检测 —— 不查落盘文件，
+    // 未保存的草稿也能测，也不存在「先保存再检测」的竞态
+    type ServerEntry = {
+      name: string;
+      command?: string;
+      args?: string[];
+      url?: string;
+    };
+    let entries: ServerEntry[];
     try {
       const parsed: unknown =
         JSON.parse(serversText);
-      if (!Array.isArray(parsed)) return;
-      names = parsed
-        .map(item =>
-          typeof item === "object" &&
-          item !== null
-            ? String(
-                (item as { name?: unknown })
-                  .name ?? ""
-              )
-            : ""
+      const items = Array.isArray(parsed)
+        ? parsed
+        : [parsed];
+      entries = [];
+      for (const item of items) {
+        if (
+          typeof item !== "object" ||
+          item === null
         )
-        .filter(Boolean);
+          continue;
+        const servers = (
+          item as {
+            mcpServers?: Record<string, unknown>;
+          }
+        ).mcpServers;
+        if (
+          servers &&
+          typeof servers === "object"
+        ) {
+          for (const [
+            name,
+            config
+          ] of Object.entries(servers)) {
+            entries.push({
+              name,
+              ...(typeof config === "object" &&
+              config !== null
+                ? config
+                : {})
+            } as ServerEntry);
+          }
+          continue;
+        }
+        const name = (item as { name?: unknown })
+          .name;
+        if (typeof name === "string" && name)
+          entries.push(item as ServerEntry);
+      }
     } catch {
+      setTestResults([
+        {
+          name: "-",
+          ok: false,
+          error: t("settings.mcp.invalidJson"),
+          toolCount: 0
+        }
+      ]);
       return;
     }
-    if (names.length === 0) return;
+    if (entries.length === 0) {
+      setTestResults([
+        {
+          name: "-",
+          ok: false,
+          error: t("settings.mcp.noServers"),
+          toolCount: 0
+        }
+      ]);
+      return;
+    }
     setTesting(true);
     setTestResults([]);
     const results = [];
-    for (const name of names) {
+    for (const config of entries) {
       try {
         const result = await invoke<{
           name: string;
@@ -150,12 +223,12 @@ export default function McpSection({
           error: string | null;
           toolCount: number;
         }>("mcp_client_test_connection", {
-          server: name
+          config
         });
         results.push(result);
       } catch (reason) {
         results.push({
-          name,
+          name: config.name,
           ok: false,
           error: String(reason),
           toolCount: 0
@@ -243,6 +316,22 @@ export default function McpSection({
           }
         />
       </SettingsRow>
+      {/* 访问令牌放接入配置上面：外部工具接入时先看 token 再拿配置 */}
+      <SettingsRow
+        title={t("settings.mcp.resetTitle")}
+        description={t("settings.mcp.resetDesc")}
+        control={
+          <Button
+            variant="tertiary"
+            size="sm"
+            onPress={() => void resetToken()}
+          >
+            {copied === "reset"
+              ? t("settings.mcp.resetDone")
+              : t("settings.mcp.reset")}
+          </Button>
+        }
+      />
       <SettingsRow
         title={t("settings.mcp.configTitle")}
         description={t("settings.mcp.configDesc")}
@@ -267,21 +356,6 @@ export default function McpSection({
           {MCP_CONFIG_TEMPLATE}
         </pre>
       </SettingsRow>
-      <SettingsRow
-        title={t("settings.mcp.resetTitle")}
-        description={t("settings.mcp.resetDesc")}
-        control={
-          <Button
-            variant="tertiary"
-            size="sm"
-            onPress={() => void resetToken()}
-          >
-            {copied === "reset"
-              ? t("settings.mcp.resetDone")
-              : t("settings.mcp.reset")}
-          </Button>
-        }
-      />
       <SettingsRow
         title={t("settings.mcp.clientTitle")}
         description={t("settings.mcp.clientDesc")}

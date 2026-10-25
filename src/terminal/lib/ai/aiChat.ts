@@ -15,6 +15,7 @@
  */
 import {
   logError,
+  logInfo,
   logWarn
 } from "@/shared/lib/log";
 import {
@@ -1693,11 +1694,14 @@ export function useAiChat(
       } finally {
         // if/else 而非 early return：return 写在 finally 里会吞异常
         if (ownsRound(round, roundRef.current)) {
+          logInfo(
+            `[ai] skip 收尾：复位 busy（第 ${round} 轮）`
+          );
           setBusy(false);
           setStream(null);
           streamIdRef.current = null;
         } else {
-          console.info(
+          logWarn(
             `[ai] skip 收尾跳过（第 ${round} 轮已被第 ${roundRef.current} 轮接管）`
           );
         }
