@@ -39,6 +39,11 @@ import { useAppDialogs } from "@/app/lib/useAppDialogs";
 import { useAppLoading } from "@/app/lib/useAppLoading";
 import { useTerminalSelection } from "@/app/lib/useTerminalSelection";
 import { buildHeaderActions } from "@/app/lib/headerActions";
+import { askAiFromTerminal } from "@/terminal/lib/ai/askFromTerminal";
+import { useWatch } from "@/watch/lib/useWatch";
+import WatchDialog from "@/watch/components/WatchDialog";
+import WatchPanel from "@/watch/components/WatchPanel";
+import type { SavedSession } from "@/sessions/lib/session";
 import "@xterm/xterm/css/xterm.css";
 import "@/styles/app.scss";
 import "@/styles/main.css";
@@ -81,6 +86,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] =
     useState(false);
   const [macroOpen, setMacroOpen] =
+    useState(false);
+  /** 正在配置值守巡检的会话；null = 弹窗关闭 */
+  const [watchSession, setWatchSession] =
+    useState<SavedSession | null>(null);
+  /** 右侧值守面板（状态 / 班报）是否展开 */
+  const [watchOpen, setWatchOpen] =
     useState(false);
   // 编辑中的宏；为 null 表示本次弹窗是「新增」
   const [editingMacro, setEditingMacro] =
@@ -150,6 +161,19 @@ export default function App() {
   const notifications = useNotifications(
     appSettings.settings
   );
+
+  /**
+   * 值守巡检：心跳由后端发，采样复用 AI 的 exec 通道，
+   * 判定是纯函数，通知走上面那套开关与焦点判定。
+   *
+   * 放在 App 层是因为它**与会话是否打开无关** —— 值守盯的是已保存的
+   * 服务器，不是「用户正开着的标签」。
+   */
+  const watch = useWatch({
+    sessions: sessionStore.sessions,
+    notify: notifications.notifyWatch,
+    onError: setError
+  });
 
   const terminals = useTerminals(
     // 已关闭/已断开的会话上迟到的 write/resize 只会得到这个错误，
@@ -249,6 +273,51 @@ export default function App() {
         );
         setError(String(reason));
       });
+  }
+
+  /**
+   * 值守 → AI 归因：把打包好的现场送进 AI 面板。
+   *
+   * AI 面板挂在**当前活动终端**上，而被巡检的会话未必开着，所以分两条路：
+   * 1. 已有面板在听 → 直接发；
+   * 2. 没有 → 先把该会话的终端打开（会挂上 AiPanel），再重试补发 ——
+   *    面板挂载是下一帧的事，`askAiFromTerminal` 此刻必然没人接。
+   *
+   * 重试封顶 ~1.5 秒：密码框/密钥认证的会话可能要更久才把面板挂上，
+   * 但无限等下去只会让用户点了按钮之后毫无反馈，不如早点放弃并提示。
+   *
+   * @returns false = 彻底发不出去（本地会话 / 会话找不到），调用方据此提示
+   */
+  function askAiFromWatch(
+    text: string,
+    sessionId: string
+  ): boolean {
+    if (askAiFromTerminal("diagnose", text))
+      return true;
+    const session = sessionStore.sessions.find(
+      item => item.id === sessionId
+    );
+    if (!session || session.kind !== "ssh")
+      return false;
+    console.info(
+      `[watch] AI 面板未就绪，先打开会话终端：${sessionId}`
+    );
+    terminals.open(session);
+    let tries = 0;
+    const retry = () => {
+      if (askAiFromTerminal("diagnose", text))
+        return;
+      tries += 1;
+      if (tries > 30) {
+        logWarn(
+          "[watch] AI 面板迟迟未就绪，归因请求已放弃"
+        );
+        return;
+      }
+      window.setTimeout(retry, 50);
+    };
+    window.setTimeout(retry, 50);
+    return true;
   }
 
   /**
@@ -530,6 +599,10 @@ export default function App() {
         onToggleSidebarMode={toggleSidebarMode}
         statusMode={statusMode}
         onToggleStatus={toggleStatusMode}
+        watchOpen={watchOpen}
+        onToggleWatch={() =>
+          setWatchOpen(open => !open)
+        }
         hideMenus={settingsOpen}
         onMenuClosed={() =>
           refocusAfterAction(refocusActive)
@@ -565,6 +638,7 @@ export default function App() {
             onRemoveGroup={
               dialogs.setGroupToRemove
             }
+            onWatch={setWatchSession}
             onCreateInGroup={
               dialogs.openCreateInGroup
             }
@@ -662,6 +736,18 @@ export default function App() {
             terminals.setPtyResizePaused
           }
         />
+        {/* 值守面板：右侧覆盖层（不挤压终端网格，见 _watch.scss 注释）。
+            放在 SettingsPage 之前 —— 设置页 z-index 更高，打开时把它盖住。 */}
+        {watchOpen && (
+          <WatchPanel
+            sessions={sessionStore.sessions}
+            watch={watch}
+            onClose={() => setWatchOpen(false)}
+            onConfigure={setWatchSession}
+            onAskAi={askAiFromWatch}
+            onError={setError}
+          />
+        )}
         {/* 设置页盖在工作区之上（绝对定位），而不是替换它的内容 ——
             替换会让 TerminalWorkspace 卸载，xterm 的 DOM 随之被移除，
             回来时终端就空了。 */}
@@ -734,6 +820,21 @@ export default function App() {
           }
           onConfirm={terminals.confirmPaste}
           onCancel={terminals.cancelPaste}
+        />
+      )}
+
+      {/* 值守配置弹窗同样挂根层：终端工作区有 overflow:hidden 与自己的
+          层叠上下文，弹层放里面会被裁剪或压在终端下面。
+          只在需要时挂载并带 key：换会话即重挂，省掉「props 变了重置
+          表单状态」那类 effect。 */}
+      {watchSession && (
+        <WatchDialog
+          key={watchSession.id}
+          session={watchSession}
+          onClose={() => setWatchSession(null)}
+          onSaved={watch.reload}
+          onAskAi={askAiFromWatch}
+          onDeleteAlert={watch.removeAlert}
         />
       )}
     </main>

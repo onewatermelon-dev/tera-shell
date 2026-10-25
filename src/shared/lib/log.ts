@@ -5,6 +5,11 @@
  * 既带不出来、也早被关窗清掉了 —— 诊断包里过去只有 Rust 侧日志。这里
  * 把前端日志按级别转发给后端（`frontend_log` 命令），进同一份文件。
  *
+ * 两条通路都会落盘（见 `installConsoleBridge`）：
+ * - `logInfo/logWarn/logError` —— 明确知道级别的业务日志；
+ * - **裸 `console.log/info/debug/warn/error`** —— 早期代码和排查现场
+ *   大量直接用的就是 console，只转发助手等于漏掉一半现场。
+ *
  * 三条硬约束：
  * 1. **绝不因为日志本身失败而影响业务**：调用是 fire-and-forget，
  *    落盘失败只留 console。
@@ -14,7 +19,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 
-type Level = "info" | "warn" | "error";
+type Level = "debug" | "info" | "warn" | "error";
 
 /** 同一条消息在这个窗口内只落盘一次（渲染循环去重的关键） */
 const DEDUPE_MS = 2000;
@@ -108,18 +113,90 @@ function emit(
   message: string,
   detail: unknown[]
 ): void {
-  // console 保留：开发者体验照旧，只是多了一份可导出的副本
-  if (level === "error")
-    console.error(message, ...detail);
-  else if (level === "warn")
-    console.warn(message, ...detail);
-  else console.info(message, ...detail);
+  // console 保留：开发者体验照旧，只是多了一份可导出的副本。
+  // helperDepth 让桥接层知道「这条是助手转发的」，避免同一个事件落盘两份。
+  helperDepth += 1;
+  try {
+    console[level](message, ...detail);
+  } finally {
+    helperDepth -= 1;
+  }
+  forward(level, [message, ...detail]);
+}
 
-  const text =
-    detail.length > 0
-      ? `${message} ${detail.map(stringify).join(" ")}`
-      : message;
+/** 单条日志落盘的最大字符数：对象被 JSON 化后可能很长，截断即可。 */
+const MAX_LINE = 2000;
+
+/** 把一组 console 参数转发到后端（去重 + 限流后）。 */
+function forward(
+  level: Level,
+  args: unknown[]
+): void {
+  const text = args
+    .map(stringify)
+    .join(" ")
+    .trim()
+    .slice(0, MAX_LINE);
+  if (!text) return;
   if (shouldSend(text)) void send(level, text);
+}
+
+/** 由 `log*` 助手触发的 console 调用深度；桥接层据此跳过重复转发。 */
+let helperDepth = 0;
+
+/**
+ * 桥接标记挂在 `globalThis` 而不是模块变量上。
+ *
+ * ⚠️ 模块变量在 **HMR / 模块重载**后会重置，于是 console 被包第二层 ——
+ * 之后每条 console 都会被转发两遍（日志里每个错误出现两次，极易误判成
+ * 「错误发生了两次」）。挂全局标记后，无论模块重载几次都只装一层。
+ */
+const BRIDGE_FLAG = "__teraConsoleBridged";
+
+/**
+ * 把 `console.*` 整体接到日志文件（`main.tsx` 启动时调一次）。
+ *
+ * ## 为什么要 patch console 而不是只用 log* 助手
+ *
+ * 项目里大量排查现场是直接 `console.debug(...)` 写的（心跳、通知判定、
+ * 粘贴拦截、窗格同步）。这些恰恰是出事时最想看的东西，却从来进不了
+ * 诊断包。补一层桥接，比回头把上千处调用改成 `logDebug` 现实得多。
+ *
+ * ## 三个必须防的坑
+ *
+ * - **重复落盘**：助手内部也走 console，桥接层要靠 `helperDepth` 让路；
+ * - **递归**：`send` 失败时只在 catch 里静默，绝不回头再打 console；
+ * - **刷屏**：沿用同一套去重 + 每秒 40 条的预算，渲染循环打不爆日志。
+ */
+export function installConsoleBridge(): void {
+  const holder = globalThis as {
+    [BRIDGE_FLAG]?: boolean;
+  };
+  if (holder[BRIDGE_FLAG]) return;
+  holder[BRIDGE_FLAG] = true;
+  // console.log 也要接（大量排查现场用的是它），归到 info 级别
+  const methods: {
+    method:
+      "debug" | "log" | "info" | "warn" | "error";
+    level: Level;
+  }[] = [
+    { method: "debug", level: "debug" },
+    { method: "log", level: "info" },
+    { method: "info", level: "info" },
+    { method: "warn", level: "warn" },
+    { method: "error", level: "error" }
+  ];
+  for (const { method, level } of methods) {
+    const original =
+      console[method].bind(console);
+    console[method] = (...args: unknown[]) => {
+      original(...args);
+      // 助手已经转发过这一条了
+      if (helperDepth > 0) return;
+      forward(level, args);
+    };
+  }
+  logInfo("[log] 控制台输出已接入日志文件");
 }
 
 /** 普通信息（生命周期、关键动作）。 */
@@ -154,6 +231,8 @@ export function logError(
  * - Promise 未处理的 rejection（`void invoke(...)` 漏了 catch）
  */
 export function installGlobalErrorLogging(): void {
+  // 先接 console：确保后面任何一处报错（包括桥接自身）都有机会落盘
+  installConsoleBridge();
   window.addEventListener("error", event => {
     logError(
       "[window.error]",

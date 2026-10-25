@@ -36,7 +36,9 @@ export const DataName = {
   /** 主机档案（每台主机一份 Markdown，注入 AI 上下文），见 terminal/lib/ai/hostNotes.ts */
   hostNotes: "host_notes",
   /** Runbook 库（命名命令序列，按步执行），见 terminal/lib/ai/runbookLibrary.ts */
-  runbooks: "runbooks"
+  runbooks: "runbooks",
+  /** 值守巡检：每会话检查项/阈值 + 告警历史，见 watch/lib/watchStore.ts */
+  watch: "watch"
 } as const;
 
 /**

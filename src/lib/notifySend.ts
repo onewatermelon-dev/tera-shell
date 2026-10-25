@@ -143,7 +143,9 @@ export async function notify(
       ? settings.notifyCommand
       : payload.kind === "ai"
         ? settings.notifyAi
-        : settings.notifyTransfer;
+        : payload.kind === "watch"
+          ? settings.notifyWatch
+          : settings.notifyTransfer;
   const isFocused = await isWindowFocused();
   // ⚠️ 只构造**一份**判定数据，日志与判定都用它。
   // 曾写成「日志打criteria、判定打另一份（focused 还会取反）」，
@@ -251,6 +253,33 @@ export function transferNotification(
   return {
     kind: "transfer",
     title: succeeded ? "传输完成" : "传输失败",
+    body: summary
+  };
+}
+
+/**
+ * 值守巡检的通知内容。
+ *
+ * 标题按「告警 / 已恢复」分开，是为了让人**在通知中心里一眼扫过去**就
+ * 知道当前是变坏还是变好 —— 一晚上十几条通知，标题长得一样等于没有标题。
+ *
+ * @param summary 已由 `describeEvent` 拼好的正文（会话名 + 指标 + 阈值）
+ * @param level 告警还是恢复
+ * @param repeat 冷却后的重复提醒（「仍未恢复」）
+ */
+export function watchNotification(
+  summary: string,
+  level: "alert" | "recover",
+  repeat = false
+): NotifyPayload {
+  return {
+    kind: "watch",
+    title:
+      level === "recover"
+        ? "值守 · 已恢复"
+        : repeat
+          ? "值守 · 仍未恢复"
+          : "值守 · 告警",
     body: summary
   };
 }

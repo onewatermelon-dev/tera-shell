@@ -6,6 +6,7 @@
  */
 
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -100,5 +101,96 @@ describe("level 映射", () => {
       call => call[1]?.level
     );
     expect(levels).toEqual(["warn", "info"]);
+  });
+});
+
+/**
+ * console 桥接：裸 `console.*` 也要落盘。
+ *
+ * 这是「终端/控制台里看到的东西都能在日志里找到」的前端一半 ——
+ * 项目里大量排查现场直接写的是 `console.debug(...)`，如果不接管，
+ * 出事时最想看的那批线索永远进不了诊断包。
+ */
+describe("console 桥接", () => {
+  const originals = {
+    log: console.log,
+    info: console.info,
+    debug: console.debug,
+    warn: console.warn,
+    error: console.error
+  };
+
+  /** 某条消息落盘了几次。 */
+  function countOf(needle: string): number {
+    return invoke.mock.calls.filter(call =>
+      String(call[1]?.message ?? "").includes(
+        needle
+      )
+    ).length;
+  }
+
+  afterEach(() => {
+    // 桥接是全局副作用：不还原会污染同进程里的其它测试文件
+    Object.assign(console, originals);
+    delete (
+      globalThis as {
+        __teraConsoleBridged?: boolean;
+      }
+    ).__teraConsoleBridged;
+  });
+
+  it("裸 console.info 会落盘", async () => {
+    const { installConsoleBridge } =
+      await freshLog();
+    installConsoleBridge();
+    console.info("[桥接] 裸 console 探针 A");
+    expect(
+      countOf("[桥接] 裸 console 探针 A")
+    ).toBe(1);
+  });
+
+  it("console.debug 以 debug 级别落盘（前端默认放行 debug）", async () => {
+    const { installConsoleBridge } =
+      await freshLog();
+    installConsoleBridge();
+    console.debug("[桥接] 裸 console 探针 B");
+    const hit = invoke.mock.calls.find(call =>
+      String(call[1]?.message ?? "").includes(
+        "[桥接] 裸 console 探针 B"
+      )
+    );
+    expect(hit?.[1]?.level).toBe("debug");
+  });
+
+  it("console.log 归到 info（大量现场用的是它）", async () => {
+    const { installConsoleBridge } =
+      await freshLog();
+    installConsoleBridge();
+    console.log("[桥接] 裸 console 探针 C");
+    const hit = invoke.mock.calls.find(call =>
+      String(call[1]?.message ?? "").includes(
+        "[桥接] 裸 console 探针 C"
+      )
+    );
+    expect(hit?.[1]?.level).toBe("info");
+  });
+
+  it("助手不重复落盘：logError 只写一条", async () => {
+    const { installConsoleBridge, logError } =
+      await freshLog();
+    installConsoleBridge();
+    logError("[桥接] 助手探针 D");
+    expect(countOf("[桥接] 助手探针 D")).toBe(1);
+  });
+
+  it("重复安装不会叠加转发（HMR 重载同理）", async () => {
+    const { installConsoleBridge } =
+      await freshLog();
+    installConsoleBridge();
+    installConsoleBridge();
+    console.info("[桥接] 裸 console 探针 E");
+    expect(
+      countOf("[桥接] 裸 console 探针 E")
+    ).toBe(1);
   });
 });

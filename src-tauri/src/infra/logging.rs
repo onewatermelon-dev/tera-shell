@@ -9,7 +9,10 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use chrono::Local;
@@ -23,13 +26,22 @@ use tracing_subscriber::{
 /// 单个日志文件最多容纳的记录条数，超出后滚动到新文件。
 const MAX_RECORDS_PER_FILE: u64 = 9999;
 
+/// 默认日志级别。
+///
+/// `frontend=debug` 是刻意加的：前端 `console.debug` 里有大量排查用的现场
+/// （心跳、通知判定、粘贴拦截），它们平时不进文件，出事时恰恰最有用。
+/// 只放宽 `frontend` 这一个 target，Rust 侧的 debug 仍然按需用 `RUST_LOG`
+/// 打开 —— 否则 xterm/ssh 的逐包日志会把文件刷爆。
+const DEFAULT_FILTER: &str = "info,frontend=debug";
+
 /// 初始化日志：stdout + 按天滚动的文件日志双输出。
 ///
-/// 日志级别由环境变量 `RUST_LOG` 控制，默认 `info`；
+/// 日志级别由环境变量 `RUST_LOG` 控制，缺省为 [`DEFAULT_FILTER`]；
 /// 排查问题时用 `RUST_LOG=debug` 启动可获取更详细的日志。
 pub fn init(app: &tauri::App) {
     let dir = log_dir(app);
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
     // 根目录建不出来时退回仅 stdout，不阻塞应用启动（日期子目录在首条日志时创建）。
     if let Err(error) = fs::create_dir_all(&dir) {
         eprintln!("日志目录创建失败 {}：{error}", dir.display());
@@ -38,18 +50,134 @@ pub fn init(app: &tauri::App) {
             .init();
         return;
     }
+    let writer = RotatingWriter::new(dir.clone());
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()
                 .with_ansi(false)
-                .with_writer(RotatingWriter::new(dir.clone()))
+                .with_writer(writer.clone())
                 .with_filter(filter.clone()),
         )
         // stdout 层不指定 writer，fmt::layer 默认输出到 stdout。
         .with(tracing_subscriber::fmt::layer().with_filter(filter))
         .init();
-    tracing::info!("日志初始化完成：{}", dir.display());
+    // 必须晚于 subscriber 初始化（hook 自己也走那条 writer），但要早于
+    // 任何可能 panic 的业务代码 —— setup 里接着就是建窗口。
+    install_panic_hook(writer);
+    tracing::info!(
+        dir = %dir.display(),
+        filter = DEFAULT_FILTER,
+        "日志初始化完成"
+    );
 }
+
+/// 把 panic 也写进日志文件。
+///
+/// ## 为什么非要有这一步
+///
+/// `tracing` 只收「主动打的日志」。panic 是标准库直接写 stderr 的，
+/// 落不到文件里 —— 2026-10-25 就因此吃过亏：应用启动即 abort，终端里
+/// 明明有一大段 backtrace，导出的诊断包里却一个字都没有，等于现场全丢。
+///
+/// ## 两个细节
+///
+/// - **先落盘、再交给默认钩子**：默认钩子仍会往 stderr 打一份，开发时
+///   照旧能看见；这里只是在它之前把同样的内容抄进文件。
+/// - **递归保护**：panic 钩子里再 panic 会直接 abort，所以用原子标志拦住
+///   第二次进入（此时连"钩子挂了"这条都写不进去，只能放弃）。
+fn install_panic_hook(writer: RotatingWriter) {
+    static IN_HOOK: AtomicBool = AtomicBool::new(false);
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if !IN_HOOK.swap(true, Ordering::SeqCst) {
+            let thread = std::thread::current()
+                .name()
+                .unwrap_or("unnamed")
+                .to_string();
+            let location = info.location().map(|place| {
+                format!(
+                    "{}:{}:{}",
+                    place.file(),
+                    place.line(),
+                    place.column()
+                )
+            });
+            // backtrace 只在用户显式要求时抓：默认抓一次要几百微秒并占
+            // 几十 KB，而绝大多数 panic 看位置就够定位了
+            let backtrace = std::env::var_os("RUST_BACKTRACE")
+                .is_some()
+                .then(|| {
+                    std::backtrace::Backtrace::force_capture()
+                        .to_string()
+                });
+            let text = format_panic(
+                &thread,
+                location.as_deref(),
+                &payload_text(&info),
+                backtrace.as_deref(),
+            );
+            let mut handle = writer.make_writer();
+            // 写失败（磁盘满等）也没别的办法了：默认钩子仍会打 stderr
+            let _ = handle.write_all(text.as_bytes());
+            drop(handle);
+            IN_HOOK.store(false, Ordering::SeqCst);
+        }
+        default_hook(info);
+    }));
+}
+
+/// panic 载荷转文本。
+///
+/// 载荷一般就是 `panic!("...")` 的内容；`&str` 与 `String` 两种形态都要认，
+/// 认不出来时给一句占位，别让整条记录变成空白。
+fn payload_text(
+    info: &std::panic::PanicHookInfo<'_>,
+) -> String {
+    if let Some(text) = info.payload().downcast_ref::<&str>() {
+        (*text).to_string()
+    } else if let Some(text) =
+        info.payload().downcast_ref::<String>()
+    {
+        text.clone()
+    } else {
+        "（panic 载荷不是字符串）".to_string()
+    }
+}
+
+/// 拼一条 panic 记录（纯函数，便于单测）。
+///
+/// 分隔线的刻意加的：日志文件和几十万行业务日志混在一起，一段带
+/// `===== PANIC =====` 的块扫读时一眼就能看见。
+pub fn format_panic(
+    thread: &str,
+    location: Option<&str>,
+    message: &str,
+    backtrace: Option<&str>,
+) -> String {
+    let mut out = String::from("\n===== PANIC =====\n");
+    out.push_str(&format!("thread '{thread}' panicked"));
+    if let Some(place) = location {
+        out.push_str(&format!(" at {place}"));
+    }
+    out.push_str(":\n");
+    out.push_str(message.trim_end());
+    out.push('\n');
+    match backtrace {
+        Some(trace) => {
+            out.push_str("--- backtrace ---\n");
+            out.push_str(trace);
+            if !trace.ends_with('\n') {
+                out.push('\n');
+            }
+        }
+        None => out.push_str(
+            "（未记录 backtrace：设 RUST_BACKTRACE=1 重启可带上堆栈）\n",
+        ),
+    }
+    out.push_str("=================\n");
+    out
+}
+
 
 /// 日志根目录：固定在 `<主目录>/.tera-shell/logs`（本机运行产物，不跟
 /// 可迁移的数据目录走）；目录本身由 init 里的 create_dir_all 创建。
@@ -210,3 +338,7 @@ impl<'a> MakeWriter<'a> for RotatingWriter {
 pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/logging_panic.rs"]
+mod tests;

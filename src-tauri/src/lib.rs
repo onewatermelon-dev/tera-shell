@@ -13,6 +13,8 @@ pub mod ssh;
 pub mod terminal;
 /// 会话导入/导出的文件搬运（格式逻辑在前端，这里只管读写与对话框）
 pub mod transfer;
+/// 值守巡检的心跳调度器（只发 tick，判定与通知在前端）
+pub mod watch;
 
 /// 前端 F12 / Ctrl+Shift+I 打开 DevTools。
 /// 浏览器级快捷键被禁用后 F12 不再生效，需要走这个命令手动打开。
@@ -40,6 +42,10 @@ fn frontend_log(level: String, message: String) {
     match level.as_str() {
         "error" => tracing::error!(target: "frontend", "{message}"),
         "warn" => tracing::warn!(target: "frontend", "{message}"),
+        // debug 走 debug 级别：默认过滤器只对 `frontend` 这个 target 放宽到
+        // debug（见 infra::logging::DEFAULT_FILTER），所以控制台里的
+        // console.debug 现场也会进文件
+        "debug" => tracing::debug!(target: "frontend", "{message}"),
         _ => tracing::info!(target: "frontend", "{message}"),
     }
 }
@@ -76,6 +82,9 @@ pub fn run() {
         .manage(ai::ExecPool::default())
         // 进行中的模型流，供「停止生成」掐断 reqwest 请求。
         .manage(ai::AiStreams::default())
+        // 值守心跳：前端不能靠 setInterval —— WebView 后台会节流，
+        // 而值守恰恰是「窗口最小化」时才最需要准点。
+        .manage(watch::Heartbeat::default())
         // 暴露给前端 invoke() 的最小终端命令集合。
         .invoke_handler(tauri::generate_handler![
             terminal::start,
@@ -143,6 +152,9 @@ pub fn run() {
             data::current_root,
             data::set_data_dir,
             data::pick_data_dir,
+            // 值守心跳（巡检的定时源；判定与通知在前端）
+            watch::watch_heartbeat_start,
+            watch::watch_heartbeat_stop,
             fonts::list_fonts,
             transfer::export_to_file,
             transfer::import_from_file,

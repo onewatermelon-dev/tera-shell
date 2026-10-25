@@ -631,6 +631,100 @@ const zhCN = {
   "notify.transfer": "传输结束",
   "notify.transferHint":
     "上传或下载完成、失败时提醒。",
+  "notify.watch": "值守巡检告警",
+  "notify.watchHint":
+    "巡检越界与恢复时提醒；只有配了巡检的会话才会产生事件。",
+  "watch.eyebrow": "值守巡检",
+  "watch.title": "这个会话怎么盯",
+  "watch.localUnsupported":
+    " · 本地会话不支持巡检",
+  "watch.enable": "开启巡检",
+  "watch.hint.on":
+    "开启后按下面的检查项定时只读采样，越界才通知。",
+  "watch.hint.off":
+    "巡检已关闭：检查项与间隔暂时不可编辑，打开上面的开关即可继续配置。",
+  "watch.interval": "间隔（秒）",
+  "watch.intervalHint":
+    "最短 30 秒。每次采样在远端跑一条只读脚本，不调 AI，不烧 token。",
+  "watch.threshold": "阈值",
+  "watch.consecutive": "连续次数",
+  "watch.checksHint":
+    "阈值：超过即算越界（百分比；负载按每核）。连续次数：连续几次越界才通知，1 = 一次就报。服务存活与自定义检查只看「活着 / 匹配上」，所以阈值那格是「—」。",
+  "watch.noThreshold":
+    "这一项只看「活着 / 匹配上」，没有百分比阈值",
+  "watch.label.mount": "挂载点",
+  "watch.label.unit": "服务单元",
+  "watch.label.command": "只读命令",
+  "watch.label.expect": "输出需含",
+  "watch.optional": "可空",
+  "watch.mount": "挂载点（默认 /）",
+  "watch.unit": "服务单元（如 nginx）",
+  "watch.command": "只读命令",
+  "watch.expect": "输出需包含（可空）",
+  "watch.commandHint":
+    "只允许只读命令；检出写操作（rm / restart / 重定向等）会在保存时被拒绝。",
+  "watch.quietTitle":
+    "免打扰与冷却（对所有会话生效）",
+  "watch.quietStart": "免打扰开始",
+  "watch.quietEnd": "免打扰结束",
+  "watch.cooldown": "重复提醒冷却（分钟）",
+  "watch.quietHint":
+    "免打扰留空表示不启用，支持跨零点；静默期间照常记录，只是不弹通知。",
+  "watch.error.noCheck":
+    "至少启用一个检查项，否则巡检没有意义。",
+  "watch.error.unitRequired":
+    "服务检查需要填单元名（如 nginx）。",
+  "watch.error.unitInvalid":
+    "单元名只能用字母、数字和 @ . / : - _ 这些字符。",
+  "watch.kind.cpu": "CPU 占用",
+  "watch.kind.mem": "内存占用",
+  "watch.kind.disk": "磁盘使用率",
+  "watch.kind.load": "负载（每核）",
+  "watch.kind.service": "服务存活",
+  "watch.kind.command": "自定义检查",
+  "watch.kind.connect": "连接",
+  "sidebar.watch": "值守巡检",
+  "watch.recentAlerts": "最近告警（这台机器）",
+  "watch.noAlerts": "还没有告警记录。",
+  "watch.alerted": "告警",
+  "watch.recovered": "已恢复",
+  "watch.askAi": "让 AI 归因",
+  "watch.aiUnavailable":
+    "AI 面板没打开（本地会话不支持），先打开一个 SSH 会话的 AI 面板再试。",
+  "watch.aiSent":
+    "已发送到 AI 面板，关闭本弹窗即可看到回答。",
+  "watch.panel.title": "值守巡检",
+  "watch.panel.enabled":
+    "启用巡检的会话：{count}",
+  "watch.panel.tab.status": "状态",
+  "watch.panel.tab.report": "班报",
+  "watch.panel.empty":
+    "还没有会话开启巡检。在左侧会话条目上悬停，点仪表盘图标配置检查项。",
+  "watch.panel.sample": "立即采样",
+  "watch.panel.sampling": "采样中…",
+  "watch.panel.configure": "配置巡检",
+  "watch.panel.lastSample": "上次采样",
+  "watch.panel.noSample": "还没采样",
+  "watch.panel.breaching": "{count} 项告警中",
+  "watch.panel.recent": "最近告警",
+  "watch.panel.noAlert": "暂无告警。",
+  "watch.alert.delete": "删除这条告警",
+  "watch.panel.rangeShift": "本班（8 小时）",
+  "watch.panel.rangeDay": "24 小时",
+  "watch.panel.copy": "复制班报",
+  "watch.panel.copied": "班报已复制到剪贴板",
+  "watch.panel.rangeHint":
+    "时间窗以最后一次采样为终点，不是「此刻」。",
+  "watch.panel.noData":
+    "这段时间没有采样数据（巡检刚开启，或一直连不上）。",
+  "watch.panel.interval": "间隔",
+  "watch.panel.pending": "观察中：",
+  "watch.panel.repeatTimes": "连{count}次",
+  "watch.metric.mem": "内存",
+  "watch.metric.load": "负载",
+  "watch.metric.disk": "磁盘",
+  "watch.metric.threshold": "阈值",
+  "rail.watch": "值守巡检",
   "about.repo": "GitHub 仓库",
   "about.licenses.title": "开源许可",
   "about.licenses.search": "搜索组件或许可证",
@@ -1443,6 +1537,103 @@ const enUS: Record<MessageKey, string> = {
   "notify.transfer": "Transfer finished",
   "notify.transferHint":
     "Notify when an upload or download completes or fails.",
+  "notify.watch": "Watch alerts",
+  "notify.watchHint":
+    "Notify on threshold breaches and recoveries; only sessions with a watch config produce events.",
+  "watch.eyebrow": "Duty watch",
+  "watch.title": "How to watch this session",
+  "watch.localUnsupported":
+    " · local sessions cannot be watched",
+  "watch.enable": "Enable watch",
+  "watch.hint.on":
+    "Once enabled, the checks below run on a read-only schedule and only notify on breaches.",
+  "watch.hint.off":
+    "Watch is off: checks and interval are locked. Turn the switch on to keep editing.",
+  "watch.interval": "Interval (s)",
+  "watch.intervalHint":
+    "30s minimum. Each sample runs one read-only script remotely — no AI calls, no tokens burned.",
+  "watch.threshold": "Threshold",
+  "watch.consecutive": "Consecutive",
+  "watch.checksHint":
+    "Threshold: anything above counts as a breach (percent; load is per-core). Consecutive: how many breaches in a row before notifying; 1 means notify immediately. Service and custom checks only care about alive/matched, so their threshold cell shows \u201c—\u201d.",
+  "watch.noThreshold":
+    "This check only cares about alive/matched — no percentage threshold",
+  "watch.label.mount": "Mount",
+  "watch.label.unit": "Unit",
+  "watch.label.command": "Command",
+  "watch.label.expect": "Contains",
+  "watch.optional": "optional",
+  "watch.mount": "Mount point (default /)",
+  "watch.unit": "Service unit (e.g. nginx)",
+  "watch.command": "Read-only command",
+  "watch.expect":
+    "Output must contain (optional)",
+  "watch.commandHint":
+    "Read-only commands only; write operations (rm / restart / redirection, etc.) are rejected on save.",
+  "watch.quietTitle":
+    "Do-not-disturb and cooldown (applies to all sessions)",
+  "watch.quietStart": "Quiet from",
+  "watch.quietEnd": "Quiet until",
+  "watch.cooldown": "Repeat cooldown (min)",
+  "watch.quietHint":
+    "Leave empty to disable; midnight-crossing is supported. Alerts are still recorded during quiet hours, just not notified.",
+  "watch.error.noCheck":
+    "Enable at least one check, otherwise watching does nothing.",
+  "watch.error.unitRequired":
+    "Service checks need a unit name (e.g. nginx).",
+  "watch.error.unitInvalid":
+    "Unit names may only contain letters, digits and @ . / : - _",
+  "watch.kind.cpu": "CPU usage",
+  "watch.kind.mem": "Memory usage",
+  "watch.kind.disk": "Disk usage",
+  "watch.kind.load": "Load (per core)",
+  "watch.kind.service": "Service alive",
+  "watch.kind.command": "Custom check",
+  "watch.kind.connect": "Connection",
+  "sidebar.watch": "Duty watch",
+  "watch.recentAlerts":
+    "Recent alerts (this host)",
+  "watch.noAlerts": "No alerts recorded yet.",
+  "watch.alerted": "Alert",
+  "watch.recovered": "Recovered",
+  "watch.askAi": "Ask AI to attribute",
+  "watch.aiUnavailable":
+    "The AI panel is not open (local sessions have none). Open an SSH session's AI panel and retry.",
+  "watch.aiSent":
+    "Sent to the AI panel — close this dialog to see the answer.",
+  "watch.panel.title": "Duty watch",
+  "watch.panel.enabled":
+    "Sessions under watch: {count}",
+  "watch.panel.tab.status": "Status",
+  "watch.panel.tab.report": "Shift report",
+  "watch.panel.empty":
+    "No session is under watch yet. Hover a session in the sidebar and click the dashboard icon to configure checks.",
+  "watch.panel.sample": "Sample now",
+  "watch.panel.sampling": "Sampling…",
+  "watch.panel.configure": "Configure checks",
+  "watch.panel.lastSample": "Last sample",
+  "watch.panel.noSample": "Not sampled yet",
+  "watch.panel.breaching": "{count} breaching",
+  "watch.panel.recent": "Recent alerts",
+  "watch.panel.noAlert": "No alerts.",
+  "watch.alert.delete": "Delete this alert",
+  "watch.panel.rangeShift": "This shift (8h)",
+  "watch.panel.rangeDay": "24 hours",
+  "watch.panel.copy": "Copy report",
+  "watch.panel.copied":
+    "Report copied to clipboard",
+  "watch.panel.rangeHint":
+    "The window ends at the last sample, not at \u201cnow\u201d.",
+  "watch.panel.noData":
+    "No samples in this window (watch just enabled, or the host stayed unreachable).",
+  "watch.panel.interval": "Every",
+  "watch.panel.pending": "Warming up:",
+  "watch.panel.repeatTimes": "x{count}",
+  "watch.metric.mem": "MEM",
+  "watch.metric.load": "load",
+  "watch.metric.disk": "disk",
+  "watch.metric.threshold": "threshold",
+  "rail.watch": "Duty watch",
   "about.repo": "GitHub repository",
   "about.licenses.title": "Open source licenses",
   "about.licenses.search":

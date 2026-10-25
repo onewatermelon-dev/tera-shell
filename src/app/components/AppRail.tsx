@@ -8,7 +8,8 @@ import {
   SettingOutlined,
   DashboardOutlined,
   FolderOpenOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  AlertOutlined
 } from "@ant-design/icons";
 import Hint from "@/shared/components/Hint";
 import {
@@ -197,6 +198,9 @@ type RailProps = {
   /** 底部状态栏形态（快捷宏 ⇆ 信息栏）与切换动作。 */
   statusMode: StatusMode;
   onToggleStatus: () => void;
+  /** 值守巡检面板的展开态与切换动作。 */
+  watchOpen: boolean;
+  onToggleWatch: () => void;
   /** 竖条菜单收起（动作执行或直接关闭）后的焦点回还回调。 */
   onMenuClosed: () => void;
 };
@@ -218,6 +222,8 @@ export default function AppRail({
   onOpenSettings,
   statusMode,
   onToggleStatus,
+  watchOpen,
+  onToggleWatch,
   onMenuClosed
 }: RailProps) {
   const t = useT();
@@ -401,6 +407,20 @@ export default function AppRail({
             onClick={onToggleSidebarMode}
           >
             <FolderOpenOutlined />
+          </button>
+        </Hint>
+        {/* 值守巡检面板：与侧栏/状态栏不同，它是**右侧覆盖层**，
+            图标只负责开合，不改变工作区布局 */}
+        <Hint label={t("rail.watch")}>
+          <button
+            type="button"
+            className="rail-trigger"
+            data-active={watchOpen}
+            aria-pressed={watchOpen}
+            aria-label={t("rail.watch")}
+            onClick={onToggleWatch}
+          >
+            <AlertOutlined />
           </button>
         </Hint>
         {/* 设置按钮沉底：margin-top:auto 把它推到卡片最下面 */}

@@ -24,7 +24,11 @@
 
 /** 通知类别。 */
 export type NotifyKind =
-  "command" | "ai" | "transfer";
+  | "command"
+  | "ai"
+  | "transfer"
+  /** 值守巡检的告警与恢复 */
+  | "watch";
 
 /** 一条待发通知。 */
 export type NotifyPayload = {

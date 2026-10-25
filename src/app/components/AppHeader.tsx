@@ -124,6 +124,9 @@ type Props = {
   /** 底部状态栏形态（快捷宏 ⇆ 信息栏）：透传给左侧竖条上的开关。 */
   statusMode: StatusMode;
   onToggleStatus: () => void;
+  /** 值守巡检面板的展开态与开合动作（右侧覆盖层，不改变布局）。 */
+  watchOpen: boolean;
+  onToggleWatch: () => void;
   /** 打开设置页时隐藏菜单入口 —— 那里的动作对设置页没有意义。 */
   hideMenus?: boolean;
   /** 菜单收起（动作执行或直接关闭）后的焦点回还回调。 */
@@ -140,6 +143,8 @@ export default function AppHeader({
   onToggleSidebarMode,
   statusMode,
   onToggleStatus,
+  watchOpen,
+  onToggleWatch,
   hideMenus = false,
   onMenuClosed
 }: Props) {
@@ -321,6 +326,8 @@ export default function AppHeader({
           onOpenSettings={actions.openSettings}
           statusMode={statusMode}
           onToggleStatus={onToggleStatus}
+          watchOpen={watchOpen}
+          onToggleWatch={onToggleWatch}
         />
       )}
       <Header

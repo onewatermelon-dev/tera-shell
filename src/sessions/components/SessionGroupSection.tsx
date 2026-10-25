@@ -5,7 +5,8 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  LinkOutlined
+  LinkOutlined,
+  DashboardOutlined
 } from "@ant-design/icons";
 import type { SavedSession } from "@/sessions/lib/session";
 import type {
@@ -38,6 +39,8 @@ type Props = {
   ) => void;
   onEdit: (session: SavedSession) => void;
   onRemove: (session: SavedSession) => void;
+  /** 打开该会话的值守巡检配置 */
+  onWatch: (session: SavedSession) => void;
 };
 
 /** 单个会话条目。抽成独立组件，让父级只管分组结构。 */
@@ -48,7 +51,8 @@ function SessionRow({
   onPointerDown,
   onDoubleClick,
   onEdit,
-  onRemove
+  onRemove,
+  onWatch
 }: {
   session: SavedSession;
   activeId: string;
@@ -57,6 +61,7 @@ function SessionRow({
   onDoubleClick: Props["onSessionDoubleClick"];
   onEdit: Props["onEdit"];
   onRemove: Props["onRemove"];
+  onWatch: Props["onWatch"];
 }) {
   const t = useT();
   return (
@@ -93,6 +98,18 @@ function SessionRow({
             : `${session.username ? session.username + "@" : ""}${session.host}:${session.port}`}
         </small>
       </span>
+      {session.id !== "local" && (
+        <Button
+          className="watch"
+          variant="ghost"
+          size="sm"
+          isIconOnly
+          aria-label={t("sidebar.watch")}
+          onPress={() => onWatch(session)}
+        >
+          <DashboardOutlined />
+        </Button>
+      )}
       {session.id !== "local" && (
         <Button
           className="edit"
@@ -140,7 +157,8 @@ export default function SessionGroupSection({
   onSessionPointerDown,
   onSessionDoubleClick,
   onEdit,
-  onRemove
+  onRemove,
+  onWatch
 }: Props) {
   const t = useT();
   // 搜索时强制展开；折叠分组里若有活动会话也展开，否则点不到
@@ -258,6 +276,7 @@ export default function SessionGroupSection({
               onDoubleClick={onSessionDoubleClick}
               onEdit={onEdit}
               onRemove={onRemove}
+              onWatch={onWatch}
             />
           ))}
         </div>

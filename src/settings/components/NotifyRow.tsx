@@ -87,6 +87,22 @@ export default function NotifyRow({
               {t("notify.transferHint")}
             </p>
           </div>
+          {/* 值守告警：只有配了巡检的会话才会产生事件，默认开着不会吵人 */}
+          <div className="notify-kinds">
+            <Toggle
+              ariaLabel={t("notify.watch")}
+              isSelected={settings.notifyWatch}
+              onChange={notifyWatch =>
+                onChange({ notifyWatch })
+              }
+            />
+            <span className="notify-kind-label">
+              {t("notify.watch")}
+            </span>
+            <p className="notify-kind-hint">
+              {t("notify.watchHint")}
+            </p>
+          </div>
         </>
       )}
     </SettingsRow>

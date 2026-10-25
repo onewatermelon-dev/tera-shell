@@ -170,6 +170,13 @@ export type AppSettings = {
   notifyAi: boolean;
   /** 传输结束时通知 */
   notifyTransfer: boolean;
+  /**
+   * 值守巡检告警/恢复时通知。
+   *
+   * 与「长命令完成」不同，这一类是**用户配了才生效**的：没有巡检配置
+   * 就不会有任何事件，所以默认开着也不会吵到人。
+   */
+  notifyWatch: boolean;
 };
 
 /** 终端字体的内置默认值：与创建 Terminal 时的取值保持一致。 */
@@ -298,6 +305,7 @@ export const defaultSettings: AppSettings = {
   notifyCommand: true,
   notifyAi: true,
   notifyTransfer: true,
+  notifyWatch: true,
   shortcutOverrides: {}
 };
 
@@ -433,6 +441,7 @@ export function loadSettings(): AppSettings {
       notifyAi: parsed.notifyAi !== false,
       notifyTransfer:
         parsed.notifyTransfer !== false,
+      notifyWatch: parsed.notifyWatch !== false,
       // 快捷键覆盖：手改过设置文件的话这里可能有未知 id / 撞车键位，
       // sanitizeOverrides 会剔掉（见 appShortcuts）
       shortcutOverrides: sanitizeOverrides(

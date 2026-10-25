@@ -18,7 +18,8 @@ import {
   aiNotification,
   commandNotification,
   notify as sendNotify,
-  transferNotification
+  transferNotification,
+  watchNotification
 } from "@/lib/notifySend";
 import { registerAiDoneHandler } from "@/lib/notifyBridge";
 
@@ -85,9 +86,30 @@ export function useNotifications(
     []
   );
 
+  /**
+   * 值守巡检告警 / 恢复。
+   *
+   * 这一类同样受「仅窗口未聚焦时通知」约束 —— 用户正看着某个终端时，
+   * 突然弹一条系统通知会打断他手里的事；此时告警仍然记进面板与历史，
+   * 只是换个安静的方式呈现（这条纪律与长命令通知一致）。
+   */
+  const notifyWatch = useCallback(
+    (
+      summary: string,
+      level: "alert" | "recover",
+      repeat = false
+    ) =>
+      sendNotify(
+        settingsRef.current,
+        watchNotification(summary, level, repeat)
+      ),
+    []
+  );
+
   return {
     notifyCommand,
     notifyAiDone,
-    notifyTransferDone
+    notifyTransferDone,
+    notifyWatch
   };
 }

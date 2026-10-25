@@ -39,23 +39,64 @@ export async function aiRunCommand(
 ): Promise<AiExecResult> {
   const result = await invoke<AiExecResult>(
     "ai_run_command",
-    {
-      target: {
-        ...target,
-        command,
-        stdin: stdin ?? null,
-        execId: execId ?? null,
-        escalateSudoPassword:
-          escalate?.sudoPassword || null,
-        escalateSuPassword:
-          escalate?.suPassword || null
-      }
-    }
+    execPayload(
+      target,
+      command,
+      stdin,
+      execId,
+      escalate
+    )
   );
   // AI 命令可能建删文件（不产生终端的 OSC 7 / OSC 133）：
   // 完成后广播一次，目录栏据此重读
   notifyDirectoryDirty();
   return result;
+}
+
+/**
+ * 与 `aiRunCommand` 相同，但**不**广播「目录可能变了」。
+ *
+ * 值守巡检用这条：它的脚本是只读的（`df` / `systemctl is-active`），
+ * 并不会改动远端目录。每分钟因此让目录栏重读一次纯属噪音 —— 用户正
+ * 浏览某个远端目录时，列表会被无谓地刷新。
+ *
+ * 两个入口共用 `execPayload`，后端入参契约只有一处，不会各自漂移。
+ */
+export async function aiRunCommandQuiet(
+  target: SshTarget,
+  command: string,
+  stdin?: string,
+  execId?: string
+): Promise<AiExecResult> {
+  return invoke<AiExecResult>(
+    "ai_run_command",
+    execPayload(target, command, stdin, execId)
+  );
+}
+
+/** 组装后端 `ai_run_command` 的入参（字段名与 Rust 侧 serde 对齐）。 */
+function execPayload(
+  target: SshTarget,
+  command: string,
+  stdin?: string,
+  execId?: string,
+  escalate?: {
+    sudoPassword?: string;
+    suPassword?: string;
+  }
+): Record<string, unknown> {
+  return {
+    target: {
+      ...target,
+      command,
+      stdin: stdin ?? null,
+      execId: execId ?? null,
+      escalateSudoPassword:
+        escalate?.sudoPassword || null,
+      escalateSuPassword:
+        escalate?.suPassword || null
+    }
+  };
 }
 
 /**

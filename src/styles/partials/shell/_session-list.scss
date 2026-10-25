@@ -75,7 +75,8 @@
 // `.button--icon-only.button--sm` 是 (0,2,0)，只写 `.edit` (0,1,0)
 // 会被它的 `w-9 md:w-8`（32px）盖掉，按钮比声明的 15px 大一倍。
 .delete.button,
-.edit.button {
+.edit.button,
+.watch.button {
   display: none;
   width: 15px;
   min-width: 15px;
@@ -117,8 +118,13 @@
   color: var(--danger);
 }
 
+.watch.button:hover {
+  color: var(--accent);
+}
+
 .session-item:hover .delete,
-.session-item:hover .edit {
+.session-item:hover .edit,
+.session-item:hover .watch {
   display: block;
 }
 

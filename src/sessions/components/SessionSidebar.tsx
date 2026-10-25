@@ -44,6 +44,8 @@ type Props = {
   onCreateGroup: () => void;
   onEditGroup: (group: SessionGroup) => void;
   onRemoveGroup: (group: SessionGroup) => void;
+  /** 打开该会话的值守巡检配置 */
+  onWatch: (session: SavedSession) => void;
   /** 在指定分组里新建会话（分组 id，空串 = 未分组）。 */
   onCreateInGroup: (groupId: string) => void;
   /**
@@ -72,6 +74,7 @@ export default function SessionSidebar({
   onCreateGroup,
   onEditGroup,
   onRemoveGroup,
+  onWatch,
   onCreateInGroup,
   onMove
 }: Props) {
@@ -362,6 +365,7 @@ export default function SessionSidebar({
               onSessionDoubleClick={onDuplicate}
               onEdit={onEdit}
               onRemove={onRemove}
+              onWatch={onWatch}
             />
           ))
         ) : (

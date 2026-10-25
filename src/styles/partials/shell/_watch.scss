@@ -1,0 +1,615 @@
+// 值守巡检配置弹窗（watch/components/WatchDialog.tsx）与右侧巡检面板
+// （watch/components/WatchPanel.tsx）。
+// 一行一个检查项：开关 + 名称 + 阈值 + 连续次数，具体对象（挂载点 /
+// 单元名 / 命令）另起一行 —— 全部塞进一行会让弹窗横向溢出。
+// 细滚动条 mixin 在 _scrollbar.scss，面板主体是滚动容器。
+@use "../scrollbar" as *;
+
+// 弹窗宽度与限高。滚动**不靠**这里，靠内层 .dialog-scroll 自带的
+// max-height —— 弹窗里那层 `<Form>` 是裸 form（block 元素），
+// `.modal__body` 的 flex: 1 在它里面不生效，指望 flex 撑出滚动区
+// 只会得到「高度不受限、滚动条永不出现」。
+// max-height 只负责把对话框框在视口内（Modal 容器高 = visual viewport）。
+.watch-dialog {
+  width: min(640px, 92vw);
+  max-height: min(86vh, 760px);
+
+  // ⚠️ Body 的真实类名是 BEM 的 .modal__body（默认 overflow: visible）；
+  // min-height: 0 是 flex 子项允许收缩的关键，缺了它内容照样把限高顶穿
+  .modal__body {
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
+// 值守弹窗的字段滚动区就是 .dialog-scroll（见 partials/sftp/files）：
+// 它自带 max-height + overflow-y，是这套弹窗里唯一被验证过能滚的机制。
+// 这里不覆盖它的任何属性 —— 曾经写过 `.watch-scroll { max-height: none }`
+// 想「按剩余高度撑满」，结果是滚动条彻底消失（父级不是 flex 容器）。
+
+.watch-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.watch-switch {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.watch-interval {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.watch-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+// 总开关关闭时整组压暗：控件本身已 isDisabled（点不动），
+// 这里再降一档不透明度，让「现在配了也不会跑」一眼可见
+.watch-checks.is-idle {
+  opacity: 0.55;
+}
+
+.watch-check {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s ease;
+
+  &.is-on {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+}
+
+// 列头与每行的四列栅格必须用同一套模板，否则「阈值 / 连续次数」
+// 会跟下面的输入框对不上 —— 对不上的表头比没有表头更误导。
+.watch-checks-head {
+  display: grid;
+  grid-template-columns: auto 1fr 96px 96px;
+  gap: 8px;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.watch-check-head {
+  display: grid;
+  grid-template-columns: auto 1fr 96px 96px;
+  gap: 8px;
+  align-items: center;
+}
+
+.watch-col {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+// 没有百分比阈值的检查项（服务 / 自定义）在这里放个破折号，
+// 空着会被当成「漏配了」
+.watch-col-none {
+  text-align: center;
+}
+
+.watch-check-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.watch-num {
+  width: 96px;
+}
+
+// 行内附加字段（挂载点 / 服务单元 / 命令）：标签常驻，不靠 placeholder
+// —— 值填上之后 placeholder 就没了，只剩一个孤零零的「/」没人知道是什么
+.watch-extra {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.watch-field-label {
+  flex: none;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.watch-extra-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.watch-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.watch-global {
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--border);
+}
+
+.watch-global-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.watch-quiet {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.watch-alert {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 0;
+
+  // 这一层的 color 只给色点用（它读 currentColor）：文字自己有颜色。
+  // 不用 `.watch-alert[data-level] .watch-alert-dot` 那种两段选择器 ——
+  // prettier 会把它折成两行，与 stylelint 的缩进规则无限打架。
+  color: var(--accent);
+
+  &[data-level="alert"] {
+    color: var(--danger);
+  }
+}
+
+// 状态色点：一列告警扫过去，先分「红的还是灰的」，再看细节
+.watch-alert-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: currentcolor;
+  border-radius: 50%;
+}
+
+// 允许折行（最多自然两行）：一行塞不下「时间 · 会话 · 指标 值（阈值 x）」，
+// 而省略号恰好会切掉最要紧的数值
+.watch-alert-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.watch-alert-time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+// 行内删除：比「归因」还小一档（18px），而且平时是灰的 ——
+// 它贴着归因按钮，太显眼容易误点。悬停才转危险色。
+.watch-alert .watch-alert-del.button {
+  flex: none;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  font-size: 10px;
+  color: var(--muted);
+  border-radius: 4px;
+}
+
+.watch-alert .watch-alert-del.button:hover {
+  color: var(--danger);
+}
+
+// 「让 AI 归因」：行内小按钮。HeroUI 的 sm 按钮仍有 32px 高、左右各 12px
+// 内边距，杵在 11px 正文旁边像块砖。压到 22px、收窄内边距，让它更像一个
+// 行内链接 —— 它是次要动作，不该和告警正文抢注意力。
+// ⚠️ 选择器要够重：`.watch-alert-ai`（0,1,0）压不过 HeroUI 的
+// `.button--sm`，加一层祖先 `.watch-alert` 提到 (0,3,0)，免得哪天 HeroUI
+// 把尺寸规则改成 `.button.button--sm` 复合选择器。
+.watch-alert .watch-alert-ai.button {
+  flex: none;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--accent);
+  border-radius: 6px;
+}
+
+// ---- 右侧巡检面板 ----
+
+// 覆盖在工作区右侧，而不是做 `.terminal-with-ai` 的栅格列：窗格网格是
+// 显式行列模板，改宽度会牵动 PTY 重排与屏幕内容，面板只是「看一眼」。
+// 观感与 AI 对话面板（`.ai-panel`）**同一张卡片**：`--surface` 底、
+// 1px 描边、12px 圆角。位置也对齐 —— `.workspace` 有 8px 内边距，
+// 绝对定位的包含块是它的 padding box（= 整个格子），所以 `inset: 8px`
+// 才正好落在终端卡片 / AI 面板所在的**内容区**边缘。
+// 之前写 `inset: 0` 是贴着格子边缘，导致：右侧比 AI 面板多出 8px、
+// 左侧反而露出 AI 卡片那 8px 的描边（用户反馈「还能看到 AI 卡片的边框」）。
+.watch-panel {
+  position: absolute;
+  inset: 8px 8px 8px auto;
+  z-index: 28;
+  display: flex;
+  flex-direction: column;
+
+  // 宽度与 AI 对话面板对齐：同一个默认值、同一份用户拖拽存档
+  // （`--watch-panel-width` 由组件按 `loadPanelWidth()` 注入）。
+  // 窄窗口的兜底表达式也与 `.terminal-with-ai` 逐字一致（50vw-13px）。
+  width: min(
+    var(--watch-panel-width, 390px),
+    calc(50vw - 13px)
+  );
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+// 头部高度 / 内边距 / 分隔线与 `.ai-panel-head` 对齐（44px + 1px 底边），
+// 两个面板并排时标题行的基线一致，看着才是同一套组件
+.watch-panel-head {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  height: 44px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.watch-panel-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--foreground);
+}
+
+.watch-panel-head small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.watch-panel-actions {
+  display: flex;
+  margin-left: auto;
+}
+
+.watch-tabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 10px 14px 8px;
+}
+
+.watch-tab {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+
+  &[data-active="true"] {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+}
+
+.watch-panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 14px 16px;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.watch-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.watch-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  // 告警中：整卡描边转红，扫一眼就知道哪台要处理
+  &[data-breaching="true"] {
+    background: color-mix(
+      in srgb,
+      var(--danger) 6%,
+      transparent
+    );
+    border-color: var(--danger);
+  }
+}
+
+.watch-row-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.watch-row-head small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.watch-row-foot {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+// 行脚左侧的说明文字：吃掉剩余宽度，把两个图标按钮顶到卡片右缘。
+// `display: block` 是必须的 —— 行内元素上的 overflow/text-overflow 不生效，
+// 文字一长就会把按钮挤到行中间（用户反馈「按钮不在最右侧」）。
+.watch-foot-text {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 「立即采样 / 配置」两个图标按钮：HeroUI 的 icon-only sm 是 32px 见方，
+// 跟这行 10~11px 的说明文字摆在一起显得笨重，压到 20px。
+// ⚠️ 权重必须到 (0,3,0)：HeroUI 的 `.button--icon-only.button--sm` 已经是
+// (0,2,0)，而 `main.css`（@import @heroui/styles）在 app.scss **之后**加载，
+// 同权重会被它盖掉。
+.watch-row-foot .watch-icon-btn.button {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--muted);
+  border-radius: 5px;
+}
+
+.watch-row-foot .watch-icon-btn.button:hover {
+  color: var(--accent);
+}
+
+.watch-row-threshold {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+// 「观察中：内存 42%（1/3）」—— 越界但还没攒够次数。
+// 用警示色但压低饱和度：它还不是告警，但比普通说明更要紧
+.watch-row-pending {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: color-mix(
+    in srgb,
+    var(--danger) 75%,
+    var(--muted)
+  );
+}
+
+.watch-metrics {
+  display: grid;
+  grid-template-columns: repeat(
+    4,
+    minmax(0, 1fr)
+  );
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.watch-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.watch-metric-label {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+// 面板与 AI 面板同宽（默认 390，窗口窄时 50vw），四列指标会被压到
+// 60px 上下；长挂载点（/var/lib/...）必须省略号，不能顶破栅格
+.watch-metric-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.watch-metric-bar {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  background: var(--surface-secondary);
+  border-radius: 2px;
+}
+
+.watch-metric-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.watch-section-title {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+// ---- 班报 ----
+
+.watch-report-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+// 时间范围与「复制班报」：与图标按钮同一个问题 —— HeroUI 的 sm 按钮是
+// 32px 高、左右 12px 内边距，三个并排比下面的卡片标题还重。
+// 压到 22px / 8px。权重同样要到 (0,3,0)，理由见 `.watch-icon-btn`。
+.watch-report-bar .watch-bar-btn.button {
+  height: 22px;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+// 时间窗说明：默认 .watch-hint 只有上边距，第一张卡片会紧贴着这行字
+.watch-report-hint {
+  margin: 0 0 10px;
+}
+
+.watch-report-copy {
+  margin-left: auto;
+}
+
+.watch-report-card {
+  // 12px：卡片里有折线图 + 两行带小数点的说明，8px 时文字几乎贴着描边
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.watch-verdict {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--foreground);
+}
+
+.watch-chart {
+  position: relative;
+  margin-top: 6px;
+}
+
+.watch-chart-svg {
+  display: block;
+  width: 100%;
+  height: 110px;
+}
+
+.watch-chart-ylabels {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1px 0;
+  font-size: 9px;
+  color: var(--muted);
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.watch-chart-xlabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+.watch-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.watch-chart-threshold {
+  opacity: 0.7;
+  stroke: var(--danger);
+  stroke-width: 1;
+}
+
+.watch-chart-cpu {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.watch-chart-mem {
+  opacity: 0.8;
+  stroke: var(--muted);
+  stroke-width: 1.2;
+}
+
+.watch-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.watch-legend-cpu::before {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+  content: "";
+  background: var(--accent);
+}
+
+.watch-legend-mem::before {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+  content: "";
+  background: var(--muted);
+}
+
+.watch-legend-threshold::before {
+  display: inline-block;
+  width: 10px;
+  height: 0;
+  margin-right: 4px;
+  vertical-align: middle;
+  content: "";
+  border-top: 1px dashed var(--danger);
+}
