@@ -45,14 +45,20 @@ export type RunbookMaterial = {
 /**
  * 基础脱敏：把常见的「键=值」型密钥替换成 ***。
  *
- * ⚠️ 只覆盖最常见的几种写法（password=/token:/--password xxx/Bearer）。
- * 真正的保障是导出后人工复核 —— 不要指望正则穷尽所有形式。
+ * ⚠️ 只覆盖最常见的几种写法（password=/token:/--password xxx/Bearer/
+ * 私钥块/AWS AccessKey）。真正的保障是人工复核 —— 不要指望正则穷尽
+ * 所有形式。导出 Runbook 与「发给模型前」共用这一份（见 aiChat dispatch）。
  */
 export function redactSecrets(
   text: string
 ): string {
   return (
     text
+      // 私钥块整段替换（放最前，防止密钥内容被键值对规则先碰到）
+      .replace(
+        /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+        "[已脱敏私钥]"
+      )
       // password=xxx / passwd: xxx / token=xxx / secret= / api_key=
       .replace(
         /\b(password|passwd|pwd|token|secret|api[_-]?key|access[_-]?key|auth[_-]?token)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi,
@@ -66,7 +72,34 @@ export function redactSecrets(
         /\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/g,
         "$1***"
       )
+      // AWS AccessKey ID：固定 AKIA 前缀 + 16 位大写数字
+      .replace(/\b(AKIA[0-9A-Z]{16})\b/g, "***")
   );
+}
+
+/**
+ * 数一遍文本里会命中多少处脱敏（各模式独立计数求和）。
+ *
+ * 与 redactSecrets 用同一组模式：先跑脱敏再比对变化数不准确
+ * （一条文本可能同时命中多个模式、或单模式内多次命中），这里逐模式
+ * match 计数，保证「本次脱敏了 N 处」的 N 与实际替换量一致。
+ */
+export function countSecrets(
+  text: string
+): number {
+  const patterns = [
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+    /\b(password|passwd|pwd|token|secret|api[_-]?key|access[_-]?key|auth[_-]?token)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi,
+    /(\s-p)(?!\s)\S+/g,
+    /(--password\s+)(\S+)/gi,
+    /\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/g,
+    /\b(AKIA[0-9A-Z]{16})\b/g
+  ];
+  let count = 0;
+  for (const pattern of patterns) {
+    count += (text.match(pattern) ?? []).length;
+  }
+  return count;
 }
 
 /** 单行化：标题/说明里塞进换行会破坏 Markdown 结构。 */

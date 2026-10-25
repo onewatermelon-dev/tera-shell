@@ -64,6 +64,10 @@ import {
 } from "./fileEditExec";
 import { recordEditHistory } from "./editHistory";
 import {
+  countSecrets,
+  redactSecrets
+} from "./runbook";
+import {
   applyEdits,
   buildHunks,
   computeLineDiff,
@@ -1036,6 +1040,30 @@ export function useAiChat(
             .join("、")}`
         );
       }
+      // 发模型前脱敏：正文与终端引用快照都过一遍（终端滚屏里常躺着
+      // 密码/token）。计数与替换同组模式，N 与实际替换量一致。
+      // 可见 entry 保留原文（用户自己敲的自己看），末尾附一行脱敏
+      // 提示 —— 模型与用户都知道「发出去的不是原文」。
+      const redactedAsked = redactSecrets(asked);
+      const redactedRefs = refBlocks.map(
+        redactSecrets
+      );
+      const secretCount =
+        countSecrets(asked) +
+        refBlocks.reduce(
+          (sum, block) =>
+            sum + countSecrets(block),
+          0
+        );
+      const secretNotice =
+        secretCount > 0
+          ? `\n\n[已自动脱敏 ${secretCount} 处敏感信息后再发送]`
+          : "";
+      if (secretCount > 0) {
+        console.info(
+          `[ai] 发送前已脱敏 ${secretCount} 处`
+        );
+      }
       setError("");
       // 认领本轮：后续收尾只在本轮仍是当轮时才生效（见 roundRef 注释）
       const round = (roundRef.current += 1);
@@ -1044,7 +1072,7 @@ export function useAiChat(
         ...list,
         {
           kind: "user",
-          text: trimmed,
+          text: `${trimmed}${secretNotice}`,
           sentAt: Date.now(),
           ...(images.length ? { images } : {})
         }
@@ -1058,13 +1086,13 @@ export function useAiChat(
       }
       messages.push({
         role: "user",
-        content: `${asked}\n\n${workspaceContext(
+        content: `${redactedAsked}${secretNotice}\n\n${workspaceContext(
           session,
           userFromPrompt(session.terminal),
           hasEscalationPassword(session.id)
         )}${
-          refBlocks.length > 0
-            ? `\n\n${refBlocks.join("\n\n")}`
+          redactedRefs.length > 0
+            ? `\n\n${redactedRefs.join("\n\n")}`
             : ""
         }`,
         ...(images.length ? { images } : {})
