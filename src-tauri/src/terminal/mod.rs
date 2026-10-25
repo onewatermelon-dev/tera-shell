@@ -420,6 +420,7 @@ pub fn start(
 	window: tauri::Window,
 	config: Config,
 	terminals: State<Terminals>,
+	open: State<crate::mcp::bridge::OpenSessions>,
 ) -> Result<(), String> {
 	// 注入的 Window 就是发起调用的那个窗口：输出只发回它。
 	// 包成 Arc<Mutex<_>>：拖出独立窗口时会改归属，读线程要能读到新值
@@ -475,6 +476,16 @@ pub fn start(
 		.map_err(|error| error.to_string())?;
 	let writer = Arc::new(Mutex::new(writer));
 	let id = config.id;
+	// 登记 MCP 可见的「已打开会话」元数据（不含密码）。供外部 agent 经
+	// `tera_list_open_sessions` 查询当前有哪些会话在线。host/username/port
+	// 在 `config.id` 被 move 之后仍可访问（部分 move）。
+	open.register(crate::mcp::bridge::OpenSessionMeta {
+		id: id.clone(),
+		kind: config.kind.clone(),
+		host: config.host.clone().unwrap_or_default(),
+		port: config.port.unwrap_or(0),
+		username: config.username.clone().unwrap_or_default(),
+	});
 	let password = config.password.clone();
 	let input_buf = Arc::new(Mutex::new(Vec::new()));
 	let expecting_password = Arc::new(AtomicBool::new(false));
@@ -1020,8 +1031,14 @@ pub async fn open_terminal_window(
 }
 
 #[tauri::command(rename = "terminal_close")]
-pub fn close(id: String, terminals: State<Terminals>) -> Result<(), String> {
+pub fn close(
+	id: String,
+	terminals: State<Terminals>,
+	open: State<crate::mcp::bridge::OpenSessions>,
+) -> Result<(), String> {
 	info!(session = %id, "终端会话关闭");
+	// 会话关闭即从 MCP 的「已打开」登记表移除，外部 agent 不再看到它。
+	open.remove(&id);
 	match terminals
 		.0
 		.lock()

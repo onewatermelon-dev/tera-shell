@@ -4,8 +4,22 @@ version = "1.0.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
+# `cargo run` 默认跑 GUI 主程序（`pnpm tauri dev` 依赖此默认值）。
+# MCP Server 是独立二进制 `tera-shell-mcp`，由外部 agent 显式指定拉起。
+default-run = "tera-shell"
 
 # 在 https://doc.rust-lang.org/cargo/reference/manifest.html 查看更多键及其定义
+
+# 显式声明两个二进制入口。默认规则里 `src/main.rs` → `tera-shell`、
+# `src/bin/tera-shell-mcp.rs` → `tera-shell-mcp`，一旦声明其一就必须
+# 全部显式写出，避免 Cargo 对 `cargo run` 的默认 bin 产生歧义。
+[[bin]]
+name = "tera-shell"
+path = "src/main.rs"
+
+[[bin]]
+name = "tera-shell-mcp"
+path = "src/bin/tera-shell-mcp.rs"
 
 [lib]
 # `_lib` 后缀看似多余，但却是必要的
@@ -86,6 +100,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = "0.4"
 parking_lot = "0.12"
 bytes = "1"
+rmcp = { version = "3.7.0", default-features = false, features = ["server", "client", "macros", "schemars", "transport-io", "transport-child-process", "transport-streamable-http-client-reqwest"] }
+axum = { version = "0.8.9", features = ["tokio"] }
 
 # ── Windows 专用：WebView2 COM（禁用浏览器级快捷键，避免 Ctrl+F 弹出页面查找栏）──
 [target.'cfg(windows)'.dependencies]

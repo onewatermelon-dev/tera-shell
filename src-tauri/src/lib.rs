@@ -7,6 +7,8 @@ pub mod fs;
 pub mod icons;
 /// 基础设施（日志、凭据加解密）
 pub mod infra;
+/// MCP / 外部 agent 双向接入（Server 对外暴露 + Client 调外部）。
+pub mod mcp;
 pub mod sftp;
 /// SSH 连接底座：SFTP 与 AI exec 共用（跳板链 / 私钥 / 连接目标）
 pub mod ssh;
@@ -85,6 +87,9 @@ pub fn run() {
         // 值守心跳：前端不能靠 setInterval —— WebView 后台会节流，
         // 而值守恰恰是「窗口最小化」时才最需要准点。
         .manage(watch::Heartbeat::default())
+        // MCP 已打开会话登记表：terminal::start/close 登记移除，
+        // 本地 HTTP bridge 读取后返回给外部 agent。
+        .manage(mcp::bridge::OpenSessions::default())
         // 暴露给前端 invoke() 的最小终端命令集合。
         .invoke_handler(tauri::generate_handler![
             terminal::start,
@@ -163,6 +168,15 @@ pub fn run() {
         .setup(|app| {
             // 优先初始化日志，后续启动阶段的错误都能被记录。
             infra::logging::init(app);
+            // 启动 MCP 本地 HTTP bridge：生成 token、起 127.0.0.1 服务、
+            // 写 bridge 配置，供外部 agent 拉起的 `tera-shell-mcp` 子进程
+            // 连接。app_handle 经 Manager trait 取得。
+            {
+                use tauri::Manager;
+                let handle = app.handle().clone();
+                let open = app.state::<mcp::bridge::OpenSessions>().inner().clone();
+                mcp::start_bridge(&handle, open);
+            }
             // WebView2 的浏览器级快捷键（Ctrl+F 页面查找栏等）会抢在页面 JS 之前
             // 响应，preventDefault 拦不住；原生禁用后查找统一走应用内实现。
             #[cfg(target_os = "windows")]

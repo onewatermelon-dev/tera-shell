@@ -70,6 +70,39 @@ fn home_dir(app: &AppHandle) -> PathBuf {
 		.unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// 从「用户主目录」解析出数据实际所在目录（已带 `.tera-shell` 后缀）。
+///
+/// 逻辑与 `data_dir` 完全一致，但不依赖 `AppHandle` —— 供 **MCP 子进程**
+/// 这类没有 Tauri 上下文、却又需要读同一份数据的入口复用（子进程用
+/// `dirs::home_dir()` 拿主目录）。单点真源：`data_dir` 内部也调它，
+/// 避免「数据在哪」的规则在两处漂移。
+pub(crate) fn resolve_data_dir_from(
+	home: &Path
+) -> PathBuf {
+	let base = read_location(home)
+		.map(PathBuf::from)
+		.unwrap_or_else(|| home.to_path_buf());
+	base.join(SUBDIR)
+}
+
+/// 读取 `location.json` 里记录的数据根目录（不含 `.tera-shell` 后缀）。
+///
+/// 从 `configured_root` 抽出纯读盘部分：读 `<home>/.tera-shell/location.json`
+/// 的 `dataDir` 字段，解析失败或未配置时返回 `None`。
+fn read_location(home: &Path) -> Option<String> {
+	let text =
+		std::fs::read_to_string(home.join(SUBDIR).join(LOCATION_FILE))
+			.ok()?;
+	let value: serde_json::Value =
+		serde_json::from_str(&text).ok()?;
+	let dir = value.get("dataDir")?.as_str()?.trim().to_string();
+	if dir.is_empty() {
+		None
+	} else {
+		Some(dir)
+	}
+}
+
 /// 应用自有的家目录据点：`<主目录>/.tera-shell`。
 ///
 /// location.json 固定在这里（数据目录可以搬走，「数据在哪」的指针不能跟着
@@ -84,24 +117,9 @@ fn location_path(app: &AppHandle) -> PathBuf {
 	home_anchor(app).join(LOCATION_FILE)
 }
 
-/// 读配置里的数据根目录；没有配置或解析失败时返回 `None`（表示用主目录）。
-fn configured_root(app: &AppHandle) -> Option<String> {
-	let text = std::fs::read_to_string(location_path(app)).ok()?;
-	let value: serde_json::Value = serde_json::from_str(&text).ok()?;
-	let dir = value.get("dataDir")?.as_str()?.trim().to_string();
-	if dir.is_empty() {
-		None
-	} else {
-		Some(dir)
-	}
-}
-
 /// 数据实际所在目录（已带 `.tera-shell` 后缀）。
 fn data_dir(app: &AppHandle) -> PathBuf {
-	let base = configured_root(app)
-		.map(PathBuf::from)
-		.unwrap_or_else(|| home_dir(app));
-	base.join(SUBDIR)
+	resolve_data_dir_from(&home_dir(app))
 }
 
 /// 某个逻辑数据名对应的文件路径。
