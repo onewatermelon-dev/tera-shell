@@ -139,15 +139,13 @@ fn decrypt_password(cipher: Option<&str>) -> Option<String> {
 	crate::infra::secret::decrypt(cipher.to_string()).ok()
 }
 
-/// 把会话定义解析成 `ai::ExecTarget`（含 command 与连接信息）。
+/// 把会话定义解析成 `ssh::SshTarget`（SFTP / AI exec 共用的连接目标）。
 ///
-/// `command` 由调用方传入；这里只负责填 host/port/username/password/
-/// jump/key_path/host_key_policy。
-pub fn build_exec_target(
+/// 从 session_id 读会话 + 解密码 + 摊跳板链 + 读私钥/主机密钥策略。
+pub fn build_ssh_target(
 	data_dir: &std::path::Path,
 	session_id: &str,
-	command: String,
-) -> Result<crate::ai::ExecTarget, TargetError> {
+) -> Result<crate::ssh::SshTarget, TargetError> {
 	let sessions = load_sessions(data_dir);
 	let session = sessions
 		.iter()
@@ -156,7 +154,7 @@ pub fn build_exec_target(
 
 	if session.kind != "ssh" {
 		return Err(TargetError::NotFound(format!(
-			"{session_id}（本地会话不支持远程命令执行）"
+			"{session_id}（本地会话不支持远程操作）"
 		)));
 	}
 
@@ -180,22 +178,52 @@ pub fn build_exec_target(
 		})
 		.unwrap_or_default();
 
-	Ok(crate::ai::ExecTarget {
-		host: session.host.trim().to_string(),
-		port: Some(if session.port == 0 { 22 } else { session.port }),
-		username: Some(session.username.trim().to_string()),
-		password: decrypt_password(session.password.as_deref()),
+	let key_path = if settings.ssh_key_path.trim().is_empty() {
+		None
+	} else {
+		Some(settings.ssh_key_path.trim().to_string())
+	};
+	let host_key_policy = if settings.host_key_policy.is_empty() {
+		None
+	} else {
+		Some(settings.host_key_policy.clone())
+	};
+
+	Ok(crate::ssh::SshTarget::new(
+		&session.host,
+		Some(if session.port == 0 { 22 } else { session.port }),
+		Some(&session.username),
+		decrypt_password(session.password.as_deref()).as_deref(),
+		key_path.as_deref(),
 		jump,
-		key_path: if settings.ssh_key_path.trim().is_empty() {
-			None
-		} else {
-			Some(settings.ssh_key_path.trim().to_string())
-		},
-		host_key_policy: if settings.host_key_policy.is_empty() {
-			None
-		} else {
-			Some(settings.host_key_policy.clone())
-		},
+	)
+	.map_err(|error| TargetError::Other(error))?
+	.with_host_key_policy(host_key_policy.as_deref()))
+}
+
+/// 把会话定义解析成 `ai::ExecTarget`（含 command 与连接信息）。
+///
+/// `command` 由调用方传入；这里只负责填 host/port/username/password/
+/// jump/key_path/host_key_policy。
+pub fn build_exec_target(
+	data_dir: &std::path::Path,
+	session_id: &str,
+	command: String,
+) -> Result<crate::ai::ExecTarget, TargetError> {
+	let ssh = build_ssh_target(data_dir, session_id)?;
+	let host_key_policy = match ssh.host_key_policy {
+		crate::ssh::HostKeyPolicy::Strict => "strict",
+		crate::ssh::HostKeyPolicy::Ask => "ask",
+		crate::ssh::HostKeyPolicy::AcceptNew => "accept-new",
+	};
+	Ok(crate::ai::ExecTarget {
+		host: ssh.host,
+		port: Some(ssh.port),
+		username: Some(ssh.username),
+		password: ssh.password,
+		jump: ssh.jump,
+		key_path: ssh.key_path,
+		host_key_policy: Some(host_key_policy.to_string()),
 		command,
 		stdin: None,
 		exec_id: None,

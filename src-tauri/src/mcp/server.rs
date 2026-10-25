@@ -37,6 +37,15 @@ pub struct RunCommandParams {
 	pub is_read_only: bool,
 }
 
+/// `tera_list_dir` / `tera_read_file` 共用的参数：会话 + 远程路径。
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SftpPathParams {
+	/// 会话 id。
+	pub session_id: String,
+	/// 远程绝对路径。
+	pub path: String,
+}
+
 /// MCP 工具路由：只读会话能力。
 #[derive(Clone, Default)]
 pub struct TeraTools;
@@ -115,6 +124,54 @@ impl TeraTools {
 		.await
 		.map_err(|error| error.to_string())?;
 		Ok(output)
+	}
+
+	/// 列一个远程目录（只读，不审批）。
+	#[tool(description = "列出 tera-shell 指定 SSH 会话（session_id）上某个远程目录的内容（只读，无需审批）。返回条目名，目录带 / 后缀、文件带字节大小。")]
+	async fn tera_list_dir(
+		&self,
+		params: Parameters<SftpPathParams>,
+	) -> Result<String, String> {
+		let inner = &params.0;
+		if inner.session_id.trim().is_empty() {
+			return Err("缺少 session_id".to_string());
+		}
+		let data_dir = super::sessions::data_dir();
+		let path = if inner.path.trim().is_empty() {
+			"."
+		} else {
+			inner.path.trim()
+		};
+		super::remote::list_dir(
+			&data_dir,
+			inner.session_id.trim(),
+			path,
+		)
+		.await
+		.map_err(|error| error.to_string())
+	}
+
+	/// 读一个远程文件的文本内容（只读，不审批）。
+	#[tool(description = "读取 tera-shell 指定 SSH 会话（session_id）上一个远程文件的文本内容（只读，无需审批）。超过 256KB 会截断并注明。")]
+	async fn tera_read_file(
+		&self,
+		params: Parameters<SftpPathParams>,
+	) -> Result<String, String> {
+		let inner = &params.0;
+		if inner.session_id.trim().is_empty() {
+			return Err("缺少 session_id".to_string());
+		}
+		if inner.path.trim().is_empty() {
+			return Err("缺少 path".to_string());
+		}
+		let data_dir = super::sessions::data_dir();
+		super::remote::read_file(
+			&data_dir,
+			inner.session_id.trim(),
+			inner.path.trim(),
+		)
+		.await
+		.map_err(|error| error.to_string())
 	}
 }
 

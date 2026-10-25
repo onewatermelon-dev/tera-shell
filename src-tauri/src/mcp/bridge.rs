@@ -111,6 +111,8 @@ pub(crate) struct BridgeState {
 	exec: crate::ai::ExecPool,
 	/// 审批等待表（阻塞式往返）。
 	approvals: super::approval::Approvals,
+	/// SFTP 连接池（列目录 / 读文件）。
+	sftp: crate::sftp::SftpPool,
 	/// Tauri AppHandle：发审批事件给前端。
 	app: tauri::AppHandle,
 	/// 数据目录：构造 ExecTarget、落审计。
@@ -123,6 +125,7 @@ pub(crate) fn serve_state(
 	open: OpenSessions,
 	exec: crate::ai::ExecPool,
 	approvals: super::approval::Approvals,
+	sftp: crate::sftp::SftpPool,
 	app: tauri::AppHandle,
 	data_dir: std::path::PathBuf,
 ) -> BridgeState {
@@ -131,6 +134,7 @@ pub(crate) fn serve_state(
 		open,
 		exec,
 		approvals,
+		sftp,
 		app,
 		data_dir,
 	}
@@ -169,6 +173,77 @@ async fn open_sessions(
 /// `GET /api/health`：供子进程探测主进程是否在线。
 async fn health() -> &'static str {
 	"ok"
+}
+
+/// 列目录 / 读文件共用的请求体（session_id + 远程路径）。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SftpPathRequest {
+	session_id: String,
+	path: String,
+}
+
+/// 把 session_id 解析成 SshTarget（错误统一转 HTTP 400）。
+fn resolve_ssh_target(
+	state: &BridgeState,
+	session_id: &str,
+) -> Result<crate::ssh::SshTarget, (StatusCode, String)> {
+	super::target::build_ssh_target(&state.data_dir, session_id)
+		.map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+/// `POST /api/list_dir`：列一个远程目录（只读，不审批）。
+async fn list_dir(
+	State(state): State<Arc<BridgeState>>,
+	headers: HeaderMap,
+	Json(req): Json<SftpPathRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+	check_auth(&headers, &state.token)
+		.map_err(|status| (status, "unauthorized".into()))?;
+	let target = resolve_ssh_target(&state, &req.session_id)?;
+	let path = if req.path.trim().is_empty() {
+		".".to_string()
+	} else {
+		req.path.trim().to_string()
+	};
+	// SFTP 是阻塞实现，放 blocking 线程
+	let pool = state.sftp.clone();
+	let joined = tauri::async_runtime::spawn_blocking(move || {
+		crate::sftp::list_remote_dir(&pool, &target, &path)
+	})
+	.await
+	.map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+	let entries = joined
+		.map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+	Ok(Json(serde_json::json!({
+		"entries": entries,
+	})))
+}
+
+/// `POST /api/read_file`：读一个远程文件的文本内容（只读，不审批）。
+async fn read_file(
+	State(state): State<Arc<BridgeState>>,
+	headers: HeaderMap,
+	Json(req): Json<SftpPathRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+	check_auth(&headers, &state.token)
+		.map_err(|status| (status, "unauthorized".into()))?;
+	let target = resolve_ssh_target(&state, &req.session_id)?;
+	let path = req.path.trim().to_string();
+	if path.is_empty() {
+		return Err((StatusCode::BAD_REQUEST, "缺少 path".into()));
+	}
+	let pool = state.sftp.clone();
+	let joined = tauri::async_runtime::spawn_blocking(move || {
+		crate::sftp::read_remote_file(&pool, &target, &path)
+	})
+	.await
+	.map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+	let content = joined
+		.map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+	Ok(Json(serde_json::json!({
+		"content": content,
+	})))
 }
 
 /// `POST /api/run_command` 的请求体。
@@ -355,6 +430,8 @@ pub(crate) fn router(state: Arc<BridgeState>) -> Router {
 		.route("/api/health", get(health))
 		.route("/api/open_sessions", get(open_sessions))
 		.route("/api/run_command", axum::routing::post(run_command))
+		.route("/api/list_dir", axum::routing::post(list_dir))
+		.route("/api/read_file", axum::routing::post(read_file))
 		.with_state(state)
 }
 

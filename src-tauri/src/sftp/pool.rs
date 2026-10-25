@@ -58,7 +58,7 @@ pub(super) struct CacheEntry {
 /// 缓存的是**已经打开的 `Sftp` 通道**而不是裸 `Session`：ssh2 0.9 起 `Sftp`
 /// 不带生命周期参数，内部持有 `Arc<Mutex<SessionInner>>`，可以脱离局部
 /// `Session` 变量长期存活（库已 `unsafe impl Send + Sync for Sftp`）。
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SftpPool {
 	/// 每个目标一条长连接（含已打开的 SFTP 通道与 id 映射）。
 	pub(super) connections: Arc<Mutex<HashMap<String, Arc<Connection>>>>,

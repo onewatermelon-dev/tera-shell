@@ -169,6 +169,80 @@ pub async fn run_command(
 	Ok(output)
 }
 
+/// 列一个远程目录（`POST /api/list_dir`，只读）。
+pub async fn list_dir(
+	data_dir: &Path,
+	session_id: &str,
+	path: &str,
+) -> Result<String, BridgeError> {
+	let config = read_config(data_dir)?;
+	let url = format!("http://127.0.0.1:{}/api/list_dir", config.port);
+	let response = http_client()
+		.post(&url)
+		.header("Authorization", format!("Bearer {}", config.token))
+		.json(&serde_json::json!({
+			"sessionId": session_id,
+			"path": path,
+		}))
+		.send()
+		.await
+		.map_err(|_| BridgeError::NotRunning)?;
+	let status = response.status();
+	let body = response.text().await.unwrap_or_default();
+	if !status.is_success() {
+		return Err(BridgeError::Other(body));
+	}
+	let value: serde_json::Value =
+		serde_json::from_str(&body).unwrap_or_default();
+	let entries = value
+		.get("entries")
+		.and_then(|v| v.as_array())
+		.map(|arr| {
+			arr.iter()
+				.filter_map(|item| item.as_str())
+				.collect::<Vec<_>>()
+				.join("\n")
+		})
+		.unwrap_or_default();
+	if entries.is_empty() {
+		Ok("（空目录）".to_string())
+	} else {
+		Ok(entries)
+	}
+}
+
+/// 读一个远程文件的文本内容（`POST /api/read_file`，只读）。
+pub async fn read_file(
+	data_dir: &Path,
+	session_id: &str,
+	path: &str,
+) -> Result<String, BridgeError> {
+	let config = read_config(data_dir)?;
+	let url = format!("http://127.0.0.1:{}/api/read_file", config.port);
+	let response = http_client()
+		.post(&url)
+		.header("Authorization", format!("Bearer {}", config.token))
+		.json(&serde_json::json!({
+			"sessionId": session_id,
+			"path": path,
+		}))
+		.send()
+		.await
+		.map_err(|_| BridgeError::NotRunning)?;
+	let status = response.status();
+	let body = response.text().await.unwrap_or_default();
+	if !status.is_success() {
+		return Err(BridgeError::Other(body));
+	}
+	let value: serde_json::Value =
+		serde_json::from_str(&body).unwrap_or_default();
+	Ok(value
+		.get("content")
+		.and_then(|v| v.as_str())
+		.unwrap_or(&body)
+		.to_string())
+}
+
 /// 供测试注入的 `OpenSessionMeta` 反序列化（确认与主进程字段对齐）。
 #[allow(dead_code)]
 fn _assert_deserialize() {

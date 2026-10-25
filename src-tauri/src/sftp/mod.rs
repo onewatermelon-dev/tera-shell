@@ -11,6 +11,7 @@
 pub mod browse;
 pub mod open;
 pub mod pool;
+pub mod read;
 pub mod remote_ops;
 pub mod rename;
 pub mod transfer;
@@ -18,6 +19,7 @@ pub mod window;
 
 pub use browse::{RemoteEntry, SftpListing, SftpRequest, list};
 pub use pool::SftpPool;
+pub(crate) use read::{list_remote_dir, read_remote_file};
 pub use remote_ops::{
 	archive, chmod, create_remote_file, disk_usage, make_remote_dir,
 	remote_fs, remove_remote_path,

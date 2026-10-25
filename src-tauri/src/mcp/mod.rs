@@ -52,6 +52,10 @@ pub fn start_bridge(app: &tauri::AppHandle, open: bridge::OpenSessions) {
 		.state::<approval::Approvals>()
 		.inner()
 		.clone();
+	let sftp = app
+		.state::<crate::sftp::SftpPool>()
+		.inner()
+		.clone();
 	let app_handle = app.clone();
 
 	// 生成 token：优先复用磁盘上已有的（GUI 重启后子进程里缓存的旧 token
@@ -110,6 +114,7 @@ pub fn start_bridge(app: &tauri::AppHandle, open: bridge::OpenSessions) {
 			open,
 			exec,
 			approvals,
+			sftp,
 			app_handle,
 			data_dir_clone,
 		));
