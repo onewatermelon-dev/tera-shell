@@ -52,6 +52,8 @@ import {
 } from "@/terminal/lib/session/terminalLayout";
 import WatchDialog from "@/watch/components/WatchDialog";
 import WatchPanel from "@/watch/components/WatchPanel";
+import { useMcpApproval } from "@/terminal/lib/mcp/useMcpApproval";
+import { McpApprovalDialog } from "@/terminal/components/ai/McpApprovalDialog";
 import type { SavedSession } from "@/sessions/lib/session";
 import "@xterm/xterm/css/xterm.css";
 import "@/styles/app.scss";
@@ -105,6 +107,9 @@ export default function App() {
   // 编辑中的宏；为 null 表示本次弹窗是「新增」
   const [editingMacro, setEditingMacro] =
     useState<TerminalMacro | null>(null);
+
+  // MCP 外部 agent 命令审批：监听后端事件，弹审批卡
+  const mcpApproval = useMcpApproval();
 
   // 显示偏好：字体、字号、主题。必须早于 useTerminals —— 终端要用它建实例
   const appSettings = useSettings();
@@ -936,6 +941,27 @@ export default function App() {
           onSaved={watch.reload}
           onAskAi={askAiFromWatch}
           onDeleteAlert={watch.removeAlert}
+        />
+      )}
+
+      {/* MCP 审批弹窗：外部 agent 请求执行命令时，弹全局确认框。
+          同样挂根层（终端工作区有 overflow:hidden 自建层叠上下文）。 */}
+      {mcpApproval.pending && (
+        <McpApprovalDialog
+          key={mcpApproval.pending.requestId}
+          request={mcpApproval.pending}
+          onApprove={() =>
+            void mcpApproval.respond(
+              mcpApproval.pending!.requestId,
+              "approved"
+            )
+          }
+          onReject={() =>
+            void mcpApproval.respond(
+              mcpApproval.pending!.requestId,
+              "rejected"
+            )
+          }
         />
       )}
     </main>

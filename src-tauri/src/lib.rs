@@ -90,6 +90,8 @@ pub fn run() {
         // MCP 已打开会话登记表：terminal::start/close 登记移除，
         // 本地 HTTP bridge 读取后返回给外部 agent。
         .manage(mcp::bridge::OpenSessions::default())
+        // MCP 命令执行审批等待表：bridge 登记、前端审批卡回传决定。
+        .manage(mcp::approval::Approvals::default())
         // 暴露给前端 invoke() 的最小终端命令集合。
         .invoke_handler(tauri::generate_handler![
             terminal::start,
@@ -146,6 +148,7 @@ pub fn run() {
             ai::exec_cancel,
             ai::chat_stream,
             ai::chat_cancel,
+            mcp::approval_respond,
             infra::secret::encrypt,
             infra::secret::decrypt,
             infra::http::http_post_json,

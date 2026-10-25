@@ -33,7 +33,7 @@ const SUBDIR: &str = ".tera-shell";
 const LOCATION_FILE: &str = "location.json";
 
 /// 允许被读写的逻辑数据名。限定白名单，避免前端传任意文件名。
-const ALLOWED: [&str; 16] = [
+const ALLOWED: [&str; 17] = [
 	"sessions",
 	"groups",
 	"settings",
@@ -53,6 +53,8 @@ const ALLOWED: [&str; 16] = [
 	"terminal_layout",
 	// 窗口在桌面的位置与大小
 	"window_state",
+	// MCP 命令执行审计日志（见 src-tauri/src/mcp/audit.rs）
+	"mcp_audit",
 ];
 
 fn ensure_name(name: &str) -> Result<(), String> {

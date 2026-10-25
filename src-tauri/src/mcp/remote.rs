@@ -102,6 +102,73 @@ pub async fn healthy(data_dir: &Path) -> bool {
 	}
 }
 
+/// 经主进程审批后执行命令（`POST /api/run_command`）。
+///
+/// 阻塞直到用户在主窗口审批（或超时）。返回命令执行的文本结果，或
+/// `BridgeError`（主进程未运行 / 用户拒绝 / 审批超时等）。
+pub async fn run_command(
+	data_dir: &Path,
+	session_id: &str,
+	command: &str,
+	is_read_only: bool,
+	client: &str,
+) -> Result<String, BridgeError> {
+	let config = read_config(data_dir)?;
+	let url = format!(
+		"http://127.0.0.1:{}/api/run_command",
+		config.port
+	);
+	let response = http_client()
+		.post(&url)
+		.header("Authorization", format!("Bearer {}", config.token))
+		.json(&serde_json::json!({
+			"sessionId": session_id,
+			"command": command,
+			"isReadOnly": is_read_only,
+			"client": client,
+		}))
+		.send()
+		.await
+		.map_err(|error| {
+			if error.is_timeout() {
+				// 审批超时（主进程 5 分钟）会表现为请求超时
+				BridgeError::Other("审批超时或命令执行超时".into())
+			} else {
+				BridgeError::NotRunning
+			}
+		})?;
+
+	let status = response.status();
+	let body = response
+		.text()
+		.await
+		.unwrap_or_default();
+
+	if status == reqwest::StatusCode::UNAUTHORIZED {
+		return Err(BridgeError::Other("鉴权失败".into()));
+	}
+	if status == reqwest::StatusCode::FORBIDDEN {
+		return Err(BridgeError::Other("用户拒绝了这条命令".into()));
+	}
+	if status == reqwest::StatusCode::REQUEST_TIMEOUT {
+		return Err(BridgeError::Other("审批超时，已自动拒绝".into()));
+	}
+	if !status.is_success() {
+		// 主进程返回的错误体（如「会话不存在」）
+		return Err(BridgeError::Other(body));
+	}
+
+	// 成功：body 是 {"requestId":..., "output":"exit_code=..."}
+	let value: serde_json::Value =
+		serde_json::from_str(&body).unwrap_or_default();
+	let output = value
+		.get("output")
+		.and_then(|v| v.as_str())
+		.unwrap_or(&body)
+		.to_string();
+	Ok(output)
+}
+
 /// 供测试注入的 `OpenSessionMeta` 反序列化（确认与主进程字段对齐）。
 #[allow(dead_code)]
 fn _assert_deserialize() {

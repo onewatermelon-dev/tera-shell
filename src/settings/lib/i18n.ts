@@ -909,7 +909,18 @@ const zhCN = {
   "option.light": "浅色",
   "option.dark": "深色",
   "option.zhCN": "简体中文",
-  "option.enUS": "English"
+  "option.enUS": "English",
+
+  "mcp.approval.title": "外部 Agent 请求执行命令",
+  "mcp.approval.from": "来自 {client}，",
+  "mcp.approval.external": "外部 Agent",
+  "mcp.approval.target": "目标：{target}",
+  "mcp.approval.readonlyHint":
+    "这是一条只读命令，执行不会修改服务器状态。",
+  "mcp.approval.writeHint":
+    "这条命令会修改服务器状态，请确认命令内容后执行。",
+  "mcp.approval.reject": "拒绝",
+  "mcp.approval.approve": "执行"
 } as const;
 
 export type MessageKey = keyof typeof zhCN;
@@ -1830,7 +1841,19 @@ const enUS: Record<MessageKey, string> = {
   "option.light": "Light",
   "option.dark": "Dark",
   "option.zhCN": "简体中文",
-  "option.enUS": "English"
+  "option.enUS": "English",
+
+  "mcp.approval.title":
+    "External agent requests a command",
+  "mcp.approval.from": "From {client}, ",
+  "mcp.approval.external": "External agent",
+  "mcp.approval.target": "Target: {target}",
+  "mcp.approval.readonlyHint":
+    "This is a read-only command; it will not change server state.",
+  "mcp.approval.writeHint":
+    "This command will change server state. Review it before running.",
+  "mcp.approval.reject": "Reject",
+  "mcp.approval.approve": "Run"
 };
 
 const DICTIONARIES: Record<

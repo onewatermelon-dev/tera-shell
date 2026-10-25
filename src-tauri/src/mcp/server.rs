@@ -25,6 +25,18 @@ pub struct ListSessionsParams {}
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ListOpenSessionsParams {}
 
+/// `tera_run_command` 的参数：指定会话 + 命令。
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RunCommandParams {
+	/// 会话 id（来自 `tera_list_sessions` / `tera_list_open_sessions`）。
+	pub session_id: String,
+	/// 要执行的 shell 命令。
+	pub command: String,
+	/// 是否为只读命令（只查不改状态为 true）。
+	#[serde(default)]
+	pub is_read_only: bool,
+}
+
 /// MCP 工具路由：只读会话能力。
 #[derive(Clone, Default)]
 pub struct TeraTools;
@@ -77,6 +89,32 @@ impl TeraTools {
 				})
 				.collect();
 		Ok(render_sessions(&metas))
+	}
+
+	/// 在指定会话的服务器上执行一条命令（需用户在主窗口审批）。
+	#[tool(description = "在 tera-shell 的指定 SSH 会话（session_id）上执行一条 shell 命令并返回输出。⚠️ 会先在 tera-shell 主窗口弹出审批卡，等用户点「执行」后才真正运行；用户拒绝则返回拒绝提示。只读命令（查状态）设 is_read_only=true。")]
+	async fn tera_run_command(
+		&self,
+		params: Parameters<RunCommandParams>,
+	) -> Result<String, String> {
+		let inner = &params.0;
+		if inner.session_id.trim().is_empty() {
+			return Err("缺少 session_id".to_string());
+		}
+		if inner.command.trim().is_empty() {
+			return Err("缺少 command".to_string());
+		}
+		let data_dir = super::sessions::data_dir();
+		let output = super::remote::run_command(
+			&data_dir,
+			inner.session_id.trim(),
+			&inner.command,
+			inner.is_read_only,
+			"mcp-client",
+		)
+		.await
+		.map_err(|error| error.to_string())?;
+		Ok(output)
 	}
 }
 

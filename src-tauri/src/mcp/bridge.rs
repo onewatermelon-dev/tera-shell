@@ -30,6 +30,7 @@ use axum::{
 	routing::get,
 };
 use serde::Serialize;
+use tauri::Emitter;
 use tracing::warn;
 
 use super::token;
@@ -102,18 +103,37 @@ impl OpenSessions {
 	}
 }
 
-/// bridge 服务的共享状态：token + 已打开会话表。
+/// bridge 服务的共享状态：token + 已打开会话表 + 执行/审批所需资源。
 pub(crate) struct BridgeState {
 	token: String,
 	open: OpenSessions,
+	/// AI exec 会话池（执行命令）。
+	exec: crate::ai::ExecPool,
+	/// 审批等待表（阻塞式往返）。
+	approvals: super::approval::Approvals,
+	/// Tauri AppHandle：发审批事件给前端。
+	app: tauri::AppHandle,
+	/// 数据目录：构造 ExecTarget、落审计。
+	data_dir: std::path::PathBuf,
 }
 
 /// 构造 bridge 的共享状态（供 mod.rs 在 spawn 前组装）。
 pub(crate) fn serve_state(
 	token: String,
 	open: OpenSessions,
+	exec: crate::ai::ExecPool,
+	approvals: super::approval::Approvals,
+	app: tauri::AppHandle,
+	data_dir: std::path::PathBuf,
 ) -> BridgeState {
-	BridgeState { token, open }
+	BridgeState {
+		token,
+		open,
+		exec,
+		approvals,
+		app,
+		data_dir,
+	}
 }
 
 /// 校验 `Authorization: Bearer <token>`；通过返回 None，失败返回 401 错误。
@@ -151,11 +171,150 @@ async fn health() -> &'static str {
 	"ok"
 }
 
+/// `POST /api/run_command` 的请求体。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RunCommandRequest {
+	session_id: String,
+	command: String,
+	#[serde(default)]
+	is_read_only: bool,
+	#[serde(default)]
+	client: String,
+}
+
+/// `POST /api/run_command`：审批后执行命令（阻塞等用户决定）。
+async fn run_command(
+	State(state): State<Arc<BridgeState>>,
+	headers: HeaderMap,
+	Json(req): Json<RunCommandRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+	check_auth(&headers, &state.token)
+		.map_err(|status| (status, "unauthorized".into()))?;
+
+	// 构造 ExecTarget（会话不存在 / 密码解不开在这里就报错）
+	let target = super::target::build_exec_target(
+		&state.data_dir,
+		&req.session_id,
+		req.command.clone(),
+	)
+	.map_err(|error| {
+		(StatusCode::BAD_REQUEST, error.to_string())
+	})?;
+
+	let client = if req.client.trim().is_empty() {
+		"unknown".to_string()
+	} else {
+		req.client.trim().to_string()
+	};
+
+	// 保存目标描述（target 会在执行时被 move，审计要用）
+	let target_desc = format!(
+		"{}@{}:{}",
+		target.username.as_deref().unwrap_or("root"),
+		target.host,
+		target.port.unwrap_or(22)
+	);
+
+	// 生成审批请求，登记 pending，emit 给前端
+	let request_id = format!("mcp-{}", crate::mcp::token::generate());
+	let approval = super::approval::ApprovalRequest {
+		request_id: request_id.clone(),
+		target: target_desc.clone(),
+		command: target.command.clone(),
+		is_read_only: req.is_read_only,
+		client: client.clone(),
+	};
+	let rx = state.approvals.register(request_id.clone());
+	// 事件名与前端 useMcpApproval 的 listen 一致
+	let _ = state
+		.app
+		.emit("mcp-approval-request", approval);
+
+	// 阻塞等决定（超时自动拒绝）
+	let decision = tokio::time::timeout(
+		super::approval::APPROVAL_TIMEOUT,
+		rx,
+	)
+	.await
+	.map_err(|_| {
+		// 超时：解除 pending，落审计，返回错误
+		state.approvals.dismiss(&request_id);
+		super::audit::record_decision(
+			&state.data_dir,
+			&client,
+			&target_desc,
+			&target.command,
+			req.is_read_only,
+			super::approval::Decision::Rejected,
+		);
+		(
+			StatusCode::REQUEST_TIMEOUT,
+			"审批超时，已自动拒绝".to_string(),
+		)
+	})?
+	.map_err(|_| {
+		(StatusCode::INTERNAL_SERVER_ERROR, "审批通道已关闭".into())
+	})?;
+
+	match decision {
+		super::approval::Decision::Rejected => {
+			super::audit::record_decision(
+				&state.data_dir,
+				&client,
+				&target_desc,
+				&target.command,
+				req.is_read_only,
+				super::approval::Decision::Rejected,
+			);
+			Err((
+				StatusCode::FORBIDDEN,
+				"用户拒绝了这条命令".to_string(),
+			))
+		}
+		super::approval::Decision::Approved => {
+			// 执行命令
+			let command = target.command.clone();
+			let outcome = crate::ai::execute_command(
+				&state.exec,
+				target,
+			)
+			.await
+			.map_err(|error| {
+				(StatusCode::INTERNAL_SERVER_ERROR, error)
+			})?;
+
+			super::audit::record_executed(
+				&state.data_dir,
+				&client,
+				&target_desc,
+				&command,
+				req.is_read_only,
+				outcome.exit_code,
+				format!("{}{}", outcome.stdout, outcome.stderr),
+			);
+
+			// 返回执行结果给子进程（文本形式）
+			let output = format!(
+				"exit_code={}\nstdout:\n{}\nstderr:\n{}",
+				outcome.exit_code,
+				outcome.stdout,
+				outcome.stderr
+			);
+			Ok(Json(serde_json::json!({
+				"requestId": request_id,
+				"output": output
+			})))
+		}
+	}
+}
+
 /// 构建路由（供 mod.rs 组装 axum server）。
 pub(crate) fn router(state: Arc<BridgeState>) -> Router {
 	Router::new()
 		.route("/api/health", get(health))
 		.route("/api/open_sessions", get(open_sessions))
+		.route("/api/run_command", axum::routing::post(run_command))
 		.with_state(state)
 }
 

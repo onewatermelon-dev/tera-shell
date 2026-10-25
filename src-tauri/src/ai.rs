@@ -38,7 +38,7 @@ const CANCEL_POLL_MS: u32 = 1_000;
 ///
 /// ssh2 的 `Session` 不可克隆，池里存的是互斥锁包住的会话本体 ——
 /// 同一台服务器上的命令在锁上排队，恰好符合"逐条执行"的语义。
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ExecPool {
 	sessions:
 		Arc<Mutex<HashMap<String, Arc<Mutex<Session>>>>>,
@@ -104,45 +104,45 @@ impl ExecPool {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecTarget {
-	host: String,
-	port: Option<u16>,
-	username: Option<String>,
-	password: Option<String>,
+	pub host: String,
+	pub port: Option<u16>,
+	pub username: Option<String>,
+	pub password: Option<String>,
 	#[serde(default)]
-	jump: Vec<JumpHop>,
+	pub jump: Vec<JumpHop>,
 	#[serde(default)]
-	key_path: Option<String>,
+	pub key_path: Option<String>,
 	/// 主机密钥校验策略（设置页 `hostKeyPolicy`）：accept-new / ask /
 	/// strict。缺省 accept-new —— 与终端 ssh 的缺省行为一致。
 	#[serde(default)]
-	host_key_policy: Option<String>,
+	pub host_key_policy: Option<String>,
 	/// 要执行的命令，在远端登录 shell 下运行（等价 `shell -c "命令"`）。
-	command: String,
+	pub command: String,
 	/// 可选：喂给命令 stdin 的内容（exec 通道数据流，不受 channel request
 	/// 的 ~16KB 包上限约束）。用于把大段文本（如 cat 高亮结果）注入
 	/// `cat > /dev/pts/N`，不占用命令字符串。
-	stdin: Option<String>,
+	pub stdin: Option<String>,
 	/// 前端生成的执行 id：「停止」时靠它定位这条命令。缺省由内部补一个，
 	/// 只是前端取消不了。
-	exec_id: Option<String>,
+	pub exec_id: Option<String>,
 	/// sudo 密码（**登录账号**的密码）。有值才走 `sudo -S`。
 	/// ⚠️ **绝不进日志**。
 	#[serde(default)]
-	escalate_sudo_password: Option<String>,
+	pub escalate_sudo_password: Option<String>,
 	/// su 密码（**root** 的密码）。有值才走 `su -` + pty。
 	/// ⚠️ 两个密码不是同一个，必须分开配 —— 合并成一个的话用户填哪个都有一半失败。
 	#[serde(default)]
-	escalate_su_password: Option<String>,
+	pub escalate_su_password: Option<String>,
 }
 
 /// 一次命令执行的产物。
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecOutcome {
-	stdout: String,
-	stderr: String,
+	pub stdout: String,
+	pub stderr: String,
 	/// 退出码；通道异常拿不到时为 -1。
-	exit_code: i32,
+	pub exit_code: i32,
 }
 
 /// 执行失败的原因。区分「可重试」（连接失效）与「已取消」（用户点了
@@ -185,6 +185,17 @@ impl std::fmt::Display for ExecError {
 #[tauri::command(rename = "ai_run_command")]
 pub async fn run_command(
 	pool: State<'_, ExecPool>,
+	target: ExecTarget,
+) -> Result<ExecOutcome, String> {
+	execute_command(&pool, target).await
+}
+
+/// 执行一条 AI 命令（`run_command` 与 MCP bridge 共用的核心）。
+///
+/// 从 `run_command` 抽出：MCP 的 bridge handler 拿不到 `State<ExecPool>`，
+/// 但它可以拿到 `ExecPool` 的 Clone，直接调这里。逻辑与原来完全一致。
+pub async fn execute_command(
+	pool: &ExecPool,
 	target: ExecTarget,
 ) -> Result<ExecOutcome, String> {
 	let sessions = pool.sessions.clone();

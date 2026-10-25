@@ -11,9 +11,12 @@
 //! 子进程只做**只读**（列会话 / 读元数据）；任何命令执行与 SFTP 都经
 //! 主进程审批后放行。
 
+pub mod approval;
+pub mod audit;
 pub mod bridge;
 pub mod remote;
 pub mod sessions;
+pub mod target;
 pub mod token;
 
 use std::sync::Arc;
@@ -38,6 +41,17 @@ pub fn start_bridge(app: &tauri::AppHandle, open: bridge::OpenSessions) {
 	let data_dir = crate::data::resolve_data_dir_from(
 		&app.path().home_dir().unwrap_or_default(),
 	);
+
+	// 从 Tauri 状态取执行池与审批表（与 ai::run_command 共用同一实例）。
+	let exec = app
+		.state::<crate::ai::ExecPool>()
+		.inner()
+		.clone();
+	let approvals = app
+		.state::<approval::Approvals>()
+		.inner()
+		.clone();
+	let app_handle = app.clone();
 
 	// 生成 token：优先复用磁盘上已有的（GUI 重启后子进程里缓存的旧 token
 	// 还能用），没有才新生成并持久化。
@@ -90,8 +104,14 @@ pub fn start_bridge(app: &tauri::AppHandle, open: bridge::OpenSessions) {
 		tracing::info!(port, "MCP bridge 端口已写入配置");
 
 		// 用已经 bind 好的 listener 直接 serve。
-		let state =
-			Arc::new(bridge::serve_state(token_clone, open));
+		let state = Arc::new(bridge::serve_state(
+			token_clone,
+			open,
+			exec,
+			approvals,
+			app_handle,
+			data_dir_clone,
+		));
 		let app = bridge::router(state);
 		if let Err(error) = axum::serve(listener, app).await {
 			tracing::error!("MCP bridge 运行失败：{error}");
@@ -114,3 +134,23 @@ fn write_bridge_config(
 }
 
 mod server;
+
+/// 前端回传 MCP 审批决定（审批卡上点「执行 / 拒绝」）。
+///
+/// `request_id` 来自 `mcp-approval-request` 事件，`decision` 为
+/// `approved` / `rejected`。返回是否命中 pending（未命中 = 已超时或 id 错）。
+#[tauri::command(rename = "mcp_approval_respond")]
+pub fn approval_respond(
+	approvals: tauri::State<'_, approval::Approvals>,
+	request_id: String,
+	decision: String,
+) -> Result<bool, String> {
+	let decision = match decision.as_str() {
+		"approved" => approval::Decision::Approved,
+		"rejected" => approval::Decision::Rejected,
+		other => {
+			return Err(format!("未知的审批决定：{other}"));
+		}
+	};
+	Ok(approvals.respond(&request_id, decision))
+}

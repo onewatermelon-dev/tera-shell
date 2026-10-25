@@ -196,3 +196,44 @@ body.reopen-dragging {
     cursor: grabbing !important;
   }
 }
+
+// MCP 审批弹窗（外部 agent 请求执行命令时的确认框）
+// 视觉对齐 AI 面板 ToolCard，但挂 App 根层的全局弹窗。
+.mcp-approval-head {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mcp-approval-title {
+  font-weight: 650;
+}
+
+.mcp-approval-target {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.mcp-approval-command {
+  padding: 10px 12px;
+  margin: 0;
+  font:
+    12px Consolas,
+    "Cascadia Code",
+    monospace;
+  line-height: 1.6;
+  word-break: break-all;
+  white-space: pre-wrap;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+}
+
+.mcp-approval-hint {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
