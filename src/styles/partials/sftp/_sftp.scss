@@ -27,6 +27,58 @@
   }
 }
 
+// SFTP 内置预览弹层（图片/文本双击直接看）
+.sftp-preview-dialog {
+  width: min(760px, 90vw);
+
+  .modal__body {
+    min-height: 0;
+  }
+}
+
+.sftp-preview-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sftp-preview-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger, #e06c75);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.sftp-preview-image-wrap {
+  display: flex;
+  justify-content: center;
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.sftp-preview-image {
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.sftp-preview-text {
+  max-height: min(70vh, 640px);
+  margin: 0;
+  overflow: auto;
+  font:
+    12px/1.6 Consolas,
+    monospace;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+
+  @include thin-scrollbar;
+}
+
 // SFTP 面板顶部兼作窗口拖动区：Tauri 判定的是 mousedown 事件目标本身是否带
 // data-tauri-drag-region，所以让 Header 内的文本穿透，事件才会落到 Header 上。
 // 关闭钮是交互元素，需要恢复可点。

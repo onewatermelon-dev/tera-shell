@@ -131,6 +131,11 @@ const zhCN = {
   "proc.colMem": "内存",
   "proc.colCpu": "CPU",
   "proc.colCmd": "名称/命令行",
+  "sftp.preview.image": "图片预览",
+  "sftp.preview.text": "文本预览",
+  "sftp.preview.loading": "正在读取文件…",
+  "sftp.preview.truncated":
+    "文件超过 2MB，仅显示前面部分",
   "net.title": "网络信息",
   "net.colName": "名称",
   "net.colIp": "监听IP",
@@ -1074,6 +1079,11 @@ const enUS: Record<MessageKey, string> = {
   "proc.colMem": "Memory",
   "proc.colCpu": "CPU",
   "proc.colCmd": "Name/Command",
+  "sftp.preview.image": "Image preview",
+  "sftp.preview.text": "Text preview",
+  "sftp.preview.loading": "Reading file…",
+  "sftp.preview.truncated":
+    "File exceeds 2MB; showing the first part only",
   "net.title": "Network Info",
   "net.colName": "Name",
   "net.colIp": "Listening IP",

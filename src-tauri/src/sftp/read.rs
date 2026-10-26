@@ -99,3 +99,93 @@ pub(crate) fn read_remote_file(
 		Ok(text)
 	}
 }
+
+/// 预览读取的上限：图片与文本预览都够用，再大该走下载。
+const PREVIEW_MAX_BYTES: u64 = 2 * 1024 * 1024;
+
+/// 内置预览的读取结果（base64 字节 + 截断标记）。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewContent {
+	pub base64: String,
+	/// 超过上限被截断（前端提示「仅显示前 2MB」）
+	pub truncated: bool,
+}
+
+/// 读一个远程文件的字节（base64，限 2MB）——SFTP 双击内置预览用。
+///
+/// 与 `read_remote_file`（文本、给 MCP）分开：预览要原始字节（图片
+/// data URL 直拼 base64），且上限不同。
+pub(crate) fn read_remote_base64(
+	pool: &SftpPool,
+	target: &SshTarget,
+	path: &str,
+) -> Result<PreviewContent, String> {
+	let connection = obtain(&pool.connections, target)?;
+	let sftp = &connection.sftp;
+	let mut file = sftp
+		.open(std::path::Path::new(path))
+		.map_err(|error| format!("打开文件 {path} 失败：{error}"))?;
+	let mut buffer = Vec::new();
+	let mut chunk = [0u8; 65536];
+	let mut truncated = false;
+	loop {
+		let read = file
+			.read(&mut chunk)
+			.map_err(|error| format!("读取 {path} 失败：{error}"))?;
+		if read == 0 {
+			break;
+		}
+		if buffer.len() as u64 + read as u64 > PREVIEW_MAX_BYTES {
+			let room =
+				(PREVIEW_MAX_BYTES - buffer.len() as u64) as usize;
+			buffer.extend_from_slice(&chunk[..room]);
+			truncated = true;
+			break;
+		}
+		buffer.extend_from_slice(&chunk[..read]);
+	}
+	Ok(PreviewContent {
+		base64: base64_encode(&buffer),
+		truncated,
+	})
+}
+
+/// 标准库没有 base64：手写查表编码（预览量级 2MB，性能足够）。
+fn base64_encode(data: &[u8]) -> String {
+	const TABLE: &[u8; 64] =
+		b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+	for block in data.chunks(3) {
+		let b0 = block[0] as u32;
+		let b1 = *block.get(1).unwrap_or(&0) as u32;
+		let b2 = *block.get(2).unwrap_or(&0) as u32;
+		let triple = (b0 << 16) | (b1 << 8) | b2;
+		out.push(TABLE[(triple >> 18) as usize & 63] as char);
+		out.push(TABLE[(triple >> 12) as usize & 63] as char);
+		out.push(if block.len() > 1 {
+			TABLE[(triple >> 6) as usize & 63] as char
+		} else {
+			'='
+		});
+		out.push(if block.len() > 2 {
+			TABLE[triple as usize & 63] as char
+		} else {
+			'='
+		});
+	}
+	out
+}
+
+/// 读远程文件内容做内置预览（图片/文本双击直接看，不落临时文件）。
+///
+/// 签名与 remote_ops 同模式（收 TransferJob，`local` 留空）：
+/// SshTarget 含非 serde 的策略枚举，命令参数层用裸字段。
+#[tauri::command(rename = "sftp_read_preview")]
+pub fn read_preview(
+	pool: tauri::State<SftpPool>,
+	job: super::transfer::TransferJob,
+) -> Result<PreviewContent, String> {
+	let target = super::transfer::transfer_target(&job)?;
+	read_remote_base64(&pool, &target, &job.remote)
+}

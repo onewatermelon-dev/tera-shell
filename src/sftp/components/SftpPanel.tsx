@@ -39,6 +39,8 @@ type SftpPanelProps = {
   remoteOpLabel: string | null;
   onNavigateLocal: (path: string) => void;
   onNavigateRemote: (path: string) => void;
+  /** 远程栏双击文件：可预览扩展名走内置预览，其余外部打开。 */
+  onOpenRemoteFile?: (entry: PaneEntry) => void;
   onRefreshLocal: () => void;
   onRefreshRemote: () => void;
   canPaste: boolean;
@@ -131,6 +133,7 @@ export default function SftpPanel({
   remoteOpLabel,
   onNavigateLocal,
   onNavigateRemote,
+  onOpenRemoteFile,
   onRefreshLocal,
   onRefreshRemote,
   canPaste,
@@ -333,6 +336,7 @@ export default function SftpPanel({
                 : "当前是本机终端，没有远程目录"
             }
             onOpen={onNavigateRemote}
+            onOpenFile={onOpenRemoteFile}
             onRefresh={onRefreshRemote}
             isLocal={false}
             canPaste={canPaste}

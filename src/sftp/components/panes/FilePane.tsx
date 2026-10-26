@@ -33,6 +33,8 @@ type FilePaneProps = {
   /** 目录为空（或未连接）时的提示文案。 */
   emptyText: string;
   onOpen: (path: string) => void;
+  /** 双击**文件**：可预览扩展名走内置预览，其余外部打开。缺省 = 双击文件无反应（旧行为） */
+  onOpenFile?: (entry: PaneEntry) => void;
   /** 强制重新读取当前目录（远程会跳过后端缓存）。 */
   onRefresh: () => void;
   /** 是否提供本地路径选择入口（本地栏 true；远程栏不显示按钮与面板）。 */
@@ -109,6 +111,7 @@ const FilePane = memo(function FilePane({
   busy,
   emptyText,
   onOpen,
+  onOpenFile,
   onRefresh,
   canPickPath = false,
   isLocal,
@@ -387,6 +390,8 @@ const FilePane = memo(function FilePane({
                   onDoubleClick={() => {
                     if (entry.isDir)
                       onOpen(entry.path);
+                    // 双击文件：预览/外部打开（缺省维持无反应的旧行为）
+                    else onOpenFile?.(entry);
                   }}
                   onContextMenu={event => {
                     // 行上右键：菜单针对这个条目；阻止冒泡避免被当成空白处。

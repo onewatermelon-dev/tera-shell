@@ -18,6 +18,11 @@ import {
 import type { FileAction } from "@/sftp/components/panes/FileContextMenu";
 import SftpPanel from "@/sftp/components/SftpPanel";
 import TransferPolicyDialog from "@/sftp/components/dialogs/TransferPolicyDialog";
+import { SftpPreviewModal } from "@/sftp/components/SftpPreviewModal";
+import {
+  previewKind,
+  type PreviewKind
+} from "@/sftp/lib/preview";
 
 /** 等用户选策略的一次跨栏传输：冲突清单 + 选定后的执行动作。 */
 type PendingTransfer = {
@@ -51,6 +56,11 @@ export default function SftpWindow({
   // 等用户选策略的传输：有同名冲突时才挂起
   const [pendingTransfer, setPendingTransfer] =
     useState<PendingTransfer | null>(null);
+  // 双击文件的内置预览（图片/文本）
+  const [preview, setPreview] = useState<{
+    path: string;
+    kind: PreviewKind;
+  } | null>(null);
 
   /**
    * 计划一次跨栏传输：目标栏当前列表有同名项时先弹策略对话框，
@@ -100,6 +110,20 @@ export default function SftpWindow({
           path,
           refresh
         );
+    },
+    [sftp]
+  );
+
+  /** 远程栏双击文件：图片/文本走内置预览，其余外部打开（原先是双击无反应）。 */
+  const handleOpenRemoteFile = useCallback(
+    (entry: PaneEntry) => {
+      if (!sftp.session) return;
+      const kind = previewKind(entry.name);
+      if (kind) {
+        setPreview({ path: entry.path, kind });
+        return;
+      }
+      void sftp.openEntry("remote", entry, false);
     },
     [sftp]
   );
@@ -423,6 +447,7 @@ export default function SftpWindow({
         remoteOpLabel={sftp.remoteOpLabel}
         onNavigateLocal={sftp.navigateLocal}
         onNavigateRemote={handleNavigateRemote}
+        onOpenRemoteFile={handleOpenRemoteFile}
         onRefreshLocal={handleRefreshLocal}
         onRefreshRemote={handleRefreshRemote}
         canPaste={sftp.canPaste}
@@ -451,6 +476,14 @@ export default function SftpWindow({
             run(policy);
           }}
           onClose={() => setPendingTransfer(null)}
+        />
+      )}
+      {preview && (
+        <SftpPreviewModal
+          session={session}
+          path={preview.path}
+          kind={preview.kind}
+          onClose={() => setPreview(null)}
         />
       )}
     </>

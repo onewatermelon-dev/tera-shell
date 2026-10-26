@@ -122,6 +122,8 @@ pub fn run() {
             fs::pick_save_path,
             fs::rename::rename_local,
             sftp::browse::list,
+            // SFTP 内置预览：双击图片/文本直接看（不落临时文件）
+            sftp::read::read_preview,
             sftp::transfer::upload,
             sftp::transfer::download,
             sftp::remote_ops::disk_usage,
