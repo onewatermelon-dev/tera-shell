@@ -51,6 +51,7 @@ import {
   saveLayout
 } from "@/terminal/lib/session/terminalLayout";
 import WatchDialog from "@/watch/components/WatchDialog";
+import RemoteDesktopDialog from "@/remoteDesktop/components/RemoteDesktopDialog";
 import WatchPanel from "@/watch/components/WatchPanel";
 import { useMcpApproval } from "@/terminal/lib/mcp/useMcpApproval";
 import { McpApprovalDialog } from "@/terminal/components/ai/McpApprovalDialog";
@@ -100,6 +101,9 @@ export default function App() {
     useState(false);
   /** 正在配置值守巡检的会话；null = 弹窗关闭 */
   const [watchSession, setWatchSession] =
+    useState<SavedSession | null>(null);
+  /** 正在打开远程桌面的会话；null = 弹窗关闭 */
+  const [rdpSession, setRdpSession] =
     useState<SavedSession | null>(null);
   /** 右侧值守面板（状态 / 班报）是否展开 */
   const [watchOpen, setWatchOpen] =
@@ -745,6 +749,7 @@ export default function App() {
               dialogs.setGroupToRemove
             }
             onWatch={setWatchSession}
+            onRemoteDesktop={setRdpSession}
             onCreateInGroup={
               dialogs.openCreateInGroup
             }
@@ -941,6 +946,13 @@ export default function App() {
           onSaved={watch.reload}
           onAskAi={askAiFromWatch}
           onDeleteAlert={watch.removeAlert}
+        />
+      )}
+      {rdpSession && (
+        <RemoteDesktopDialog
+          key={rdpSession.id}
+          session={rdpSession}
+          onClose={() => setRdpSession(null)}
         />
       )}
 

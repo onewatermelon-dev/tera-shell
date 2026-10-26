@@ -105,6 +105,8 @@ pub fn run() {
             terminal::tunnel::open_tunnel,
             terminal::tunnel::close_tunnel,
             terminal::tunnel::list_tunnels,
+            // 远程桌面一键入口：起隧道后拉起 mstsc / VNC 关联程序
+            terminal::tunnel::launch_rdp_client,
             terminal::log_status,
             terminal::log_start,
             terminal::log_action,

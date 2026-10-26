@@ -46,6 +46,10 @@ type Props = {
   onRemoveGroup: (group: SessionGroup) => void;
   /** 打开该会话的值守巡检配置 */
   onWatch: (session: SavedSession) => void;
+  /** 打开该会话的远程桌面（起隧道 + 拉客户端） */
+  onRemoteDesktop: (
+    session: SavedSession
+  ) => void;
   /** 在指定分组里新建会话（分组 id，空串 = 未分组）。 */
   onCreateInGroup: (groupId: string) => void;
   /**
@@ -75,6 +79,7 @@ export default function SessionSidebar({
   onEditGroup,
   onRemoveGroup,
   onWatch,
+  onRemoteDesktop,
   onCreateInGroup,
   onMove
 }: Props) {
@@ -366,6 +371,7 @@ export default function SessionSidebar({
               onEdit={onEdit}
               onRemove={onRemove}
               onWatch={onWatch}
+              onRemoteDesktop={onRemoteDesktop}
             />
           ))
         ) : (

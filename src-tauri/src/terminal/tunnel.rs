@@ -332,3 +332,42 @@ pub fn list_tunnels(
 		)
 		.collect())
 }
+
+/// 拉起本机的远程桌面客户端（远程桌面一键入口的最后一步）。
+///
+/// - rdp：Windows 自带 mstsc，直连本地隧道端口；
+/// - vnc：交给系统对 vnc:// 协议的关联程序（用户装的 VNC Viewer），
+///   没关联时 start 失败，把原文错误带回让用户去装。
+///
+/// 两个分支都 spawn 不等待：拉起即成功，客户端自身的连接问题
+/// 由它自己弹窗（mstsc 连不上会自己报），不归我们管。
+#[tauri::command(rename = "launch_rdp_client")]
+pub fn launch_rdp_client(
+	kind: String,
+	local_port: u16,
+) -> Result<(), String> {
+	if !cfg!(windows) {
+		return Err("远程桌面客户端拉起目前仅支持 Windows".into());
+	}
+	let spawned = if kind == "vnc" {
+		std::process::Command::new("cmd")
+			.args([
+				"/C",
+				"start",
+				"",
+				&format!("vnc://127.0.0.1:{local_port}"),
+			])
+			.spawn()
+	} else {
+		std::process::Command::new("mstsc")
+			.arg(format!("/v:127.0.0.1:{local_port}"))
+			.spawn()
+	};
+	match spawned {
+		Ok(_) => {
+			info!(target = "tunnel", kind = %kind, local_port, "远程桌面客户端已拉起");
+			Ok(())
+		}
+		Err(error) => Err(format!("拉起客户端失败：{error}")),
+	}
+}
