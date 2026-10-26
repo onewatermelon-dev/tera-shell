@@ -49,10 +49,10 @@ export const EXPORT_VERSION = 1;
  */
 export type TransferGroup = SessionGroup;
 
-/** 导出文件里的会话：没有自己的 id、没有密码，groupId 指向文件内的分组 id。 */
+/** 导出文件里的会话：没有自己的 id、没有密码 / TOTP 密钥（DPAPI 密文换机器即失效），groupId 指向文件内的分组 id。 */
 export type TransferSession = Omit<
   SavedSession,
-  "id" | "password"
+  "id" | "password" | "totpSecret"
 >;
 
 export type ExportPayload = {

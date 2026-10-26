@@ -14,6 +14,7 @@ import {
   emptySshSession,
   type SavedSession
 } from "@/sessions/lib/session";
+import { parseTotpSecret } from "@/sessions/lib/totp";
 import {
   colorHex,
   normalizeColorTag,
@@ -79,6 +80,8 @@ export default function SessionDialog({
   const [error, setError] = useState("");
   const [newPassword, setNewPassword] =
     useState("");
+  /** 新填的 TOTP 密钥（otpauth:// 链接或 Base32）；留空保持原值。 */
+  const [newTotp, setNewTotp] = useState("");
 
   /**
    * 分组框里显示的**名字**（不是 id）。
@@ -182,6 +185,23 @@ export default function SessionDialog({
           {
             plain: newPassword
           }
+        );
+      } catch (reason) {
+        setError(String(reason));
+        return;
+      }
+    }
+    // TOTP 密钥同密码的规矩：先本地验形再加密，验不过红字报错不许静默。
+    if (newTotp.trim()) {
+      const secret = parseTotpSecret(newTotp);
+      if (!secret) {
+        setError(t("session.totp.invalid"));
+        return;
+      }
+      try {
+        next.totpSecret = await invoke<string>(
+          "encrypt",
+          { plain: secret }
         );
       } catch (reason) {
         setError(String(reason));
@@ -733,6 +753,36 @@ export default function SessionDialog({
                         )}
                       />
                     </TextField>
+                  )}
+                  {/**
+                   * 两步验证（TOTP）密钥：otpauth:// 链接或裸 Base32 都收，
+                   * 提交时 parseTotpSecret 归一化 + 校验，DPAPI 加密落盘。
+                   * 留空保持原值（与上方密码一致）；本机没有「清除」入口，
+                   * 想撤销就把会话删了重建——密钥本就该跟会话同生命周期。
+                   */}
+                  {form.kind === "ssh" && (
+                    <>
+                      <TextField
+                        name="totp"
+                        value={newTotp}
+                        onChange={setNewTotp}
+                      >
+                        <Label>
+                          {t(
+                            "session.totp.label"
+                          )}
+                        </Label>
+                        <Input
+                          autoComplete="off"
+                          placeholder={t(
+                            "session.totp.placeholder"
+                          )}
+                        />
+                      </TextField>
+                      <p className="dialog-hint">
+                        {t("session.totp.hint")}
+                      </p>
+                    </>
                   )}
                   <Typography.Paragraph
                     size="sm"

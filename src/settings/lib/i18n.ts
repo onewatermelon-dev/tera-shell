@@ -131,6 +131,17 @@ const zhCN = {
   "proc.colMem": "内存",
   "proc.colCpu": "CPU",
   "proc.colCmd": "名称/命令行",
+  "sidebar.remoteDesktop": "打开远程桌面",
+  "rdp.title": "远程桌面",
+  "rdp.protocol": "协议",
+  "rdp.hint":
+    "RDP 用 Windows 自带的远程桌面（mstsc）；VNC 需本机已安装 VNC Viewer 并关联 vnc:// 协议。",
+  "rdp.port": "服务器端口",
+  "rdp.portHint":
+    "服务器上远程桌面服务的端口（RDP 默认 3389，VNC 默认 5900）。",
+  "rdp.badPort": "端口必须在 1-65535",
+  "rdp.connect": "连接",
+  "rdp.connecting": "正在建立隧道…",
   "sftp.preview.image": "图片预览",
   "sftp.preview.text": "文本预览",
   "sftp.preview.loading": "正在读取文件…",
@@ -396,6 +407,15 @@ const zhCN = {
   "session.jump.desc":
     "连接时先经所选会话登录（ssh -J），选中会话自身还可再配跳板形成多跳。",
   "session.passwordPlaceholder": "留空保持原密码",
+  "session.totp.label": "两步验证密钥（TOTP）",
+  "session.totp.placeholder":
+    "otpauth:// 链接或 Base32 密钥，留空保持原值",
+  "session.totp.hint":
+    "服务器开启两步验证时，侧栏会话条目可一键复制验证码，无需翻手机。密钥经系统加密存储，不会写入导出文件。",
+  "session.totp.invalid":
+    "无法识别的 TOTP 密钥：请粘贴验证器 App 提供的 otpauth:// 链接，或纯 Base32 密钥（字母 A-Z 与数字 2-7）。",
+  "sidebar.totp": "复制两步验证码",
+  "totp.error": "生成验证码失败：",
   "session.authHint":
     "身份验证由系统 SSH 处理，支持已有密钥和 ssh-agent。",
   "session.save": "保存会话",
@@ -1079,6 +1099,17 @@ const enUS: Record<MessageKey, string> = {
   "proc.colMem": "Memory",
   "proc.colCpu": "CPU",
   "proc.colCmd": "Name/Command",
+  "sidebar.remoteDesktop": "Open remote desktop",
+  "rdp.title": "Remote Desktop",
+  "rdp.protocol": "Protocol",
+  "rdp.hint":
+    "RDP uses the built-in Windows client (mstsc); VNC requires a local VNC viewer associated with the vnc:// protocol.",
+  "rdp.port": "Server port",
+  "rdp.portHint":
+    "Port of the remote desktop service (RDP defaults to 3389, VNC to 5900).",
+  "rdp.badPort": "Port must be 1-65535",
+  "rdp.connect": "Connect",
+  "rdp.connecting": "Establishing tunnel…",
   "sftp.preview.image": "Image preview",
   "sftp.preview.text": "Text preview",
   "sftp.preview.loading": "Reading file…",
@@ -1351,6 +1382,15 @@ const enUS: Record<MessageKey, string> = {
     "Connect through the selected session first (ssh -J); the jump session itself can also have one for multi-hop chains.",
   "session.passwordPlaceholder":
     "Leave empty to keep the current password",
+  "session.totp.label": "Two-factor key (TOTP)",
+  "session.totp.placeholder":
+    "otpauth:// link or Base32 key, leave empty to keep",
+  "session.totp.hint":
+    "When the server asks for a verification code, click the shield on the sidebar entry to copy the current code — no phone needed. The key is stored OS-encrypted and never exported.",
+  "session.totp.invalid":
+    "Unrecognized TOTP key: paste the otpauth:// link from your authenticator app, or a plain Base32 key (letters A-Z and digits 2-7).",
+  "sidebar.totp": "Copy 2FA code",
+  "totp.error": "Failed to generate code: ",
   "session.authHint":
     "Authentication is handled by the system SSH client, so existing keys and ssh-agent both work.",
   "session.save": "Save session",

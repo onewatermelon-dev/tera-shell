@@ -76,7 +76,8 @@
 // 会被它的 `w-9 md:w-8`（32px）盖掉，按钮比声明的 15px 大一倍。
 .delete.button,
 .edit.button,
-.watch.button {
+.watch.button,
+.totp.button {
   display: none;
   width: 15px;
   min-width: 15px;
@@ -122,10 +123,77 @@
   color: var(--accent);
 }
 
+.totp.button:hover {
+  color: var(--accent);
+}
+
 .session-item:hover .delete,
 .session-item:hover .edit,
-.session-item:hover .watch {
+.session-item:hover .watch,
+.session-item:hover .totp {
   display: block;
+}
+
+// TOTP 验证码浮条：点行上的盾牌按钮后贴行内右侧浮起，展示 6 位码 +
+// 剩余秒数（最后 1 秒自动关，不会挂着过期码）。浮层配方与右键菜单一致
+// （--overlay + border + 投影）。inset-block 定垂直、不用 translateY ——
+// WebView2 里重排帧 transform 居中会先画未位移位置。
+.totp-chip {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  bottom: 4px;
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 0 4px 0 10px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+
+  small {
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  &.is-error small {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--danger);
+    white-space: nowrap;
+  }
+}
+
+.totp-code {
+  padding: 0;
+  font:
+    12px Consolas,
+    monospace;
+  color: var(--accent);
+  letter-spacing: 1px;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.totp-code:hover {
+  text-decoration: underline;
+}
+
+.totp-close {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.totp-close:hover {
+  color: var(--foreground);
 }
 
 .empty-list {
