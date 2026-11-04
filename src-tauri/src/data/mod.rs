@@ -33,7 +33,7 @@ const SUBDIR: &str = ".tera-shell";
 const LOCATION_FILE: &str = "location.json";
 
 /// 允许被读写的逻辑数据名。限定白名单，避免前端传任意文件名。
-const ALLOWED: [&str; 18] = [
+const ALLOWED: [&str; 20] = [
 	"sessions",
 	"groups",
 	"settings",
@@ -57,6 +57,10 @@ const ALLOWED: [&str; 18] = [
 	"mcp_audit",
 	// MCP Client：外部 MCP server 配置（见 src-tauri/src/mcp/client.rs）
 	"mcp_servers",
+	// 动漫播放：API 域名等配置（见 src/anime/lib/store.ts）
+	"anime",
+	// 动漫账号：登录态 token（DPAPI 密文，见 src-tauri/src/anime.rs）
+	"anime_account",
 ];
 
 fn ensure_name(name: &str) -> Result<(), String> {

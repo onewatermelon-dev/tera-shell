@@ -50,10 +50,12 @@ export default defineConfig(async () => ({
   // 1.防止Vite掩盖rust错误
   clearScreen: false,
   // 2. tauri 需要一个固定端口，如果该端口不可用则失败
+  //    host 显式钉死 127.0.0.1：用 false(localhost) 时 vite 8 只绑 ::1（IPv6），
+  //    WebView2 加载 localhost 先试 IPv4 → 连接被拒 → 前端跑不起来 → 窗口永不显示
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    host: host || "127.0.0.1",
     hmr: host
       ? {
           protocol: "ws",

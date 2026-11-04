@@ -84,6 +84,11 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 aes-gcm = "0.10"
 argon2 = "0.5"
 rand = "0.8"
+# 动漫加密层：libunicorn.dll 动态加载 + deviceSecret 派生
+libloading = "0.8"
+goblin = "0.9"
+hmac = "0.12"
+sha2 = "0.10"
 
 # ── 编码转换 ──
 encoding_rs = "0.8"

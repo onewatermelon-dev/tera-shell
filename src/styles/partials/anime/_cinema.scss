@@ -1,0 +1,662 @@
+// 影院播放器（对标腾讯视频网页端）：
+// 顶部渐变标题栏（返回+集名）+ 底部渐变控制栏（进度条 + 按钮排 +
+// 弹出菜单：选集/倍速/清晰度/音量/设置）+ 中央暂停按钮 + 提示浮条。
+// 控制栏鼠标静置自动隐藏；「铺满窗口」用 fixed inset 覆盖整个窗口
+// （不用 translateY 居中，规避 WebView2 固定定位重排跳动的坑）。
+
+.cin-root {
+  --cin-accent: #f5484f;
+
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000000;
+  border-radius: 10px;
+}
+
+// 原生全屏：铺满整屏
+.cin-root:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+// 控制隐藏时整个播放器藏光标（:has 需要 Chromium 105+，WebView2 满足）
+.cin-root:has(.cin-ui.is-hidden) {
+  cursor: none;
+}
+
+.cin-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+// 控制层：容器不吃指针（点视频切换播放），子元素单独恢复
+.cin-ui {
+  position: absolute;
+  inset: 0;
+
+  // 容器不吃指针：单击视频画面要直达 video（暂停/播放），只有
+  // 顶栏/底栏等子元素各自恢复 auto 接收交互
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.cin-ui.is-hidden {
+  pointer-events: none;
+  opacity: 0;
+}
+
+// —— 顶部：返回 + 标题 ——
+.cin-top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px 30px;
+  pointer-events: auto;
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 62%),
+    rgb(0 0 0 / 0%)
+  );
+}
+
+.cin-top-back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  color: rgb(255 255 255 / 92%);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+
+  &:hover {
+    background: rgb(255 255 255 / 16%);
+  }
+}
+
+.cin-top-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 95%);
+  overflow-wrap: anywhere;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 60%);
+}
+
+// —— 底部：进度行 + 按钮行 ——
+.cin-bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 24px 14px 8px;
+  pointer-events: auto;
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 78%),
+    rgb(0 0 0 / 0%)
+  );
+}
+
+// 进度区：时间分居轨道两端上方（左当前/右总长），轨道全宽
+.cin-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cin-times {
+  display: flex;
+  justify-content: space-between;
+}
+
+.cin-time {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 88%);
+  white-space: nowrap;
+}
+
+// 进度轨道：热区 14px 高，视觉条 4px，hover 涨到 6px
+// ⚠️ 不能给 flex:1——父容器 .cin-progress 是纵向 flex，flex-basis:0% 会把
+// height 压成 0，轨道整个消失（column 里宽度由 stretch 天然铺满）
+.cin-track {
+  position: relative;
+  min-width: 0;
+  height: 14px;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.cin-rail {
+  position: absolute;
+  inset: 5px 0;
+  background: rgb(255 255 255 / 20%);
+  border-radius: 3px;
+}
+
+.cin-track:hover .cin-rail {
+  top: 4px;
+  bottom: 4px;
+}
+
+// 缓存区间（白色半透明，多段不连续）
+.cin-seg {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  background: rgb(255 255 255 / 32%);
+}
+
+.cin-track:hover .cin-seg {
+  top: 4px;
+  bottom: 4px;
+}
+
+// 已播放（强调红）
+.cin-played {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  pointer-events: none;
+  background: var(--cin-accent);
+  border-radius: 3px;
+}
+
+.cin-track:hover .cin-played {
+  top: 4px;
+  bottom: 4px;
+}
+
+.cin-thumb {
+  position: absolute;
+  top: 1px;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  background: var(--cin-accent);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 50%);
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
+.cin-track:hover .cin-thumb {
+  opacity: 1;
+}
+
+.cin-track.is-scrub .cin-thumb {
+  opacity: 1;
+}
+
+// hover 时间气泡（跟随鼠标，轨道上方）
+.cin-tip {
+  position: absolute;
+  bottom: 22px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: rgb(0 0 0 / 82%);
+  border-radius: 4px;
+  transform: translateX(-50%);
+}
+
+// 按钮行
+.cin-row {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.cin-btn {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  color: rgb(255 255 255 / 90%);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+
+  &:hover {
+    color: #ffffff;
+    background: rgb(255 255 255 / 16%);
+  }
+}
+
+// 文字按钮（选集 / 倍速 / 清晰度）
+.cin-txt {
+  flex: none;
+  max-width: 150px;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: rgb(255 255 255 / 90%);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+
+  &:hover {
+    color: #ffffff;
+    background: rgb(255 255 255 / 16%);
+  }
+}
+
+.cin-spacer {
+  flex: 1;
+}
+
+// —— 悬停菜单：按钮 wrapper + 内嵌深色面板（悬停即弹，移走即收）——
+// wrapper 里的按钮与面板间留桥接空隙（margin-bottom），鼠标互移不会中途收起
+.cin-item {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+
+.cin-item-pop {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 132px;
+  max-height: min(360px, 60vh);
+  padding: 6px;
+  margin-bottom: 10px;
+  overflow: auto;
+  background: rgb(21 21 25 / 96%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 50%);
+  transform: translateX(-50%);
+}
+
+// 靠边防溢出：选集贴左对齐，设置贴右对齐
+.cin-item-pop--l {
+  left: 0;
+  transform: none;
+}
+
+.cin-item-pop--r {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.cin-pop-item {
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: rgb(255 255 255 / 88%);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+
+  &:hover {
+    background: rgb(255 255 255 / 10%);
+  }
+}
+
+.cin-pop-item.is-active {
+  font-weight: 600;
+  color: var(--cin-accent);
+}
+
+.cin-pop-item.is-vip {
+  color: rgb(255 255 255 / 40%);
+  cursor: not-allowed;
+}
+
+// 音量：按钮悬停弹出竖向滑条（腾讯样式：上数字下竖条）
+// 按钮与浮层包在同一个 wrapper 里，之间留桥接空隙，鼠标互移不会中途收起
+.cin-vol {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+
+// 桥接区：按钮到浮层之间的 margin 空隙若不属于 wrapper，鼠标跨过去就
+// 触发 mouseleave 收起浮层——伪元素把这段空隙盖进 wrapper 里
+// （音量竖条与选集/倍速/清晰度/设置四组菜单同款结构，一并覆盖）
+.cin-vol::before,
+.cin-item::before {
+  position: absolute;
+  bottom: calc(100% - 2px);
+  left: 0;
+  width: 100%;
+  height: 14px;
+  content: "";
+}
+
+.cin-vol-pop {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 10px 12px;
+  margin-bottom: 12px;
+  background: rgb(21 21 25 / 96%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+  transform: translateX(-50%);
+}
+
+.cin-vol-num {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 88%);
+}
+
+.cin-vol-track {
+  position: relative;
+  width: 4px;
+  height: 72px;
+  touch-action: none;
+  cursor: pointer;
+  background: rgb(255 255 255 / 25%);
+  border-radius: 2px;
+}
+
+// 音量填充（白色，自底部向上）
+.cin-vol-fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: #ffffff;
+  border-radius: 2px;
+}
+
+.cin-vol-thumb {
+  position: absolute;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  background: #ffffff;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+// 设置浮层
+.cin-set-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+}
+
+.cin-set-label {
+  font-size: 12.5px;
+  color: rgb(255 255 255 / 88%);
+}
+
+.cin-check {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--cin-accent);
+  cursor: pointer;
+}
+
+.cin-set-tip {
+  max-width: 300px;
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgb(255 255 255 / 55%);
+}
+
+// 选集浮层
+.cin-ep-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(64px, 1fr)
+  );
+  gap: 6px;
+  width: 420px;
+  max-width: 70vw;
+}
+
+.cin-ep-chip {
+  padding: 6px 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: rgb(255 255 255 / 85%);
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  background: rgb(255 255 255 / 8%);
+  border: none;
+  border-radius: 6px;
+
+  &:hover {
+    background: rgb(255 255 255 / 16%);
+  }
+}
+
+.cin-ep-chip.is-active {
+  color: #ffffff;
+  background: var(--cin-accent);
+}
+
+// —— 中央暂停按钮（暂停时显示）——
+.cin-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.cin-center-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+  color: #ffffff;
+  pointer-events: auto;
+  cursor: pointer;
+  background: rgb(0 0 0 / 46%);
+  border: 1px solid rgb(255 255 255 / 42%);
+  border-radius: 50%;
+
+  &:hover {
+    background: rgb(0 0 0 / 68%);
+  }
+}
+
+// —— 提示浮条（切倍速/音量/截图反馈）——
+.cin-toast {
+  position: absolute;
+  top: 14%;
+  right: 0;
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  padding: 6px 16px;
+  margin: 0 auto;
+  font-size: 12.5px;
+  color: #ffffff;
+  pointer-events: none;
+  background: rgb(0 0 0 / 72%);
+  border-radius: 6px;
+}
+
+// —— 拖动重开转码期间的冻结层（软解专用）——
+.cin-frozen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+}
+
+.cin-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.6;
+}
+
+.cin-spin {
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgb(255 255 255 / 25%);
+  border-top-color: var(--cin-accent);
+  border-radius: 50%;
+  animation: cin-spin 0.8s linear infinite;
+}
+
+@keyframes cin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// 选集分页页签（「1-30 / 31-60」段选）
+
+.cin-ep-tab {
+  padding: 3px 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 70%);
+  cursor: pointer;
+  background: rgb(255 255 255 / 8%);
+  border: none;
+  border-radius: 999px;
+
+  &:hover {
+    color: #ffffff;
+  }
+
+  &.is-active {
+    color: #ffffff;
+    background: var(--cin-accent);
+  }
+}
+
+// 页签行：页签横向滚动一行排开 + 右侧箭头翻页
+.cin-ep-tabs-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.cin-ep-tabs {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.cin-ep-arrow {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  color: rgb(255 255 255 / 80%);
+  cursor: pointer;
+  background: rgb(255 255 255 / 8%);
+  border: none;
+  border-radius: 50%;
+
+  &:disabled {
+    color: rgb(255 255 255 / 30%);
+    cursor: default;
+  }
+
+  &:hover:not(:disabled) {
+    color: #ffffff;
+    background: rgb(255 255 255 / 16%);
+  }
+}
+
+// seek 加载圈：换片段窗口期的中央小圈（不遮画面）
+.cin-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.cin-loading .cin-spin {
+  width: 34px;
+  height: 34px;
+  border-width: 3px;
+}
+
+// 切集遮罩：盖住底部进度条+按钮区，拦截全部点击
+.cin-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  pointer-events: auto;
+  cursor: wait;
+}

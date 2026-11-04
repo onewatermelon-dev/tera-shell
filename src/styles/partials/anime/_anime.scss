@@ -1,0 +1,526 @@
+// 动漫播放弹层：宽体详情页 + 封面卡网格 + 播放器。
+// 布局随内容自适应，不追参考 App 的移动端竖屏比例。
+// 播放器本体（影院控制栏）拆到同目录 _cinema.scss。
+
+@use "cinema";
+
+.anime-dialog {
+  position: relative;
+  width: 860px;
+  max-width: min(860px, 92vw);
+}
+
+.anime-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+// 顶部搜索行（详情页里藏搜索，聚焦看片）
+// 手动地址行与它同构，只是常驻在弹层底部
+.anime-search-row,
+.anime-manual-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  .settings-input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// 封面网格：海报比例 2:3
+.anime-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(108px, 1fr)
+  );
+  gap: 12px;
+}
+
+.anime-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
+.anime-card-cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  background: var(--heroui-bg-2, #26262c);
+  border-radius: 8px;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.anime-card-fallback {
+  font-size: 28px;
+  opacity: 0.4;
+}
+
+.anime-card-title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.anime-card-sub {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+// 详情页
+.anime-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+// 详情态：简介海报吸顶——选集几百集往下滚时，顶部信息保持可见。
+// ⚠️ 吸顶层上下有两条透明缝：上方是 body 的 padding 区（用 box-shadow
+// 向上垫片盖住），下方是 flex 的 gap（把 padding-bottom 加到 12px gap + 12px
+// 原 padding = 24px，背景直接吃进 gap 区——不能再用向下垫片，否则静态时
+// 紧跟其下的线路行第一枚按钮会被垫片盖住上沿）
+.anime-detail-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 14px;
+  padding: 4px 0 24px;
+  background: var(--heroui-bg-1, #17171b);
+  box-shadow: 0 -18px 0
+    var(--heroui-bg-1, #17171b);
+}
+
+.anime-detail-poster {
+  flex-shrink: 0;
+  width: 96px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.anime-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.anime-line {
+  margin: 0;
+  font-size: inherit;
+  opacity: 0.85;
+}
+
+.anime-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.anime-section-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+// 选集网格
+.anime-episode-grid {
+  display: grid;
+
+  // 列宽按内容自适应：集名「第20250504期」这类长文本不再被省略号截断
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(96px, 1fr)
+  );
+  gap: 8px;
+}
+
+.anime-episode-chip {
+  padding: 6px 8px;
+  font-size: 12px;
+
+  // 允许换行完整显示集名；居中保持网格观感
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--heroui-border, #3f3f46);
+  border-radius: 6px;
+
+  &:hover:not(:disabled) {
+    border-color: var(--heroui-accent, #7c5cff);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+// 播放器
+.anime-player-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+// 弹层头部：返回按钮 + 「动漫播放」标签横排
+// 弹层 Header：返回按钮 + 动漫播放标签 + 标题 同一行
+.anime-dialog [data-slot="modal-header"] {
+  display: flex;
+  flex-direction: column;
+}
+
+.anime-header-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.anime-header-back {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--accent, #7c5cff);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+}
+
+.anime-header-back:hover {
+  background: rgb(124 92 255 / 12%);
+}
+
+.anime-header-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.anime-quality-label {
+  opacity: 0.6;
+}
+
+// 选中态：与悬停同色，再加一层浅底
+.anime-episode-chip[data-active="true"] {
+  color: var(--heroui-accent, #7c5cff);
+  background: rgb(124 92 255 / 12%);
+  border-color: var(--heroui-accent, #7c5cff);
+}
+
+.anime-hint {
+  margin: 24px 0;
+  font-size: 12px;
+  text-align: center;
+  opacity: 0.55;
+}
+
+// H.265 提示条：别用 hint 的居中大边距，贴着播放器显示
+.anime-hevc-hint {
+  margin: 0;
+  color: #faad14;
+  text-align: left;
+  opacity: 1;
+}
+
+// 播放态：弹层贴近整个窗口，播放区铺满、不出滚动条。
+// 宽度按「视口高减去弹层头/提示条」反推 16:9 宽度，小窗口也不会竖向溢出。
+.anime-dialog--playing {
+  width: min(
+    1200px,
+    94vw,
+    calc((100vh - 170px) * 16 / 9)
+  );
+}
+
+.anime-dialog--playing .anime-body {
+  overflow: hidden;
+}
+
+// 数据源切换：两个站点 chip，选中高亮
+.anime-source-row {
+  display: flex;
+  gap: 8px;
+}
+
+.anime-source-chip {
+  padding: 4px 14px;
+  font-size: 12.5px;
+  color: var(--heroui-fg, #333333);
+  cursor: pointer;
+  background: var(--heroui-bg-2, #26262c);
+  border: 1px solid transparent;
+  border-radius: 999px;
+
+  &:hover {
+    border-color: var(--heroui-accent, #7c5cff);
+  }
+
+  &.is-active {
+    color: #ffffff;
+    background: var(--heroui-accent, #7c5cff);
+  }
+}
+
+// 聚站线路切换：一行 chips，当前线路高亮（与剧集 chip 同族样式）
+.anime-line-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.anime-line-label {
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+.anime-line-chip {
+  max-width: 220px;
+  padding: 3px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+
+  // 弹层永远深色：文字写死浅色，不用主题变量（继承值在暗底上会糊成一片）
+  color: rgb(255 255 255 / 85%);
+  white-space: nowrap;
+  cursor: pointer;
+  background: rgb(255 255 255 / 8%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+
+  // busy 期间的防重复点击不该牺牲可读性（0.5 的 opacity 会糊掉文字）
+  &:disabled {
+    cursor: default;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--heroui-accent, #7c5cff);
+  }
+
+  &.is-active {
+    color: #ffffff;
+    background: var(--heroui-accent, #7c5cff);
+  }
+}
+
+// 聚站浏览页（腾讯视频排版）：左频道栏 + 筛选 chips + 大卡网格。
+// 整体限高固定：滚动只发生在卡片网格内部，侧栏/筛选/搜索固定不动
+// （:has 告诉外层滚动容器让位，避免出现双层滚动）
+.anime-juz {
+  display: flex;
+  gap: 14px;
+  height: min(580px, 62vh);
+}
+
+.dialog-scroll:has(.anime-juz) {
+  max-height: none;
+  overflow: hidden;
+}
+
+.anime-juz-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 96px;
+  max-height: 560px;
+  overflow: auto;
+}
+
+.anime-juz-nav-item {
+  flex: none;
+  padding: 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: rgb(255 255 255 / 72%);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  &:hover:not(:disabled) {
+    color: #ffffff;
+    background: rgb(255 255 255 / 8%);
+  }
+
+  &.is-active {
+    color: #ffffff;
+    background: var(--heroui-accent, #7c5cff);
+  }
+}
+
+.anime-juz-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+// 卡片网格专属滚动区（筛选行固定在外）
+.anime-juz-scroll {
+  flex: 1;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.anime-screen-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.anime-screen-label {
+  flex: none;
+  font-size: 12px;
+  color: rgb(255 255 255 / 50%);
+}
+
+// 大卡网格：卡片加大（对标腾讯「今日推荐」的 4~6 列大图）
+.anime-grid--juz {
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(150px, 1fr)
+  );
+  gap: 14px;
+}
+
+.anime-grid--juz .anime-card-cover {
+  position: relative;
+
+  img {
+    height: 100%;
+  }
+}
+
+// 角标：图片右下角（「更新至188集」这类），对齐腾讯排版
+.anime-card-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  max-width: calc(100% - 12px);
+  padding: 1px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: #ffffff;
+  white-space: nowrap;
+  background: rgb(0 0 0 / 65%);
+  border-radius: 4px;
+}
+
+// 首页题材分区：板块标题 + 该板块的卡片行
+.anime-juz-section {
+  margin-bottom: 18px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.anime-juz-section-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+// 筛选组：一行横滚（chips 不换行），箭头在右端翻屏
+.anime-screen-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.anime-screen-strip {
+  display: flex;
+  flex: 1;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.anime-screen-strip .anime-line-chip {
+  flex: none;
+}
+
+// 详情页：取消滚动条（滚动能力保留）
+.dialog-scroll:has(.anime-detail) {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.anime-juz-main {
+  position: relative;
+}
+
+// 切频道/筛选的加载罩：盖住旧内容 + 环形加载圈
+.anime-juz-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 45%);
+}

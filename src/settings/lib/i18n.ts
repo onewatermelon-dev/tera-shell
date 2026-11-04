@@ -50,11 +50,57 @@ const zhCN = {
   "app.action.clear": "清屏",
   "app.action.devtools": "开发者工具",
   "app.action.openSftp": "SFTP 窗口",
+  "app.action.openAnime": "动漫播放",
   "app.action.settings": "设置",
   "app.action.more": "更多",
   "app.action.minimize": "最小化",
   "app.action.maximize": "最大化",
   "app.action.close": "关闭",
+
+  // 动漫播放（工具菜单入口，详情页 + 播放器）
+  "anime.title": "动漫播放",
+  "anime.sourceApp": "参考站",
+  "anime.sourceJuz": "聚站",
+  "anime.apiUrl.title": "动漫 API 地址",
+  "anime.apiUrl.desc":
+    "参考 App 的接口域名（抓包里的 Host，带 http:// 或 https://），动漫弹层从这里读",
+  "anime.search": "搜索动漫…",
+  "anime.searchAction": "搜索",
+  "anime.loading": "加载中…",
+  "anime.empty": "没有内容",
+  "anime.episodes": "选集",
+  "anime.back": "返回",
+  "anime.finished": "已完结",
+  "anime.hostHint":
+    "尚未配置 API 地址，请到「设置 → 通用 → 动漫 API 地址」填入参考 App 的接口域名（抓包里的 Host，带 http:// 或 https://）",
+  "anime.quality": "清晰度",
+  "anime.vipOnly": "会员专享，未开通无法播放",
+  "anime.softDecode":
+    "正在软解转码（H.265 → H.264），首帧可能等几秒；拖到未缓冲位置会从该点重转",
+  "anime.hevcHint":
+    "这条线路是 H.265(HEVC)，系统没装 HEVC 解码器时只有声音没有画面——换另一档清晰度试试",
+  // 影院播放器（参考腾讯视频网页端的控制栏）
+  "anime.cin.next": "下一集",
+  "anime.cin.play": "播放",
+  "anime.cin.pause": "暂停",
+  "anime.cin.speed": "倍速",
+  "anime.cin.volume": "音量",
+  "anime.cin.mute": "静音",
+  "anime.cin.unmute": "取消静音",
+  "anime.cin.settings": "设置",
+  "anime.cin.loop": "循环播放",
+  "anime.cin.shortcutHint":
+    "空格 播放/暂停 · ←→ 快进快退 5 秒 · ↑↓ 音量 · F 全屏 · M 静音",
+  "anime.cin.pip": "画中画",
+  "anime.cin.pipFail": "当前窗口不支持画中画",
+  "anime.cin.screenshot": "截图",
+  "anime.cin.shotSaved": "截图已保存",
+  "anime.cin.shotFail":
+    "截图失败（无画面或被跨域拦截）",
+  "anime.cin.fullscreen": "全屏",
+  "anime.cin.exitFullscreen": "退出全屏",
+  "anime.cin.speedSet": "已切换 {x} 倍速",
+  "anime.cin.volumeSet": "音量 {pct}%",
   // ⚠️ 这里曾有 app.action.toggleCaseSensitive / app.action.toggleRegex：
   // 查找面板的「区分大小写 / 正则」两个开关原本各有一个全局快捷键，
   // 用户要求取消（作为面板内的局部开关，本就不该有全局键位）。查找面板
@@ -1022,11 +1068,59 @@ const enUS: Record<MessageKey, string> = {
   "app.action.clear": "Clear",
   "app.action.devtools": "Developer tools",
   "app.action.openSftp": "SFTP window",
+  "app.action.openAnime": "Anime player",
   "app.action.settings": "Settings",
   "app.action.more": "More",
   "app.action.minimize": "Minimize",
   "app.action.maximize": "Maximize",
   "app.action.close": "Close",
+
+  // Anime player (tools menu entry: browse / detail / playback)
+  "anime.title": "Anime player",
+  "anime.sourceApp": "Reference",
+  "anime.sourceJuz": "Juzong",
+  "anime.apiUrl.title": "Anime API URL",
+  "anime.apiUrl.desc":
+    "API host of the reference app (the Host in packet captures, with http:// or https://); the anime dialog reads it from here",
+  "anime.search": "Search anime…",
+  "anime.searchAction": "Search",
+  "anime.loading": "Loading…",
+  "anime.empty": "Nothing here",
+  "anime.episodes": "Episodes",
+  "anime.back": "Back",
+  "anime.finished": "Completed",
+  "anime.hostHint":
+    "No API URL configured. Set it under Settings → General → Anime API URL (the Host from a capture, with http:// or https://)",
+  "anime.quality": "Quality",
+  "anime.vipOnly":
+    "Members only — needs a subscription",
+  "anime.softDecode":
+    "Software transcoding (H.265 → H.264). First frame may take a few seconds; seeking outside the buffer restarts transcode from that point",
+  "anime.hevcHint":
+    "This stream is H.265 (HEVC). Without the HEVC decoder only audio plays — try another quality",
+  // Cinema player (Tencent-Video-style control bar)
+  "anime.cin.next": "Next episode",
+  "anime.cin.play": "Play",
+  "anime.cin.pause": "Pause",
+  "anime.cin.speed": "Speed",
+  "anime.cin.volume": "Volume",
+  "anime.cin.mute": "Mute",
+  "anime.cin.unmute": "Unmute",
+  "anime.cin.settings": "Settings",
+  "anime.cin.loop": "Loop",
+  "anime.cin.shortcutHint":
+    "Space play/pause · ←→ seek 5s · ↑↓ volume · F fullscreen · M mute",
+  "anime.cin.pip": "Picture in picture",
+  "anime.cin.pipFail":
+    "Picture in picture is not supported here",
+  "anime.cin.screenshot": "Screenshot",
+  "anime.cin.shotSaved": "Screenshot saved",
+  "anime.cin.shotFail":
+    "Screenshot failed (no frame or blocked by CORS)",
+  "anime.cin.fullscreen": "Fullscreen",
+  "anime.cin.exitFullscreen": "Exit fullscreen",
+  "anime.cin.speedSet": "Speed {x}x",
+  "anime.cin.volumeSet": "Volume {pct}%",
 
   "sidebar.title": "Sessions",
   "sidebar.newSsh": "New SSH session",

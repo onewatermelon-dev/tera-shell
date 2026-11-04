@@ -11,6 +11,12 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
+    <!--
+      只对同源请求带 Referer。第三方的图片/视频 CDN 常按 Referer 拦外链
+      （动漫片源那条 MP4 带本站 Referer 直接 403、不带就 200），
+      而站内逻辑不依赖 Referer，所以整体收紧成 same-origin。
+    -->
+    <meta name="referrer" content="same-origin" />
     <title>TeraShell</title>
   </head>
 

@@ -1,6 +1,12 @@
 // 后端按功能域分目录：每个域一个模块目录，域内再按职责拆文件。
 // 模块路径与原先的 `xxx.rs` 完全一致，所以域内代码无需改动。
 pub mod ai;
+/// 动漫播放：参考 App 同款 API 的 JSON 代理（见 src/anime/）
+pub mod anime;
+/// 动漫加密层：libmagic_cipher.so 的 Unicorn 仿真（negotiate/API 信封加解密）
+pub mod anime_crypto;
+/// 动漫 H.265 软解转码（ffmpeg 外部进程 + 前端 MSE）
+pub mod anime_transcode;
 pub mod data;
 pub mod fonts;
 pub mod fs;
@@ -149,6 +155,22 @@ pub fn run() {
             sftp::transfer::resume_transfer,
             sftp::transfer::cancel_transfer,
             ai::run_command,
+            anime::request,
+            anime::api,
+            anime::play,
+            anime::fetch_text,
+            anime::login,
+            anime::account_status,
+            anime::logout,
+            anime::vip_info,
+            anime::redeem,
+            // 聚站（juzong01.me，苹果CMS Web 站）页面取回：cookie 两连发过 WAF
+            anime::juz_get,
+            // 聚站 dujia* 解析线路：加密 token → 真实媒体直链
+            anime::juz_resolve_token,
+            anime_transcode::transcode_start,
+            anime_transcode::transcode_stop,
+            anime_transcode::transcode_available,
             ai::exec_cancel,
             ai::chat_stream,
             ai::chat_cancel,

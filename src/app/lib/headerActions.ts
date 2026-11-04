@@ -26,6 +26,8 @@ export function buildHeaderActions(options: {
   importSessions: () => void;
   refocusActive: () => void;
   openSettings: () => void;
+  /** 打开动漫播放弹层（不依赖会话）。 */
+  openAnime: () => void;
 }): HeaderActions {
   const {
     terminals,
@@ -35,7 +37,8 @@ export function buildHeaderActions(options: {
     exportSessions,
     importSessions,
     refocusActive,
-    openSettings
+    openSettings,
+    openAnime
   } = options;
   return {
     newSession: openCreate,
@@ -107,6 +110,7 @@ export function buildHeaderActions(options: {
     openSettings,
     exportSessions,
     importSessions,
+    openAnime,
     refocusTerminal: refocusActive
   };
 }

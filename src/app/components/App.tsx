@@ -52,6 +52,7 @@ import {
 } from "@/terminal/lib/session/terminalLayout";
 import WatchDialog from "@/watch/components/WatchDialog";
 import RemoteDesktopDialog from "@/remoteDesktop/components/RemoteDesktopDialog";
+import AnimePlayerDialog from "@/anime/components/AnimePlayerDialog";
 import WatchPanel from "@/watch/components/WatchPanel";
 import { useMcpApproval } from "@/terminal/lib/mcp/useMcpApproval";
 import { McpApprovalDialog } from "@/terminal/components/ai/McpApprovalDialog";
@@ -105,6 +106,9 @@ export default function App() {
   /** 正在打开远程桌面的会话；null = 弹窗关闭 */
   const [rdpSession, setRdpSession] =
     useState<SavedSession | null>(null);
+  /** 动漫播放弹层（工具菜单入口） */
+  const [animeOpen, setAnimeOpen] =
+    useState(false);
   /** 右侧值守面板（状态 / 班报）是否展开 */
   const [watchOpen, setWatchOpen] =
     useState(false);
@@ -672,7 +676,8 @@ export default function App() {
     exportSessions: dialogs.exportSessions,
     importSessions: dialogs.importSessions,
     refocusActive,
-    openSettings: () => setSettingsOpen(true)
+    openSettings: () => setSettingsOpen(true),
+    openAnime: () => setAnimeOpen(true)
   });
 
   // 终端配色方案的背景/前景/选区下传给 CSS：.terminal-host 的余数缝隙要跟
@@ -953,6 +958,11 @@ export default function App() {
           key={rdpSession.id}
           session={rdpSession}
           onClose={() => setRdpSession(null)}
+        />
+      )}
+      {animeOpen && (
+        <AnimePlayerDialog
+          onClose={() => setAnimeOpen(false)}
         />
       )}
 

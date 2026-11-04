@@ -25,6 +25,7 @@ import DataDirRow from "@/settings/components/DataDirRow";
 import ProxyRow from "@/settings/components/ProxyRow";
 import SshKeyRow from "@/settings/components/SshKeyRow";
 import NotifyRow from "@/settings/components/NotifyRow";
+import AnimeUrlRow from "@/settings/components/AnimeUrlRow";
 import ColorSchemePicker from "@/settings/components/ColorSchemePicker";
 import { resolveColorScheme } from "@/terminal/lib/pane/colorSchemes";
 import ModelProvidersPage from "@/settings/components/ModelProvidersPage";
@@ -607,6 +608,7 @@ export default function SettingsPage({
               settings={settings}
               onChange={onChange}
             />
+            <AnimeUrlRow />
             {/* 数据路径与私钥排在最末：低频改动项，不占首屏 */}
             <DataDirRow />
             <SshKeyRow
