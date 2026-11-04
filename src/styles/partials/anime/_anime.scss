@@ -5,6 +5,10 @@
 @use "cinema";
 
 .anime-dialog {
+  // 详情页复用 cin-* 类（选集页签等），accent 变量定义在 .cin-root 上，
+  // 弹层里不在该作用域内，须在此补定义否则 is-active 背景解析为空
+  --cin-accent: #f5484f;
+
   position: relative;
   width: 860px;
   max-width: min(860px, 92vw);
@@ -250,14 +254,6 @@
   opacity: 0.55;
 }
 
-// H.265 提示条：别用 hint 的居中大边距，贴着播放器显示
-.anime-hevc-hint {
-  margin: 0;
-  color: #faad14;
-  text-align: left;
-  opacity: 1;
-}
-
 // 播放态：弹层贴近整个窗口，播放区铺满、不出滚动条。
 // 宽度按「视口高减去弹层头/提示条」反推 16:9 宽度，小窗口也不会竖向溢出。
 .anime-dialog--playing {
@@ -270,31 +266,6 @@
 
 .anime-dialog--playing .anime-body {
   overflow: hidden;
-}
-
-// 数据源切换：两个站点 chip，选中高亮
-.anime-source-row {
-  display: flex;
-  gap: 8px;
-}
-
-.anime-source-chip {
-  padding: 4px 14px;
-  font-size: 12.5px;
-  color: var(--heroui-fg, #333333);
-  cursor: pointer;
-  background: var(--heroui-bg-2, #26262c);
-  border: 1px solid transparent;
-  border-radius: 999px;
-
-  &:hover {
-    border-color: var(--heroui-accent, #7c5cff);
-  }
-
-  &.is-active {
-    color: #ffffff;
-    background: var(--heroui-accent, #7c5cff);
-  }
 }
 
 // 聚站线路切换：一行 chips，当前线路高亮（与剧集 chip 同族样式）
@@ -522,5 +493,4 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(0 0 0 / 45%);
 }

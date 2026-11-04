@@ -72,6 +72,9 @@ fn describe_reqwest(error: &reqwest::Error) -> String {
 static CRYPTO: std::sync::OnceLock<AnimeCrypto> = std::sync::OnceLock::new();
 /// 会话：协商成功后的设备身份。重启后重新协商（一次往返，不值得持久化密钥）。
 static SESSION: std::sync::Mutex<Option<Session>> = std::sync::Mutex::new(None);
+/// 聚站 WAF Cookie 缓存：第一次两连发后所有请求单发携带（搜索接口有 6 秒
+/// 频控，两连发会把配额烧在第一发上）；Cookie 失效时自动两连发重取。
+static JUZ_COOKIE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 /// 已协商的会话身份。
 #[derive(Clone)]
@@ -1209,7 +1212,8 @@ async fn juz_fetch_url(
 /// 前面架了简易 WAF：首次请求返回一个 179 字节的 JS 跳转桩并下发两条
 /// Cookie（`server_session_*` + 一条随机名），**带 Cookie 重放同一 URL**
 /// 才给真内容（实测二次请求 200、19KB+；不带就是 403）。
-/// 这里固定「两连发」：第一发收 Set-Cookie，第二发原样带回。
+/// 流程：有缓存 Cookie 单发直取，失效/没有才「两连发」重取并缓存——
+/// 搜索接口还有 6 秒频控，两连发会让第二次必吃频控页。
 ///
 /// 只放行本站域名（SSRF 收口）；m3u8 片段不经过这里，走 `anime_fetch_text`。
 #[tauri::command(rename = "juz_get")]
@@ -1220,10 +1224,26 @@ pub async fn juz_get(
 	if !url.starts_with(JUZ_BASE) {
 		return Err(format!("只允许访问 {JUZ_BASE} 下的页面"));
 	}
+	// 有缓存 Cookie 就单发直取：搜索接口 6 秒频控，两连发会把配额烧在第一发上
+	let cached = JUZ_COOKIE.lock().ok().and_then(|slot| slot.clone());
+	if let Some(cookie) = cached {
+		if let Ok((status, _, body)) = juz_fetch_url(&app, &url, Some(&cookie)).await {
+			let text = String::from_utf8_lossy(&body).into_owned();
+			// WAF 桩特征：极短 + JS 重定向；命中说明 Cookie 已失效，落回两连发
+			if status == 200 && !(text.len() < 1024 && text.contains("window.location.href")) {
+				tracing::info!(%url, len = text.len(), "聚站页面已取回");
+				return Ok(text);
+			}
+			tracing::warn!(status, len = text.len(), %url, "聚站缓存 Cookie 失效，重新过 WAF");
+		}
+	}
 	// 第一发：拿 WAF Cookie（桩响应也是 200，别看状态，看 Cookie）
 	let (_, cookies, _) = juz_fetch_url(&app, &url, None).await?;
 	// 第二发：带 Cookie 取真内容
 	let (status, _, body) = juz_fetch_url(&app, &url, Some(&cookies)).await?;
+	if let Ok(mut slot) = JUZ_COOKIE.lock() {
+		*slot = Some(cookies);
+	}
 	let text = String::from_utf8_lossy(&body).into_owned();
 	// WAF 没放行的特征：还是那个跳转桩（极短 + JS 重定向）；或干脆 403
 	if status != 200 || (text.len() < 1024 && text.contains("window.location.href")) {

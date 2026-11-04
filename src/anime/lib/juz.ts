@@ -66,18 +66,19 @@ function parseCard(
 }
 
 /** 卡片 → AnimeVideo：id 直接存 voddetail 路径（详情/播放都靠它拼 URL）。 */
-function cards(doc: Document): AnimeVideo[] {
+function cards(
+  doc: Document,
+  selector = "a.stui-vodlist__thumb"
+): AnimeVideo[] {
   const out: AnimeVideo[] = [];
   const seen = new Set<string>();
-  doc
-    .querySelectorAll("a.stui-vodlist__thumb")
-    .forEach(el => {
-      const anchor = el as HTMLAnchorElement;
-      const card = parseCard(anchor);
-      if (!card || seen.has(card.id)) return;
-      seen.add(card.id);
-      out.push(card);
-    });
+  doc.querySelectorAll(selector).forEach(el => {
+    const anchor = el as HTMLAnchorElement;
+    const card = parseCard(anchor);
+    if (!card || seen.has(card.id)) return;
+    seen.add(card.id);
+    out.push(card);
+  });
   return out;
 }
 
@@ -228,7 +229,42 @@ export async function juzSearch(
   const path = `/vodsearch/${encodeURIComponent(
     keyword
   )}-------------/`;
-  return cards(await page(path));
+  const doc = await page(path);
+  // 站点对搜索有 6 秒频控：触发时返回「系统提示」页（0 卡片，之前被装成
+  // 「没有内容」）。等 6.5 秒重试一次，仍被限就明确报错。
+  if (isThrottled(doc)) {
+    await new Promise(resolve =>
+      setTimeout(resolve, 6500)
+    );
+    const retry = await page(path);
+    if (isThrottled(retry)) {
+      throw new Error(
+        "搜索太频繁：站点限制 6 秒一次，稍等再搜"
+      );
+    }
+    return searchHits(retry);
+  }
+  return searchHits(doc);
+}
+
+/** 频控页特征：标题「系统提示」+ 正文提示搜索间隔。 */
+function isThrottled(doc: Document): boolean {
+  return (
+    doc.body.textContent?.includes(
+      "搜索时间间隔"
+    ) ?? false
+  );
+}
+
+/**
+ * 搜索命中只取 v-thumb 卡片：结果页还有 m-thumb 的「大家还在看」推荐位
+ * （同样挂着 stui-vodlist__thumb 类），混进来就是与关键词无关的条目。
+ */
+function searchHits(doc: Document): AnimeVideo[] {
+  return cards(
+    doc,
+    "a.stui-vodlist__thumb.v-thumb"
+  );
 }
 
 /** 从一个播放路径抠出集号（/vodplay/13384-1-12/ → 12）。导出供单测锁定。 */
@@ -243,9 +279,11 @@ export function epNumberOf(
 
 /** 一条播放线路：站点上的一组剧集（dujia* 解析源也在这，播放时才判别能不能直连）。 */
 export type JuzLine = {
-  /** 线路标题（站点上的中文营销名，如「剧踪独家[热播X]」） */
+  /** 线路标题（站点上的中文营销名，如「剧踪独家[热播X]」；参考站合并线路是自定义名） */
   title: string;
   episodes: AnimeEpisode[];
+  /** 参考站合并线路才有：参考 App API 的 videoId，播这条线走加密 API 播放链 */
+  appVideoId?: string;
 };
 
 /**

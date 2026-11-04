@@ -25,6 +25,8 @@ export type AnimeVideo = {
   score?: string | number;
   tags?: string;
   badgeTag?: string;
+  /** 搜索结果来源标记：app=参考站（点开走加密 API 详情链路；聚站解析不设此字段） */
+  origin?: "app";
 };
 
 /** 首页模块（RecommendationResult）。 */

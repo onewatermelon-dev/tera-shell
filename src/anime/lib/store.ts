@@ -11,15 +11,12 @@ const DATA_NAME = "anime";
 export type AnimeConfig = {
   /** 参考 App 的 API 域名（https://…），运行时解密下发所以由用户配置。 */
   baseUrl: string;
-  /** 数据源站点：app=参考站（加密 API） / juz=聚站（juzong01.me 网页解析）。 */
-  site?: "app" | "juz";
   /** 播放器音量（0..1）：跨会话记住上次的音量。 */
   volume?: number;
 };
 
 const DEFAULT_CONFIG: AnimeConfig = {
   baseUrl: "",
-  site: "app",
   volume: 1
 };
 
@@ -40,7 +37,6 @@ export async function loadAnimeConfig(): Promise<AnimeConfig> {
         typeof parsed.baseUrl === "string"
           ? parsed.baseUrl
           : "",
-      site: parsed.site === "juz" ? "juz" : "app",
       volume:
         typeof parsed.volume === "number" &&
         parsed.volume >= 0 &&

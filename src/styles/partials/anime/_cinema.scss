@@ -585,12 +585,13 @@
   }
 
   &.is-active {
+    font-weight: 600;
     color: #ffffff;
     background: var(--cin-accent);
   }
 }
 
-// 页签行：页签横向滚动一行排开 + 右侧箭头翻页
+// 页签行：页签横向滚动一行排开 + 右侧箭头平移页签条（不改选中页）
 .cin-ep-tabs-row {
   display: flex;
   gap: 4px;

@@ -1,9 +1,10 @@
 /**
- * 动漫播放弹层：浏览（首页模块/搜索）→ 详情页 → 播放器。
+ * 动漫播放弹层：聚站浏览（频道/筛选/搜索）→ 详情页 → 播放器。
  *
- * 请求链路复刻参考 App（com.yy.myuko 逆向结果，见 src-tauri/src/anime.rs）：
- * home/recommend / video/search / video/detail / resolve/episodes / resolve/sign。
- * API 域名由用户配置（参考 App 运行时才解密下发，静态拿不到）。
+ * 参考站（com.yy.myuko 逆向的加密 API，见 src-tauri/src/anime.rs）已并入聚站：
+ * 浏览面只有聚站；进详情页时后台按标题在参考站搜同名视频，命中就把它的剧集
+ * 作为「优选线路」插到线路列表最前（域名没配/接口挂了都静默跳过）。
+ * 播放按线路来源分流：优选线路走 anime_play 播放链，聚站线路走网页解析。
  *
  * 播放：resolve 给的直链交给播放器；.m3u8 走 hls.js 动态加载
  * （WebView2 是 Chromium 内核，原生不认 HLS）。带 Lua 客户端解析的源
@@ -68,14 +69,18 @@ type BrowseData = {
   videos: AnimeVideo[];
 };
 
+/** 参考站合并线路在界面上显示的自定义名（区别于聚站站方的营销线路名）。 */
+const APP_LINE_NAME = "优选线路";
+
 /** 卡片图：poster 优先（竖版海报，动漫站惯例），cover 兜底。 */
 function coverOf(video: AnimeVideo): string {
   return video.posterUrl || video.coverUrl || "";
 }
 
 /**
- * 筛选组一行：chips 横向滚动（只显示一行），右侧 ‹ › 箭头按屏翻动，
- * 滚到两端时对应箭头置灰。
+ * 筛选组一行：chips 横向滚动（只显示一行）。
+ * 右缘放不下的 chip 整只裁掉（clip-path 硬切，行尾永远只见完整按钮），
+ * 滚动/换页后重算——滚到它时自然完整显示。
  */
 function ScreenStrip({
   label,
@@ -93,26 +98,29 @@ function ScreenStrip({
   const stripRef = useRef<HTMLDivElement | null>(
     null
   );
-  /** 边界状态：决定左右箭头置灰 */
-  const [edge, setEdge] = useState({
-    left: false,
-    right: false
-  });
 
-  const updateEdge = () => {
+  /** 直接写 style 不走 state：滚动事件高频，避免整行重渲染 */
+  const updateClip = () => {
     const el = stripRef.current;
     if (!el) return;
-    setEdge({
-      left: el.scrollLeft > 4,
-      right:
-        el.scrollLeft + el.clientWidth <
-        el.scrollWidth - 4
-    });
+    const rect = el.getBoundingClientRect();
+    let cut = 0;
+    for (const node of Array.from(el.children)) {
+      const box = node.getBoundingClientRect();
+      // +1 容差：正好贴边的不算溢出
+      if (box.right > rect.right + 1) {
+        // 裁切线放在这只 chip 左缘外 6px（间隙宽），整只不可见
+        cut = rect.right - box.left + 6;
+        break;
+      }
+    }
+    el.style.clipPath =
+      cut > 0 ? `inset(0 ${cut}px 0 0)` : "";
   };
 
-  // 挂载/内容变化后先算一次边界（选项数不同，溢出情况不同）
+  // 挂载/内容变化后先算一次（选项数不同，溢出情况不同）
   useEffect(() => {
-    updateEdge();
+    updateClip();
   });
 
   return (
@@ -123,7 +131,7 @@ function ScreenStrip({
       <div
         ref={stripRef}
         className="anime-screen-strip"
-        onScroll={updateEdge}
+        onScroll={updateClip}
       >
         {options.map(opt => (
           <button
@@ -142,32 +150,6 @@ function ScreenStrip({
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        className="cin-ep-arrow"
-        disabled={!edge.left}
-        onClick={() =>
-          stripRef.current?.scrollBy({
-            left: -240,
-            behavior: "smooth"
-          })
-        }
-      >
-        <LeftOutlined />
-      </button>
-      <button
-        type="button"
-        className="cin-ep-arrow"
-        disabled={!edge.right}
-        onClick={() =>
-          stripRef.current?.scrollBy({
-            left: 240,
-            behavior: "smooth"
-          })
-        }
-      >
-        <RightOutlined />
-      </button>
     </div>
   );
 }
@@ -179,12 +161,6 @@ export default function AnimePlayerDialog({
 }) {
   const t = useT();
   const [baseUrl, setBaseUrl] = useState("");
-  const [configReady, setConfigReady] =
-    useState(false);
-  /** 数据源站点：app=参考站（加密 API），juz=聚站（网页解析） */
-  const [source, setSource] = useState<
-    "app" | "juz"
-  >("app");
   const [browse, setBrowse] =
     useState<BrowseData | null>(null);
   const [detail, setDetail] =
@@ -212,10 +188,19 @@ export default function AnimePlayerDialog({
   >([]);
   /** 当前选中的线路下标（用户可切换；播放探测命中后也会更新） */
   const [juzLineIdx, setJuzLineIdx] = useState(0);
+  /**
+   * 当前选中线路若来自参考站，存它的 videoId（播放走加密 API 链）；
+   * 聚站线路为 null。随线路点击/详情切换同步。
+   */
+  const [appLineId, setAppLineId] = useState<
+    string | null
+  >(null);
+  /** 用户是否手动点过线路：参考站线路异步合并回来时别覆盖用户的选择 */
+  const lineTouched = useRef(false);
   /** 上次会话的音量（anime.json），新播放器起播时应用 */
   const [savedVolume, setSavedVolume] =
     useState(1);
-  /** 详情页选集分页：每页 30 集，页签一行 + 箭头翻页 */
+  /** 详情页选集分页：每页 30 集，页签一行（箭头只平移页签条，不改选中页） */
   const [epPage, setEpPage] = useState(0);
   const epTabsRef = useRef<HTMLDivElement | null>(
     null
@@ -265,23 +250,6 @@ export default function AnimePlayerDialog({
     []
   );
 
-  /** 首页模块：失败不弹窗（很多源要求登录/域名不对），落横幅即可。 */
-  const loadModules = useCallback(
-    (host: string) =>
-      run(async () => {
-        const data = await animeApi<
-          ApiEnvelope & {
-            modules?: AnimeModule[];
-          }
-        >(host, ENDPOINTS.home, {});
-        setBrowse({
-          modules: data.modules ?? [],
-          videos: []
-        });
-      }),
-    [run]
-  );
-
   /** 聚站首页（网页解析，无需配置域名）：卡片 + 频道导航一次拿全。 */
   const loadJuzHome = useCallback(
     () =>
@@ -318,17 +286,11 @@ export default function AnimePlayerDialog({
         const config = await loadAnimeConfig();
         if (!alive) return;
         setBaseUrl(config.baseUrl);
-        setSource(config.site ?? "app");
         setSavedVolume(config.volume ?? 1);
-        setConfigReady(true);
-        if (config.site === "juz") {
-          void loadJuzHome();
-        } else if (config.baseUrl) {
-          void loadModules(config.baseUrl);
-        }
+        // 浏览面只有聚站：开弹层直接进聚站首页
+        void loadJuzHome();
       } catch (reason) {
         logError("[anime] 读配置失败", reason);
-        if (alive) setConfigReady(true);
       }
       try {
         const ready = await invoke<boolean>(
@@ -345,9 +307,9 @@ export default function AnimePlayerDialog({
     return () => {
       alive = false;
     };
-  }, [loadModules, loadJuzHome]);
+  }, [loadJuzHome]);
 
-  /** 音量变化持久化（防抖 300ms）：整体覆盖 anime.json，带上当前域名/站点。 */
+  /** 音量变化持久化（防抖 300ms）：整体覆盖 anime.json，带上当前域名。 */
   const persistVolume = useCallback(
     (volume: number) => {
       if (volumeSaveTimer.current !== null) {
@@ -363,7 +325,6 @@ export default function AnimePlayerDialog({
           setSavedVolume(volume);
           void saveAnimeConfig({
             baseUrl,
-            site: source,
             volume
           }).catch(reason =>
             logError(
@@ -375,95 +336,179 @@ export default function AnimePlayerDialog({
         300
       );
     },
-    [baseUrl, source]
+    [baseUrl]
   );
-
-  /** 切数据源：清空浏览/详情/播放态，配置落盘（下次打开记住选择）。 */
-  function switchSource(next: "app" | "juz") {
-    if (next === source) return;
-    setSource(next);
-    setBrowse(null);
-    setDetail(null);
-    setEpisodes([]);
-    setPlaying(null);
-    setError("");
-    void saveAnimeConfig({
-      baseUrl,
-      site: next
-    }).catch(reason =>
-      logError("[anime] 保存站点选择失败", reason)
-    );
-    if (next === "juz") {
-      void loadJuzHome();
-    } else if (baseUrl) {
-      void loadModules(baseUrl);
-    }
-  }
 
   function search() {
     if (!query.trim()) return;
-    if (source === "juz") {
-      void run(async () => {
-        setBrowse({
-          modules: [],
-          videos: await juzSearch(query.trim())
-        });
-      });
-      return;
-    }
     void run(async () => {
-      const data = await animeApi<
-        ApiEnvelope & { videos?: AnimeVideo[] }
-      >(baseUrl, ENDPOINTS.search, {
-        keyword: query.trim(),
-        pageIndex: 1,
-        pageSize: 30
-      });
+      const keyword = query.trim();
+      // 两边并行搜：参考站结果排前（与线路优先策略一致），失败静默降级为仅聚站
+      const [juzVideos, appVideos] =
+        await Promise.all([
+          juzSearch(keyword),
+          baseUrl
+            ? animeApi<
+                ApiEnvelope & {
+                  videos?: AnimeVideo[];
+                }
+              >(baseUrl, ENDPOINTS.search, {
+                keyword,
+                pageIndex: 1,
+                pageSize: 30
+              })
+                .then(data =>
+                  (data.videos ?? [])
+                    // 接口的模糊搜索会带出英文译名命中（「凡人」→ Mortal 这类），
+                    // 客户端只留标题/副标题确实含关键词的
+                    .filter(
+                      video =>
+                        video.title.includes(
+                          keyword
+                        ) ||
+                        (
+                          video.subTitle ?? ""
+                        ).includes(keyword)
+                    )
+                    .map(video => ({
+                      ...video,
+                      origin: "app" as const,
+                      badgeTag:
+                        video.badgeTag ?? "优选"
+                    }))
+                )
+                .catch(reason => {
+                  logError(
+                    "[anime] 参考站搜索失败",
+                    reason
+                  );
+                  return [];
+                })
+            : Promise.resolve([])
+        ]);
+      // 搜索结果替换整个浏览态：不清频道筛选态的话，
+      // 渲染会继续落在首页题材分区上，结果永远不显示
+      setJuzPath("search");
+      setJuzScreens([]);
+      setJuzSections([]);
       setBrowse({
         modules: [],
-        videos: data.videos ?? []
+        videos: [...appVideos, ...juzVideos]
       });
     });
   }
 
-  /** 进详情页：详情 + 剧集并行拉（参考站两个接口并行；聚站解析一页拿全部线路）。 */
+  /**
+   * 参考站同名线路合并：详情打开后按标题在参考站搜索，标题完全一致才采用
+   * （防止同名前缀误合并成另一部剧的剧集），命中就把它的剧集作为「优选线路」
+   * 插到线路列表最前；用户还没手动选过线路时自动切过去。
+   *
+   * 参考站没配域名 / 接口挂了 / 没搜到都静默跳过，不影响聚站主流程。
+   */
+  async function mergeAppLine(
+    title: string,
+    juzLines: JuzLine[]
+  ) {
+    if (!baseUrl) return;
+    try {
+      const hits = await animeApi<
+        ApiEnvelope & { videos?: AnimeVideo[] }
+      >(baseUrl, ENDPOINTS.search, {
+        keyword: title,
+        pageIndex: 1,
+        pageSize: 10
+      });
+      const hit = (hits.videos ?? []).find(
+        video =>
+          video.title.trim() === title.trim()
+      );
+      if (!hit) return;
+      const ep = await animeApi<
+        ApiEnvelope & {
+          episodes?: AnimeEpisode[];
+        }
+      >(baseUrl, ENDPOINTS.episodes, {
+        videoId: hit.id,
+        code: ""
+      });
+      const eps = ep.episodes ?? [];
+      if (!eps.length) return;
+      const merged: JuzLine[] = [
+        {
+          title: APP_LINE_NAME,
+          appVideoId: hit.id,
+          episodes: eps
+        },
+        ...juzLines
+      ];
+      setJuzLines(merged);
+      if (!lineTouched.current) {
+        // 用户没选过线路：自动切到参考站线路（优先级最高）
+        setJuzLineIdx(0);
+        setAppLineId(hit.id);
+        setEpPage(0);
+        setEpisodes(eps);
+      } else {
+        // 用户已手动选线：保持其选中内容不变（列表前插一位，下标顺移）
+        setJuzLineIdx(index => index + 1);
+      }
+    } catch (reason) {
+      logError(
+        "[anime] 参考站线路合并失败",
+        reason
+      );
+    }
+  }
+
+  /** 进详情页：聚站解析一页拿全部线路（参考站同名线路后台异步合并）；搜索结果里点参考站条目走加密 API 详情链路。 */
   function openDetail(video: AnimeVideo) {
-    if (source === "juz") {
+    if (video.origin === "app") {
       void run(async () => {
-        const parsed = await juzDetail(video.id);
-        setDetail(parsed.video);
-        setJuzLines(parsed.lines);
+        const [info, ep] = await Promise.all([
+          animeApi<
+            ApiEnvelope & { video?: AnimeDetail }
+          >(baseUrl, ENDPOINTS.detail, {
+            videoId: video.id
+          }),
+          animeApi<
+            ApiEnvelope & {
+              episodes?: AnimeEpisode[];
+            }
+          >(baseUrl, ENDPOINTS.episodes, {
+            videoId: video.id,
+            code: ""
+          })
+        ]);
+        lineTouched.current = false;
+        setAppLineId(video.id);
+        setDetail(
+          info.video ?? {
+            ...video,
+            description: ""
+          }
+        );
+        setJuzLines([]);
         setJuzLineIdx(0);
         setEpPage(0);
-        setEpisodes(
-          parsed.lines[0]?.episodes ?? []
-        );
+        setEpisodes(ep.episodes ?? []);
       });
       return;
     }
     void run(async () => {
-      const [info, ep] = await Promise.all([
-        animeApi<
-          ApiEnvelope & { video?: AnimeDetail }
-        >(baseUrl, ENDPOINTS.detail, {
-          videoId: video.id
-        }),
-        animeApi<
-          ApiEnvelope & {
-            episodes?: AnimeEpisode[];
-          }
-        >(baseUrl, ENDPOINTS.episodes, {
-          videoId: video.id,
-          code: ""
-        })
-      ]);
-      setDetail(
-        info.video ?? {
-          ...video,
-          description: ""
-        }
+      const parsed = await juzDetail(video.id);
+      lineTouched.current = false;
+      setAppLineId(null);
+      setDetail(parsed.video);
+      setJuzLines(parsed.lines);
+      setJuzLineIdx(0);
+      setEpPage(0);
+      setEpisodes(
+        parsed.lines[0]?.episodes ?? []
       );
-      setEpisodes(ep.episodes ?? []);
+      await mergeAppLine(
+        parsed.video.title,
+        parsed.lines
+      );
     });
   }
 
@@ -478,77 +523,79 @@ export default function AnimePlayerDialog({
     quality?: string
   ) {
     if (!detail) return;
-    if (source === "juz") {
-      // 聚站：用当前选中的线路播。player_data 里的 url 有三种形态——
-      // 明文直链直接播；dujia* 解析源的加密 token 走 juzResolveToken 换真实
-      // 地址；qq 等网页链接既非直链也解不了，明确报错提示换线。
+    if (appLineId) {
+      // 参考站优选线路：走加密 API 播放链（与聚站解析互不相干）
       void run(async () => {
-        const playPath = episode.code ?? "";
-        if (
-          !/^\/vodplay\/\d+-\d+-\d+\/$/.test(
-            playPath
-          )
-        ) {
-          throw new Error("这一集没有播放地址");
-        }
-        const { playUrl: raw } =
-          await juzPlay(playPath);
-        const playUrl = isDirectPlayUrl(raw)
-          ? raw
-          : await juzResolveToken(raw);
-        setPlaying({
-          url: playUrl,
-          label:
-            episode.episodeName ||
-            `第 ${episode.episodeNum} 集`,
-          quality: "",
-          qualities: [],
-          vcodec: "",
-          episode
+        const result = await invoke<{
+          playUrl?: string;
+          quality?: string;
+          qualities?: CinemaQualityOption[];
+          vcodec?: string;
+        }>("anime_play", {
+          baseUrl,
+          videoId: appLineId,
+          code: episode.code ?? "",
+          episodeNum: episode.episodeNum,
+          quality: quality ?? null
         });
-        setSoftDecode(false);
+        const playUrl = String(
+          result.playUrl ?? ""
+        );
+        if (playUrl) {
+          // 用户主动起播（没指定清晰度）时重置回退链
+          if (!quality)
+            triedQualities.current = [];
+          setPlaying({
+            url: playUrl,
+            label:
+              episode.episodeName ||
+              `第 ${episode.episodeNum} 集`,
+            quality:
+              result.quality ?? quality ?? "",
+            qualities: result.qualities ?? [],
+            vcodec: result.vcodec ?? "",
+            episode
+          });
+          // H265 直接开软解：WebView2 没有 HEVC 解码器，硬播只有声音。
+          // ffmpeg 不可用时保持原样，交给 onNoVideo 兜底提示。
+          setSoftDecode(
+            ffmpegReady &&
+              /265/i.test(result.vcodec ?? "")
+          );
+          return;
+        }
+        throw new Error("没有取到播放地址");
       });
       return;
     }
+    // 聚站：用当前选中的线路播。player_data 里的 url 有三种形态——
+    // 明文直链直接播；dujia* 解析源的加密 token 走 juzResolveToken 换真实
+    // 地址；qq 等网页链接既非直链也解不了，明确报错提示换线。
     void run(async () => {
-      const result = await invoke<{
-        playUrl?: string;
-        quality?: string;
-        qualities?: CinemaQualityOption[];
-        vcodec?: string;
-      }>("anime_play", {
-        baseUrl,
-        videoId: detail.id,
-        code: episode.code ?? "",
-        episodeNum: episode.episodeNum,
-        quality: quality ?? null
-      });
-      const playUrl = String(
-        result.playUrl ?? ""
-      );
-      if (playUrl) {
-        // 用户主动起播（没指定清晰度）时重置回退链
-        if (!quality) triedQualities.current = [];
-        setPlaying({
-          url: playUrl,
-          label:
-            episode.episodeName ||
-            `第 ${episode.episodeNum} 集`,
-          quality:
-            result.quality ?? quality ?? "",
-          qualities: result.qualities ?? [],
-          vcodec: result.vcodec ?? "",
-          episode
-        });
-        // H265 直接开软解：WebView2 没有 HEVC 解码器，硬播只有声音。
-        // ffmpeg 不可用时保持原样，交给 onNoVideo 兜底提示。
-        setSoftDecode(
-          ffmpegReady &&
-            /265/i.test(result.vcodec ?? "")
-        );
-        return;
+      const playPath = episode.code ?? "";
+      if (
+        !/^\/vodplay\/\d+-\d+-\d+\/$/.test(
+          playPath
+        )
+      ) {
+        throw new Error("这一集没有播放地址");
       }
-      throw new Error("没有取到播放地址");
+      const { playUrl: raw } =
+        await juzPlay(playPath);
+      const playUrl = isDirectPlayUrl(raw)
+        ? raw
+        : await juzResolveToken(raw);
+      setPlaying({
+        url: playUrl,
+        label:
+          episode.episodeName ||
+          `第 ${episode.episodeNum} 集`,
+        quality: "",
+        qualities: [],
+        vcodec: "",
+        episode
+      });
+      setSoftDecode(false);
     });
   }
 
@@ -708,39 +755,6 @@ export default function AnimePlayerDialog({
             <Modal.Body className="dialog-scroll anime-body">
               {!detail && (
                 <>
-                  {/* 数据源切换：参考站（加密 API，需配域名）/ 聚站（网页解析，开箱即用） */}
-                  <div className="anime-source-row">
-                    <button
-                      type="button"
-                      className={
-                        "anime-source-chip" +
-                        (source === "app"
-                          ? " is-active"
-                          : "")
-                      }
-                      disabled={busy}
-                      onClick={() =>
-                        switchSource("app")
-                      }
-                    >
-                      {t("anime.sourceApp")}
-                    </button>
-                    <button
-                      type="button"
-                      className={
-                        "anime-source-chip" +
-                        (source === "juz"
-                          ? " is-active"
-                          : "")
-                      }
-                      disabled={busy}
-                      onClick={() =>
-                        switchSource("juz")
-                      }
-                    >
-                      {t("anime.sourceJuz")}
-                    </button>
-                  </div>
                   <div className="anime-search-row">
                     <input
                       className="settings-input"
@@ -761,11 +775,7 @@ export default function AnimePlayerDialog({
                     <Button
                       variant="tertiary"
                       size="sm"
-                      isDisabled={
-                        busy ||
-                        (source === "app" &&
-                          !baseUrl)
-                      }
+                      isDisabled={busy}
                       onPress={search}
                     >
                       {t("anime.searchAction")}
@@ -780,18 +790,6 @@ export default function AnimePlayerDialog({
               )}
               {playing ? (
                 <div className="anime-player-wrap">
-                  {playing.vcodec
-                    ?.toUpperCase()
-                    .includes("265") && (
-                    <p className="anime-hint anime-hevc-hint">
-                      {t("anime.hevcHint")}
-                    </p>
-                  )}
-                  {softDecode && (
-                    <p className="anime-hint anime-hevc-hint">
-                      {t("anime.softDecode")}
-                    </p>
-                  )}
                   {softDecode ? (
                     <TranscodePlayer
                       // key 绑 src：换集/换清晰度必须重挂，否则会带着
@@ -923,46 +921,53 @@ export default function AnimePlayerDialog({
                       ) : null}
                     </div>
                   </div>
-                  {source === "juz" &&
-                    juzLines.length > 1 && (
-                      <div className="anime-line-row">
-                        <span className="anime-line-label">
-                          线路
-                        </span>
-                        {juzLines.map(
-                          (line, index) => (
-                            <button
-                              key={
-                                line.title + index
-                              }
-                              type="button"
-                              className={
-                                "anime-line-chip" +
-                                (index ===
-                                juzLineIdx
-                                  ? " is-active"
-                                  : "")
-                              }
-                              disabled={busy}
-                              // 悬停显示站点原名（「剧踪独家[热播X]」这类营销名），
-                              // 按钮上是自定义的简洁名 + 集数
-                              title={line.title}
-                              onClick={() => {
-                                setJuzLineIdx(
-                                  index
-                                );
-                                setEpPage(0);
-                                setEpisodes(
-                                  line.episodes
-                                );
-                              }}
-                            >
-                              {`线路 ${index + 1} · ${line.episodes.length}集`}
-                            </button>
-                          )
-                        )}
-                      </div>
-                    )}
+                  {juzLines.length > 1 && (
+                    <div className="anime-line-row">
+                      <span className="anime-line-label">
+                        线路
+                      </span>
+                      {juzLines.map(
+                        (line, index) => (
+                          <button
+                            key={
+                              line.title + index
+                            }
+                            type="button"
+                            className={
+                              "anime-line-chip" +
+                              (index ===
+                              juzLineIdx
+                                ? " is-active"
+                                : "")
+                            }
+                            disabled={busy}
+                            // 悬停显示线路原名（参考站线路是自定义名，聚站是营销名）
+                            title={line.title}
+                            onClick={() => {
+                              lineTouched.current = true;
+                              setJuzLineIdx(
+                                index
+                              );
+                              setAppLineId(
+                                line.appVideoId ??
+                                  null
+                              );
+                              setEpPage(0);
+                              setEpisodes(
+                                line.episodes
+                              );
+                            }}
+                          >
+                            {`${
+                              line.appVideoId
+                                ? APP_LINE_NAME
+                                : `线路 ${index + 1}`
+                            } · ${line.episodes.length}集`}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
                   <p className="anime-section-label">
                     {t("anime.episodes")}
                   </p>
@@ -992,9 +997,20 @@ export default function AnimePlayerDialog({
                                       ? " is-active"
                                       : "")
                                   }
-                                  onClick={() =>
-                                    setEpPage(i)
-                                  }
+                                  onClick={e => {
+                                    setEpPage(i);
+                                    // 点到视口外的页签时把它滚进可视区（不改选中页）
+                                    e.currentTarget.scrollIntoView(
+                                      {
+                                        block:
+                                          "nearest",
+                                        inline:
+                                          "nearest",
+                                        behavior:
+                                          "smooth"
+                                      }
+                                    );
+                                  }}
                                 >
                                   {i *
                                     EP_PAGE_SIZE +
@@ -1009,15 +1025,20 @@ export default function AnimePlayerDialog({
                               )
                             )}
                           </div>
+                          {/* 箭头只平移页签条本身一屏，不改选中页（scrollBy 越界自动夹紧） */}
                           <button
                             type="button"
                             className="cin-ep-arrow"
-                            disabled={
-                              epPage === 0
-                            }
+                            aria-label="页签左移"
                             onClick={() =>
-                              setEpPage(p =>
-                                Math.max(0, p - 1)
+                              epTabsRef.current?.scrollBy(
+                                {
+                                  left: -epTabsRef
+                                    .current
+                                    .clientWidth,
+                                  behavior:
+                                    "smooth"
+                                }
                               )
                             }
                           >
@@ -1026,23 +1047,16 @@ export default function AnimePlayerDialog({
                           <button
                             type="button"
                             className="cin-ep-arrow"
-                            disabled={
-                              epPage >=
-                              Math.ceil(
-                                episodes.length /
-                                  EP_PAGE_SIZE
-                              ) -
-                                1
-                            }
+                            aria-label="页签右移"
                             onClick={() =>
-                              setEpPage(p =>
-                                Math.min(
-                                  Math.ceil(
-                                    episodes.length /
-                                      EP_PAGE_SIZE
-                                  ) - 1,
-                                  p + 1
-                                )
+                              epTabsRef.current?.scrollBy(
+                                {
+                                  left: epTabsRef
+                                    .current
+                                    .clientWidth,
+                                  behavior:
+                                    "smooth"
+                                }
                               )
                             }
                           >
@@ -1082,9 +1096,8 @@ export default function AnimePlayerDialog({
                     </p>
                   )}
                 </div>
-              ) : source === "juz" &&
-                juzNav.length ? (
-                // 聚站浏览页：左侧频道栏 + 筛选 chips + 大卡网格（腾讯视频排版）
+              ) : // 聚站浏览页：左侧频道栏 + 筛选 chips + 大卡网格（腾讯视频排版）
+              juzNav.length ? (
                 <div className="anime-juz">
                   <div className="anime-juz-nav">
                     <button
@@ -1328,10 +1341,7 @@ export default function AnimePlayerDialog({
                 <p className="anime-hint">
                   {busy
                     ? t("anime.loading")
-                    : source === "juz" ||
-                        (configReady && baseUrl)
-                      ? t("anime.empty")
-                      : t("anime.hostHint")}
+                    : t("anime.empty")}
                 </p>
               )}
             </Modal.Body>
