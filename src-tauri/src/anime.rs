@@ -8,7 +8,9 @@
 //! 域名仍由用户在弹层配置（参考包运行时解密下发，静态拿不到）。
 
 use crate::anime_crypto::AnimeCrypto;
+use tauri::Emitter;
 use tauri::Manager;
+use tauri_plugin_dialog::DialogExt;
 
 /// 参考 App 的应用 id。
 const APP_ID: &str = "315891530526580736";
@@ -1378,3 +1380,574 @@ mod tests {
 		);
 	}
 }
+
+// ─── 下载（m3u8 → TS 拼接 → ffmpeg 转封装 mp4） ───────────────────────────
+
+/// 下载进度事件负载（事件名 anime-download-progress）。
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadProgress {
+	/// 前端生成的任务 id（区分并发任务）
+	id: String,
+	/// 已完成片段数
+	done: u64,
+	/// 片段总数
+	total: u64,
+	/// true 表示任务终态（此时 path/error 生效）
+	finished: bool,
+	/// 成品文件路径（finished 且无 error 时有效）
+	path: String,
+	/// 失败原因（finished 且非空时有效）
+	error: String,
+}
+
+/// 相对地址拼接：m3u8 里的片段/子清单常用相对路径。
+/// 支持 绝对 URL、//开头、/开头、裸相对路径 四种形态。
+fn join_url(base: &str, target: &str) -> String {
+	if target.starts_with("http://") || target.starts_with("https://") {
+		return target.to_string();
+	}
+	if let Some(rest) = target.strip_prefix("//") {
+		let scheme = base.split("://").next().unwrap_or("https");
+		return format!("{scheme}://{rest}");
+	}
+	if target.starts_with('/') {
+		if let Some(pos) = base.find("://") {
+			let after = &base[pos + 3..];
+			let host = after.split('/').next().unwrap_or("");
+			return format!("{}://{}{}", &base[..pos], host, target);
+		}
+	}
+	// 裸相对：去掉 base 最后一段后拼接
+	match base.rfind('/') {
+		Some(pos) => format!("{}{}", &base[..pos + 1], target),
+		None => format!("{base}/{target}"),
+	}
+}
+
+/// 解析 m3u8 清单，返回下一层地址列表：
+/// 主清单（含 #EXT-X-STREAM-INF）→ 只取第一档子清单地址；
+/// 媒体清单 → 按序返回全部片段地址。
+fn parse_hls_segments(base: &str, text: &str) -> Vec<String> {
+	let mut is_master = false;
+	let mut urls = Vec::new();
+	for line in text.lines() {
+		let line = line.trim();
+		if line.starts_with("#EXT-X-STREAM-INF") {
+			is_master = true;
+			continue;
+		}
+		if line.is_empty() || line.starts_with('#') {
+			continue;
+		}
+		urls.push(join_url(base, line));
+		if is_master {
+			// 主清单只取第一档：下载场景不挑画质，够用
+			break;
+		}
+	}
+	urls
+}
+
+/// 单个片段并发数：4 路并行对 CDN 礼貌且够快。
+const DOWNLOAD_CONCURRENCY: usize = 4;
+
+/// 单片段大小上限：高码率 1080P 的 10 秒片段常见 10~20MB，8MB 的接口上限太小。
+/// ponytail: 缓冲式读取，4 路并发瞬时最多 4×64MB 内存；再大就得改流式落盘
+const DOWNLOAD_SEGMENT_MAX: usize = 64 * 1024 * 1024;
+
+/// 让用户选下载目录；取消返回 Ok(None)（前端静默收手）。
+#[tauri::command(rename = "anime_pick_download_dir")]
+pub async fn anime_pick_download_dir(
+	app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+	let picked = tauri::async_runtime::spawn_blocking(move || {
+		app.dialog().file().blocking_pick_folder()
+	})
+	.await
+	.map_err(|error| format!("打开目录选择框失败：{error}"))?;
+	Ok(picked.map(|path| path.to_string()))
+}
+
+/// 下载一集。立即返回，进度走事件 anime-download-progress；
+/// finished=true 时 path 为成品路径（ffmpeg 缺失时保留 TS）或 error 为失败原因。
+#[tauri::command(rename = "anime_download")]
+pub async fn anime_download(
+	app: tauri::AppHandle,
+	id: String,
+	url: String,
+	name: String,
+	out_dir: Option<String>,
+) -> Result<(), String> {
+	if !url.starts_with("http://") && !url.starts_with("https://") {
+		return Err("只支持 http(s) 地址".into());
+	}
+	// 下载专用客户端：不设总超时（REQUEST_TIMEOUT 的 20 秒会把几 MB 的片段
+	// 掐死在半路，报「片段读取失败：error decoding response body」），
+	// 只留 15 秒连接超时 + 单片段重试兜底
+	let settings = crate::infra::proxy::load(&app);
+	let client = crate::infra::proxy::build_client(&settings, None)?;
+	// ffmpeg 路径在带句柄时解析好传进去（转封装用；没有就保留 TS）
+	let ffmpeg = crate::anime_transcode::find_ffmpeg(&app);
+	tokio::spawn(async move {
+		match download_impl(&app, &client, &id, &url, &name, out_dir, ffmpeg).await {
+			Ok(path) => {
+				tracing::info!(%id, %path, "下载完成");
+				let _ = app.emit(
+					"anime-download-progress",
+					DownloadProgress {
+						id,
+						done: 0,
+						total: 0,
+						finished: true,
+						path,
+						error: String::new(),
+					},
+				);
+			}
+			Err(error) => {
+				tracing::warn!(%id, %error, "下载失败");
+				let _ = app.emit(
+					"anime-download-progress",
+					DownloadProgress {
+						id,
+						done: 0,
+						total: 0,
+						finished: true,
+						path: String::new(),
+						error,
+					},
+				);
+			}
+		}
+	});
+	Ok(())
+}
+
+/// 下载主体：解析清单 → 并发拉片段（临时文件落地）→ 顺序拼接 → ffmpeg 转封装。
+async fn download_impl(
+	app: &tauri::AppHandle,
+	client: &reqwest::Client,
+	id: &str,
+	url: &str,
+	name: &str,
+	out_dir: Option<String>,
+	ffmpeg: Option<std::path::PathBuf>,
+) -> Result<String, String> {
+	// 片段清单：直链（mp4 等）就是单片段；m3u8 主清单最多剥两层子清单
+	let segments = if url.contains(".m3u8") {
+		let mut list_url = url.to_string();
+		let mut text = fetch_text_inner(client, &list_url).await?;
+		for _depth in 0..2 {
+			if !text.contains("#EXT-X-STREAM-INF") {
+				break;
+			}
+			let next = parse_hls_segments(&list_url, &text);
+			list_url = next
+				.first()
+				.ok_or("主清单里没有子清单地址")?
+				.clone();
+			text = fetch_text_inner(client, &list_url).await?;
+		}
+		let segments = parse_hls_segments(&list_url, &text);
+		if text.contains("#EXT-X-STREAM-INF") || segments.is_empty() {
+			return Err("m3u8 嵌套超两层或没有片段，不支持的清单结构".into());
+		}
+		// 加密（#EXT-X-KEY）/初始化段（#EXT-X-MAP）/字节范围是自研下载器的盲区：
+		// 路由给 N_m3u8DL-RE sidecar（它自己拉密钥解密）；没装 sidecar 就按原路
+		// 继续——产物可能不可播，与未接 RE 时现状一致
+		if needs_re_engine(&text) {
+			if let Some(nre) = find_nre() {
+				return download_with_re(
+					app,
+					&nre,
+					&list_url,
+					id,
+					name,
+					out_dir.clone(),
+					ffmpeg,
+				)
+				.await;
+			}
+			tracing::warn!("清单含加密/初始化段但未找到 N_m3u8DL-RE sidecar，按原路下载");
+		}
+		segments
+	} else {
+		vec![url.to_string()]
+	};
+
+	// 临时目录：片段先落盘（整集内存里放不下）
+	let stamp = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis())
+		.unwrap_or(0);
+	let temp_dir = std::env::temp_dir().join(format!("tera-shell-dl-{stamp}"));
+	std::fs::create_dir_all(&temp_dir).map_err(|e| format!("建临时目录失败：{e}"))?;
+
+	if let Err(error) =
+		download_segments(app, id, client, &segments, &temp_dir).await
+	{
+		let _ = std::fs::remove_dir_all(&temp_dir);
+		return Err(error);
+	}
+
+	// 拼输出路径：用户选的目录优先，没有就用系统下载目录；都拿不到留在临时目录
+	let file_stem = sanitize_filename(name);
+	let out_dir = match out_dir {
+		Some(dir) if !dir.trim().is_empty() => std::path::PathBuf::from(dir),
+		_ => app
+			.path()
+			.download_dir()
+			.ok()
+			.unwrap_or_else(|| temp_dir.clone()),
+	};
+	let _ = std::fs::create_dir_all(&out_dir);
+	let ts_path = out_dir.join(format!("{file_stem}.ts"));
+	concat_parts(&temp_dir, &ts_path)?;
+	let _ = std::fs::remove_dir_all(&temp_dir);
+
+	// 有 ffmpeg 就转封装成 mp4（流复制，秒级）；没有就交 TS（通用播放器都认）
+	Ok(remux_or_keep_ts(
+		ffmpeg.as_deref(),
+		&ts_path,
+		&out_dir,
+		&file_stem,
+	))
+}
+
+/// ffmpeg 流复制转封装 TS → mp4；没 ffmpeg 或转封失败就保留 TS（返回成品路径）。
+fn remux_or_keep_ts(
+	ffmpeg: Option<&std::path::Path>,
+	ts_path: &std::path::Path,
+	out_dir: &std::path::Path,
+	file_stem: &str,
+) -> String {
+	let ts = ts_path.to_string_lossy().into_owned();
+	let Some(ffmpeg) = ffmpeg else {
+		return ts;
+	};
+	let mp4_path = out_dir.join(format!("{file_stem}.mp4"));
+	let output = std::process::Command::new(ffmpeg)
+		.args(["-y", "-hide_banner", "-loglevel", "error"])
+		.arg("-i")
+		.arg(ts_path)
+		.args(["-c", "copy", "-bsf:a", "aac_adtstoasc"])
+		.arg(&mp4_path)
+		.output();
+	let Ok(output) = output else {
+		return ts;
+	};
+	if output.status.success() && mp4_path.is_file() {
+		let _ = std::fs::remove_file(ts_path);
+		return mp4_path.to_string_lossy().into_owned();
+	}
+	let stderr = String::from_utf8_lossy(&output.stderr);
+	tracing::warn!(%stderr, "ffmpeg 转封装失败，保留 TS");
+	ts
+}
+
+/// N_m3u8DL-RE sidecar（externalBin）路径：dev 在 target/debug/，安装后在主程序同目录。
+fn find_nre() -> Option<std::path::PathBuf> {
+	let exe = std::env::current_exe().ok()?;
+	let dir = exe.parent()?;
+	let candidate = dir.join("tera-shell-nre.exe");
+	candidate.is_file().then_some(candidate)
+}
+
+/// 清单是否带自研下载器接不了的特征：AES 密钥（#EXT-X-KEY）、
+/// 初始化段（#EXT-X-MAP）、字节范围（EXT-X-BYTERANGE）。
+fn needs_re_engine(text: &str) -> bool {
+	text.contains("#EXT-X-KEY")
+		|| text.contains("#EXT-X-MAP")
+		|| text.contains("EXT-X-BYTERANGE")
+}
+
+/// 走 N_m3u8DL-RE 下载（自研下载器接不了的清单才路由到这里）：
+/// RE 自己拉密钥、解密、按分片下载并合并成 TS，之后仍用本机 ffmpeg 转封装。
+/// 进度从 RE 的 stdout 文本里抽 `NN%`（RE 会打 ANSI 控制序列，但百分比本身
+/// 是连续字节，直接抽得动）；抽不到就一直停在 0%。
+async fn download_with_re(
+	app: &tauri::AppHandle,
+	nre: &std::path::Path,
+	url: &str,
+	id: &str,
+	name: &str,
+	out_dir: Option<String>,
+	ffmpeg: Option<std::path::PathBuf>,
+) -> Result<String, String> {
+	use std::process::Stdio;
+	use tokio::io::AsyncReadExt;
+
+	let file_stem = sanitize_filename(name);
+	let out_path = match out_dir.as_deref() {
+		Some(dir) if !dir.trim().is_empty() => std::path::PathBuf::from(dir),
+		// 没选目录：系统下载目录，再没有就落临时目录（RE 自己的临时目录也在旁边）
+		_ => app
+			.path()
+			.download_dir()
+			.unwrap_or_else(|_| std::env::temp_dir()),
+	};
+	std::fs::create_dir_all(&out_path).map_err(|e| format!("建输出目录失败：{e}"))?;
+	let stamp = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis())
+		.unwrap_or(0);
+	tracing::info!(%id, nre = %nre.display(), "清单含加密/初始化段，改走 N_m3u8DL-RE");
+	let mut child = tokio::process::Command::new(nre)
+		.arg(url)
+		.arg("--save-dir")
+		.arg(&out_path)
+		.arg("--save-name")
+		.arg(&file_stem)
+		.arg("--tmp-dir")
+		.arg(out_path.join(format!(".nre-tmp-{stamp}")))
+		.args(["--ui-language", "zh-CN"])
+		.args(["--log-level", "OFF"])
+		.stdin(Stdio::null())
+		.stderr(Stdio::null())
+		.stdout(Stdio::piped())
+		.kill_on_drop(true)
+		.spawn()
+		.map_err(|e| format!("启动 N_m3u8DL-RE 失败：{e}"))?;
+
+	// stdout 逐块扫百分比；攒一条最近的有效信息行（非纯进度），失败时带进错误信息
+	let mut stdout = child
+		.stdout
+		.take()
+		.ok_or("N_m3u8DL-RE 没有可读输出")?;
+	let mut buffer = [0u8; 4096];
+	let mut carry = String::new();
+	let mut last_pct: u64 = 0;
+	let mut last_info = String::new();
+	loop {
+		match stdout.read(&mut buffer).await {
+			Ok(0) | Err(_) => break,
+			Ok(n) => {
+				carry.push_str(&String::from_utf8_lossy(&buffer[..n]));
+				while let Some(pos) = carry.find(['\n', '\r']) {
+					let line = carry[..pos].trim().to_string();
+					carry.drain(..=pos);
+					let before = last_pct;
+					scan_re_line(&line, &mut last_pct, &mut last_info);
+					// 百分比有跳变才发事件：RE 每秒刷新一屏，原样转发太吵
+					if last_pct > before {
+						let _ = app.emit(
+							"anime-download-progress",
+							DownloadProgress {
+								id: id.to_string(),
+								done: last_pct,
+								total: 100,
+								finished: false,
+								path: String::new(),
+								error: String::new(),
+							},
+						);
+					}
+				}
+			}
+		}
+	}
+
+	let status = child
+		.wait()
+		.await
+		.map_err(|e| format!("等待 N_m3u8DL-RE 失败：{e}"))?;
+	if !status.success() {
+		let reason = if last_info.is_empty() {
+			format!("退出码 {:?}", status.code())
+		} else {
+			last_info
+		};
+		return Err(format!("N_m3u8DL-RE 下载失败：{reason}"));
+	}
+	let ts_path = out_path.join(format!("{file_stem}.ts"));
+	if !ts_path.is_file() {
+		return Err("N_m3u8DL-RE 完成但没有产出文件".into());
+	}
+	Ok(remux_or_keep_ts(
+		ffmpeg.as_deref(),
+		&ts_path,
+		&out_path,
+		&file_stem,
+	))
+}
+
+/// 从 RE 的一行输出里抽进度百分比与最近的有效信息行（错误说明通常在这）。
+fn scan_re_line(line: &str, last_pct: &mut u64, last_info: &mut String) {
+	if line.is_empty() {
+		return;
+	}
+	// 行里找最后一个 `%`，往前收连续的 [0-9.] 组成百分数
+	// （空格不能进数字串：进度行形如 `00:00:12 34.5%`，会连时间戳一起吞进去）
+	if let Some(pos) = line.rfind('%') {
+		let head = &line[..pos];
+		let start = head
+			.char_indices()
+			.rev()
+			.take_while(|(_, c)| c.is_ascii_digit() || *c == '.')
+			.map(|(i, _)| i)
+			.last()
+			.unwrap_or(head.len());
+		if let Ok(value) = head[start..].trim().parse::<f64>() {
+			let pct = value.clamp(0.0, 100.0) as u64;
+			if pct > *last_pct {
+				*last_pct = pct;
+			}
+		}
+	}
+	// 不含百分比的较长行记作信息行
+	if !line.contains('%') && line.chars().count() > 12 {
+		*last_info = line.to_string();
+	}
+}
+
+/// 并发拉全部片段到临时目录（4 路一批，批内并发、批间按序写盘保证拼接顺序）。
+/// 每批完成发一次进度事件。
+async fn download_segments(
+	app: &tauri::AppHandle,
+	id: &str,
+	client: &reqwest::Client,
+	segments: &[String],
+	temp_dir: &std::path::Path,
+) -> Result<(), String> {
+	let total = segments.len() as u64;
+	for (batch_start, batch) in segments.chunks(DOWNLOAD_CONCURRENCY).enumerate() {
+		let mut fetched = Vec::with_capacity(batch.len());
+		for seg_url in batch {
+			let client = client.clone();
+			let seg_url = seg_url.clone();
+			fetched.push(tokio::spawn(async move {
+				// CDN 偶发掐断传输（body 解码错误/连接重置）很常见，单片段重试 3 次
+				let mut last_error = String::new();
+				for attempt in 0..3 {
+					if attempt > 0 {
+						tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+					}
+					let result = async {
+						// 单请求 90 秒硬上限：客户端没设总超时（怕慢链路掐半路），
+						// 但服务端只连不发时请求会永久挂起——必须逐请求兜底
+						let response = client
+							.get(&seg_url)
+							.header("User-Agent", "okhttp/3.12.1")
+							.timeout(std::time::Duration::from_secs(90))
+							.send()
+							.await
+							.map_err(|e| format!("片段请求失败：{e}"))?;
+						let status = response.status().as_u16();
+						if status != 200 {
+							return Err(format!("片段返回 HTTP {status}"));
+						}
+						let bytes = response
+							.bytes()
+							.await
+							.map_err(|e| format!("片段读取失败：{e}"))?;
+					if bytes.len() > DOWNLOAD_SEGMENT_MAX {
+						return Err(format!(
+							"单个片段超过 {}MB，异常源",
+							DOWNLOAD_SEGMENT_MAX / 1024 / 1024
+						));
+					}
+						Ok(bytes.to_vec())
+					}
+					.await;
+					match result {
+						Ok(bytes) => return Ok::<Vec<u8>, String>(bytes),
+						Err(error) => {
+							tracing::warn!(%seg_url, attempt, %error, "片段下载失败，准备重试");
+							last_error = error;
+						}
+					}
+				}
+				Err(last_error)
+			}));
+		}
+		// 缺一个就整体失败（断点续传不做——YAGNI，失败重下整集即可）
+		for (offset, handle) in fetched.into_iter().enumerate() {
+			let index = batch_start * DOWNLOAD_CONCURRENCY + offset;
+			let bytes = handle
+				.await
+				.map_err(|e| format!("下载任务异常：{e}"))??;
+			let part = temp_dir.join(format!("part_{index:05}.ts"));
+			std::fs::write(&part, &bytes).map_err(|e| format!("写片段失败：{e}"))?;
+		}
+		let _ = app.emit(
+			"anime-download-progress",
+			DownloadProgress {
+				id: id.to_string(),
+				done: ((batch_start + 1) * DOWNLOAD_CONCURRENCY).min(total as usize) as u64,
+				total,
+				finished: false,
+				path: String::new(),
+				error: String::new(),
+			},
+		);
+	}
+	Ok(())
+}
+
+/// 把临时目录里的 part_* 按序拼成完整 TS。
+fn concat_parts(temp_dir: &std::path::Path, out: &std::path::Path) -> Result<(), String> {
+	let mut parts: Vec<_> = std::fs::read_dir(temp_dir)
+		.map_err(|e| format!("读临时目录失败：{e}"))?
+		.filter_map(|entry| entry.ok())
+		.filter(|entry| entry.file_name().to_string_lossy().starts_with("part_"))
+		.collect();
+	parts.sort_by_key(|entry| entry.file_name());
+	let mut out_file =
+		std::fs::File::create(out).map_err(|e| format!("建输出文件失败：{e}"))?;
+	use std::io::Write;
+	for part in parts {
+		let bytes = std::fs::read(part.path()).map_err(|e| format!("读片段失败：{e}"))?;
+		out_file
+			.write_all(&bytes)
+			.map_err(|e| format!("拼接失败：{e}"))?;
+	}
+	Ok(())
+}
+
+/// 文件名消毒：路径分隔与 Windows 非法字符换下划线，空了给默认名。
+fn sanitize_filename(name: &str) -> String {
+	let cleaned: String = name
+		.chars()
+		.map(|c| match c {
+			'\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+			_ => c,
+		})
+		.collect();
+	let trimmed = cleaned.trim();
+	if trimmed.is_empty() {
+		"anime-download".into()
+	} else {
+		trimmed.into()
+	}
+}
+
+/// 取回一个文本资源（下载模块内部复用，与 fetch_text 命令同款请求头）。
+async fn fetch_text_inner(client: &reqwest::Client, url: &str) -> Result<String, String> {
+	let response = client
+		.get(url)
+		.header("User-Agent", "okhttp/3.12.1")
+		.header("Accept", "*/*")
+		// 清单很小，30 秒足够；防挂起
+		.timeout(std::time::Duration::from_secs(30))
+		.send()
+		.await
+		.map_err(|e| format!("清单请求失败：{e}"))?;
+	let status = response.status().as_u16();
+	if status != 200 {
+		return Err(format!("清单返回 HTTP {status}"));
+	}
+	let body = response
+		.bytes()
+		.await
+		.map_err(|e| format!("清单读取失败：{e}"))?;
+	if body.len() > MAX_BODY_BYTES {
+		return Err("清单过大".into());
+	}
+	Ok(String::from_utf8_lossy(&body).into_owned())
+}
+
+// 单测放 tests/unit/anime_download.rs（join_url / parse_hls_segments 的行为锁定）
+#[cfg(test)]
+#[path = "../tests/unit/anime_download.rs"]
+mod anime_download_tests;

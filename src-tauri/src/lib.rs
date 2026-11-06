@@ -7,6 +7,10 @@ pub mod anime;
 pub mod anime_crypto;
 /// 动漫 H.265 软解转码（ffmpeg 外部进程 + 前端 MSE）
 pub mod anime_transcode;
+/// Bangumi（bgm.tv）开放 API 代理：放送日历 / 条目匹配 / 追番进度同步
+pub mod bangumi;
+/// 弹弹play 开放 API：剧集匹配 + 外部弹幕库拉取
+pub mod danmu;
 pub mod data;
 pub mod fonts;
 pub mod fs;
@@ -168,6 +172,15 @@ pub fn run() {
             anime::juz_get,
             // 聚站 dujia* 解析线路：加密 token → 真实媒体直链
             anime::juz_resolve_token,
+            // 选集下载：m3u8 → TS 拼接 → ffmpeg 转封装 mp4（进度走事件）
+            anime::anime_download,
+            // 下载前选目录（用户取消返回 None，前端静默收手）
+            anime::anime_pick_download_dir,
+            // Bangumi 开放 API：放送日历 / 评分匹配 / 追番进度同步
+            bangumi::bgm_fetch,
+            // 弹弹play 开放 API：剧集匹配 + 弹幕库
+            danmu::danmu_match,
+            danmu::danmu_comments,
             anime_transcode::transcode_start,
             anime_transcode::transcode_stop,
             anime_transcode::transcode_available,

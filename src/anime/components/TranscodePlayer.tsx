@@ -41,8 +41,17 @@ import CinemaControls, {
   fmt,
   useCinemaHotkeys
 } from "@/anime/components/CinemaControls";
-import type { CinemaQualityOption } from "@/anime/components/CinemaControls";
+import type {
+  CinemaHint,
+  CinemaQualityOption
+} from "@/anime/components/CinemaControls";
 import type { AnimeEpisode } from "@/anime/lib/types";
+import {
+  danmuColor,
+  danmuMode
+} from "@/anime/lib/danmu";
+import type { DanmuComment } from "@/anime/lib/danmu";
+import Danmaku from "danmaku";
 
 /** 后端转码分片事件（与 anime_transcode.rs 的 CHUNK_EVENT 一致）。 */
 const CHUNK_EVENT = "anime://transcode-chunk";
@@ -84,7 +93,15 @@ export default function TranscodePlayer({
   onNextEpisode,
   initialVolume,
   onVolumePersist,
-  switching
+  switching,
+  startAt: startAtInitial,
+  onProgress,
+  onDownload,
+  downloadPct,
+  downloadHint,
+  danmuComments,
+  danmuOn,
+  onToggleDanmu
 }: {
   src: string;
   /** 顶部标题：「动漫名 · 集名」 */
@@ -104,6 +121,22 @@ export default function TranscodePlayer({
   switching?: boolean;
   /** 音量变化（防抖在调用方做）：写盘持久化 */
   onVolumePersist?: (volume: number) => void;
+  /** 续播起点（秒）：作为初始转码起点 */
+  startAt?: number;
+  /** 播放进度上报（绝对秒 = startAt + currentTime；节流在调用方做） */
+  onProgress?: (sec: number) => void;
+  /** 下载当前集（给了才在控制栏渲染下载按钮） */
+  onDownload?: () => void;
+  /** 下载进度（0..100，null=没在下） */
+  downloadPct?: number | null;
+  /** 下载完成等外部提示（经控制栏 toast 显示） */
+  downloadHint?: CinemaHint;
+  /** 当前集弹幕（绝对时间轴；null=不启用） */
+  danmuComments?: DanmuComment[] | null;
+  /** 弹幕开关（控制栏按钮态） */
+  danmuOn?: boolean;
+  /** 弹幕开关切换（可选；给了才渲染弹幕按钮） */
+  onToggleDanmu?: () => void;
 }) {
   const t = useT();
   const videoRef =
@@ -112,12 +145,18 @@ export default function TranscodePlayer({
   const rootRef = useRef<HTMLDivElement | null>(
     null
   );
+  /** 弹幕层宿主（盖在视频上、控制栏下的透明层） */
+  const danmuHostRef =
+    useRef<HTMLDivElement | null>(null);
 
   /**
    * 本段转码流对应的源片绝对起始秒数。拖动到未缓冲位置时更新，
    * 触发整条管线重建（杀旧 ffmpeg、从该位置重新起）。
+   * 续播时以 startAt 作为初始起点。
    */
-  const [startAt, setStartAt] = useState(0);
+  const [startAt, setStartAt] = useState(
+    startAtInitial ?? 0
+  );
   /** 全集总时长（后端探测），进度条用绝对时间轴 0..total */
   const [total, setTotal] = useState(0);
   /** 绝对播放位置（startAt + video.currentTime），驱动进度条 */
@@ -127,6 +166,11 @@ export default function TranscodePlayer({
   const [frozen, setFrozen] = useState(false);
   const [frozenUrl, setFrozenUrl] = useState("");
   const frozenRef = useRef(false);
+  /** onProgress 经 ref 转发（见 handleTimeUpdate）：render 期间写 ref 是 eslint 禁区，改在 effect 里同步 */
+  const progressRef = useRef(onProgress);
+  useEffect(() => {
+    progressRef.current = onProgress;
+  });
   /** 缓存区间（绝对秒，多个不连续段） */
   const [buffered, setBuffered] = useState<
     Array<[number, number]>
@@ -141,6 +185,41 @@ export default function TranscodePlayer({
     text: string;
     nonce: number;
   } | null>(null);
+
+  // 弹幕引擎：软解的媒体时间从本段转码起点（startAt）重新计，
+  // 弹幕时间轴是全集绝对的——挂载时整体前移 startAt，拖动重建后随 startAt 重算
+  useEffect(() => {
+    const host = danmuHostRef.current;
+    const video = videoRef.current;
+    if (!host || !video) return;
+    if (!danmuComments?.length) return;
+    const shifted = danmuComments
+      .filter(comment => comment.t >= startAt)
+      .map(comment => ({
+        text: comment.text,
+        mode: danmuMode(comment.mode),
+        time: comment.t - startAt,
+        style: {
+          fillStyle: danmuColor(comment.color),
+          font: "22px sans-serif"
+        }
+      }));
+    if (!shifted.length) return;
+    const engine = new Danmaku({
+      container: host,
+      media: video,
+      engine: "canvas",
+      comments: shifted
+    });
+    const observer = new ResizeObserver(() =>
+      engine.resize()
+    );
+    observer.observe(host);
+    return () => {
+      observer.disconnect();
+      engine.destroy();
+    };
+  }, [danmuComments, startAt]);
   /** 保存外层滚动容器位置：拖动重开转码时 video 短暂卸载会抖动滚动，
    *  在重建前后保持 scrollTop 不变。 */
   const scrollTopRef = useRef<number | null>(
@@ -340,6 +419,10 @@ export default function TranscodePlayer({
     // 播放进度 + 缓存区间：把相对时间映射成绝对区间
     const handleTimeUpdate = () => {
       setPos(startAt + video.currentTime);
+      // 经 ref 转发：onProgress 直接入依赖会让管线随渲染重建
+      progressRef.current?.(
+        startAt + video.currentTime
+      );
       const ranges = video.buffered;
       const segs: Array<[number, number]> = [];
       for (let i = 0; i < ranges.length; i += 1) {
@@ -575,6 +658,11 @@ export default function TranscodePlayer({
           )
         }
       />
+      <div
+        ref={danmuHostRef}
+        className="cin-danmu"
+        aria-hidden="true"
+      />
       {frozen && (
         <div className="cin-frozen">
           {frozenUrl && (
@@ -599,7 +687,9 @@ export default function TranscodePlayer({
           muted,
           rate,
           loopOn,
-          switching: switching ?? false
+          switching: switching ?? false,
+          downloadPct,
+          danmuOn
         }}
         actions={{
           onTogglePlay: togglePlay,
@@ -611,6 +701,8 @@ export default function TranscodePlayer({
           onFullscreen: toggleFullscreen,
           onScreenshot: screenshot,
           onPip: pip,
+          onToggleDanmu,
+          onDownload,
           onBack,
           onNext: onNextEpisode
             ? () => {
@@ -628,7 +720,7 @@ export default function TranscodePlayer({
           activeEpisodeNum,
           onPlayEpisode
         }}
-        hint={hint}
+        hint={downloadHint ?? hint}
       />
     </div>
   );

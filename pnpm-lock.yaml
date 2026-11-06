@@ -50,6 +50,9 @@ importers:
       cli-highlight:
         specifier: ^2.1.11
         version: 2.1.11
+      danmaku:
+        specifier: ^2.0.10
+        version: 2.0.10
       hls.js:
         specifier: 1.5.13
         version: 1.5.13
@@ -1859,6 +1862,9 @@ packages:
   cz-git@1.14.0:
     resolution: {integrity: sha512-QjwlXZrGWsXQkyregBHhA2qNNGB2TCuf0ovkW1Q5OLgdJDs9Tq1yahfKpSMLyqOBjVRuv1iHBTDP83zJDBlJdg==}
     engines: {node: '>=v12.20.0'}
+
+  danmaku@2.0.10:
+    resolution: {integrity: sha512-0rqpVcKbOlWX6w5lEm0E4QfCW4EEOIWw6XMNyQrp6kjpdV3rYk0zZzkxy612APrl98XsQnqNvxlkS/fFPRDoaA==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -5753,6 +5759,8 @@ snapshots:
       - typescript
 
   cz-git@1.14.0: {}
+
+  danmaku@2.0.10: {}
 
   debug@4.4.3(supports-color@10.2.2):
     dependencies:

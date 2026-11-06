@@ -17,14 +17,14 @@ import {
 } from "react";
 import {
   ArrowLeftOutlined,
-  CameraOutlined,
+  CommentOutlined,
+  DownloadOutlined,
   LeftOutlined,
   RightOutlined,
   CaretRightFilled,
   FullscreenExitOutlined,
   FullscreenOutlined,
   PauseOutlined,
-  SettingOutlined,
   SoundFilled,
   SoundOutlined,
   StepForwardFilled,
@@ -103,6 +103,10 @@ export type CinemaState = {
   loopOn: boolean;
   /** 换集/换清晰度进行中：暂停交互 + 显示加载圈 */
   switching: boolean;
+  /** 当前集下载进度（0..100，null=没在下） */
+  downloadPct?: number | null;
+  /** 弹幕开关（给了 onToggleDanmu 才有意义） */
+  danmuOn?: boolean;
 };
 
 /** 控制栏触发的行为回调（视频操作全部在播放器里落地）。 */
@@ -118,6 +122,10 @@ export type CinemaActions = {
   onPip: () => void;
   onBack: () => void;
   onNext?: () => void;
+  /** 下载当前集（可选；给了才渲染下载按钮） */
+  onDownload?: () => void;
+  /** 弹幕开关切换（可选；给了才渲染弹幕按钮） */
+  onToggleDanmu?: () => void;
 };
 
 /** 选集 / 清晰度两组菜单数据。 */
@@ -964,50 +972,48 @@ export default function CinemaControls({
               </div>
             )}
           </div>
-          <div
-            className="cin-item"
-            onMouseEnter={() =>
-              setMenu("settings")
-            }
-            onMouseLeave={() => {
-              if (menu === "settings")
-                setMenu(null);
-            }}
-          >
+          {/* 弹幕开关：匹配到弹幕库才渲染（亮=显示中） */}
+          {actions.onToggleDanmu && (
+            <button
+              type="button"
+              className={
+                "cin-btn" +
+                (state.danmuOn
+                  ? " is-active"
+                  : "")
+              }
+              title={
+                state.danmuOn
+                  ? t("anime.cin.danmuOff")
+                  : t("anime.cin.danmuOn")
+              }
+              onClick={actions.onToggleDanmu}
+            >
+              <CommentOutlined />
+            </button>
+          )}
+          {/* 下载本集：进行中显示百分比并禁点 */}
+          {actions.onDownload && (
             <button
               type="button"
               className="cin-btn"
-              title={t("anime.cin.settings")}
+              title={
+                state.downloadPct != null
+                  ? `下载中 ${state.downloadPct}%`
+                  : t("anime.cin.download")
+              }
+              disabled={state.downloadPct != null}
+              onClick={actions.onDownload}
             >
-              <SettingOutlined />
+              {state.downloadPct != null ? (
+                <span className="cin-dl-pct">
+                  {state.downloadPct}%
+                </span>
+              ) : (
+                <DownloadOutlined />
+              )}
             </button>
-            {menu === "settings" && (
-              <div className="cin-item-pop cin-item-pop--r">
-                <div className="cin-set-row">
-                  <span className="cin-set-label">
-                    {t("anime.cin.loop")}
-                  </span>
-                  <input
-                    type="checkbox"
-                    className="cin-check"
-                    checked={state.loopOn}
-                    onChange={actions.onLoop}
-                  />
-                </div>
-                <p className="cin-set-tip">
-                  {t("anime.cin.shortcutHint")}
-                </p>
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            className="cin-btn"
-            title={t("anime.cin.screenshot")}
-            onClick={actions.onScreenshot}
-          >
-            <CameraOutlined />
-          </button>
+          )}
           <button
             type="button"
             className="cin-btn"

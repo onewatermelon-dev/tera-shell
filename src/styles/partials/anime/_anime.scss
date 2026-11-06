@@ -186,6 +186,13 @@
     border-color: var(--heroui-accent, #7c5cff);
   }
 
+  // 批量下载勾选态：实心 accent
+  &.is-picked {
+    color: #ffffff;
+    background: var(--heroui-accent, #7c5cff);
+    border-color: transparent;
+  }
+
   &:disabled {
     cursor: default;
     opacity: 0.5;
@@ -274,6 +281,157 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+// 选集区标题行：左标签右批量下载按钮
+.anime-ep-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+// 勾选模式的操作组：三个按钮成组靠右，别撒满一行
+.anime-ep-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+// 继续观看/收藏页：小缩略图横排列表（省空间，一眼扫完）
+.anime-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anime-history-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 12px 5px 5px;
+  text-align: left;
+  cursor: pointer;
+  background: rgb(255 255 255 / 4%);
+  border: none;
+  border-radius: 8px;
+
+  &:hover {
+    background: rgb(255 255 255 / 9%);
+  }
+}
+
+.anime-history-thumb {
+  flex: none;
+  width: 44px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+// 无海报的首字占位
+.anime-history-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: rgb(255 255 255 / 45%);
+  background: rgb(255 255 255 / 8%);
+}
+
+.anime-history-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.anime-history-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.anime-history-meta {
+  font-size: 11.5px;
+  color: rgb(255 255 255 / 50%);
+}
+
+// 下载页等只展示不可点的条目
+.anime-history-item.is-static {
+  cursor: default;
+
+  &:hover {
+    background: rgb(255 255 255 / 4%);
+  }
+}
+
+// 下载行的删除按钮：hover 行时才显眼
+.anime-history-del {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+  color: rgb(255 255 255 / 45%);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 6px;
+
+  &:hover {
+    color: #ff5a6e;
+    background: rgb(255 90 110 / 12%);
+  }
+}
+
+// 详情页收藏按钮：描边胶囊，收藏后实心红
+.anime-fav-btn {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  align-self: flex-start;
+  padding: 3px 12px;
+  font-size: 12.5px;
+  color: rgb(255 255 255 / 75%);
+  cursor: pointer;
+  background: rgb(255 255 255 / 8%);
+  border: 1px solid transparent;
+  border-radius: 999px;
+
+  &:hover {
+    color: #ffffff;
+  }
+
+  &.is-fav {
+    color: #ff5a6e;
+    background: rgb(255 90 110 / 12%);
+  }
+}
+
+// 选集跳转输入框：窄数字框贴在页签行末尾
+.anime-ep-jump {
+  flex: none;
+  width: 64px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: rgb(255 255 255 / 85%);
+  background: rgb(255 255 255 / 8%);
+  border: 1px solid transparent;
+  border-radius: 999px;
+
+  &::placeholder {
+    color: rgb(255 255 255 / 35%);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--heroui-accent, #7c5cff);
+  }
 }
 
 .anime-line-label {
@@ -399,13 +557,13 @@
   color: rgb(255 255 255 / 50%);
 }
 
-// 大卡网格：卡片加大（对标腾讯「今日推荐」的 4~6 列大图）
+// juz 卡片网格：列更密、卡片更小（一屏多看几部）
 .anime-grid--juz {
   grid-template-columns: repeat(
     auto-fill,
-    minmax(150px, 1fr)
+    minmax(104px, 1fr)
   );
-  gap: 14px;
+  gap: 10px;
 }
 
 .anime-grid--juz .anime-card-cover {
@@ -493,4 +651,92 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+// Bangumi 匹配评分行：可点开 bgm.tv 条目页
+.anime-bgm-score {
+  width: fit-content;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+
+  &:hover {
+    opacity: 0.8;
+  }
+}
+
+// 放送表（Bangumi 每日放送）：按星期分组，组内海报网格（滚动交给弹层）
+.anime-bgm-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.anime-bgm-cal-day {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted, #999999);
+
+  &.is-today {
+    color: var(--primary, #4f7cff);
+  }
+}
+
+.anime-bgm-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(96px, 1fr)
+  );
+  gap: 10px;
+}
+
+.anime-bgm-cal-item {
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+
+  img,
+  .anime-bgm-cal-thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    background: var(--surface-2, #26262b);
+    border-radius: 8px;
+  }
+
+  &:hover img,
+  &:hover .anime-bgm-cal-thumb {
+    filter: brightness(1.15);
+  }
+}
+
+.anime-bgm-cal-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: var(--muted, #999999);
+}
+
+.anime-bgm-cal-title {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  white-space: nowrap;
 }

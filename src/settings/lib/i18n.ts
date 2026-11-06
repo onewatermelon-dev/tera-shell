@@ -62,6 +62,12 @@ const zhCN = {
   "anime.apiUrl.title": "动漫 API 地址",
   "anime.apiUrl.desc":
     "参考 App 的接口域名（抓包里的 Host，带 http:// 或 https://），动漫弹层从这里读",
+  "anime.bgm.title": "Bangumi 追番同步（可选）",
+  "anime.bgm.desc":
+    "粘贴个人访问令牌（next.bgm.tv/demo/access-token 生成）后，看完的剧集自动同步到 bgm.tv 的「在看」收藏与单集进度；放送表无需令牌",
+  "anime.ddp.title": "弹弹play 弹幕（可选）",
+  "anime.ddp.desc":
+    "在 api.dandanplay.net 申请开放 API 凭证后填入，播放时自动按「剧名+集名」匹配外部弹幕库；没填则不加载弹幕",
   "anime.search": "搜索动漫…",
   "anime.searchAction": "搜索",
   "anime.loading": "加载中…",
@@ -85,7 +91,10 @@ const zhCN = {
     "空格 播放/暂停 · ←→ 快进快退 5 秒 · ↑↓ 音量 · F 全屏 · M 静音",
   "anime.cin.pip": "画中画",
   "anime.cin.pipFail": "当前窗口不支持画中画",
+  "anime.cin.danmuOn": "显示弹幕",
+  "anime.cin.danmuOff": "隐藏弹幕",
   "anime.cin.screenshot": "截图",
+  "anime.cin.download": "下载本集",
   "anime.cin.shotSaved": "截图已保存",
   "anime.cin.shotFail":
     "截图失败（无画面或被跨域拦截）",
@@ -1072,6 +1081,13 @@ const enUS: Record<MessageKey, string> = {
   "anime.apiUrl.title": "Anime API URL",
   "anime.apiUrl.desc":
     "API host of the reference app (the Host in packet captures, with http:// or https://); the anime dialog reads it from here",
+  "anime.bgm.title": "Bangumi sync (optional)",
+  "anime.bgm.desc":
+    "Paste a personal access token (create one at next.bgm.tv/demo/access-token) to sync watched episodes to your bgm.tv watching collection; the broadcast calendar needs no token",
+  "anime.ddp.title":
+    "dandanplay danmaku (optional)",
+  "anime.ddp.desc":
+    "Enter your open-API credentials from api.dandanplay.net to auto-match external danmaku libraries by title and episode while playing; leave empty for no danmaku",
   "anime.search": "Search anime…",
   "anime.searchAction": "Search",
   "anime.loading": "Loading…",
@@ -1095,9 +1111,12 @@ const enUS: Record<MessageKey, string> = {
   "anime.cin.shortcutHint":
     "Space play/pause · ←→ seek 5s · ↑↓ volume · F fullscreen · M mute",
   "anime.cin.pip": "Picture in picture",
+  "anime.cin.danmuOn": "Show danmaku",
+  "anime.cin.danmuOff": "Hide danmaku",
   "anime.cin.pipFail":
     "Picture in picture is not supported here",
   "anime.cin.screenshot": "Screenshot",
+  "anime.cin.download": "Download episode",
   "anime.cin.shotSaved": "Screenshot saved",
   "anime.cin.shotFail":
     "Screenshot failed (no frame or blocked by CORS)",

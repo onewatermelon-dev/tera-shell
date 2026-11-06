@@ -1,13 +1,19 @@
 # binaries/
 
-这里放 tauri 打包用的 **MCP sidecar 二进制**。
+这里放 tauri 打包用的 **sidecar 二进制**（MCP、N_m3u8DL-RE）。
 
 ## 是什么
 
 `tera-shell-mcp` 是 `src/bin/` 下的独立 Rust 二进制，让 Claude Code / Cursor
 等外部 agent 通过 MCP 协议调用 tera-shell（列会话、执行命令等）。
 
-它通过 `tauri.conf.json` 的 `bundle.externalBin` 打进安装包，安装后与主程序
+`tera-shell-nre` 是 [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE) 的
+官方 release 副本：动漫下载遇到**加密/初始化段/字节范围 m3u8**（自研下载器
+的盲区）时改走它，由它拉密钥解密；普通清单仍走自研通道。取官方
+win-x64 zip，解压出的 `N_m3u8DL-RE.exe` 复制成
+`tera-shell-nre-x86_64-pc-windows-msvc.exe` 即可。
+
+两者都通过 `tauri.conf.json` 的 `bundle.externalBin` 打进安装包，安装后与主程序
 `tera-shell.exe` 同目录。
 
 ## 为什么这个目录存在

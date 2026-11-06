@@ -36,6 +36,18 @@
   object-fit: contain;
 }
 
+// 弹幕层：canvas 宿主，盖在视频上、控制栏下，不吃指针（点穿到视频）
+.cin-danmu {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+
+  canvas {
+    display: block;
+  }
+}
+
 // 控制层：容器不吃指针（点视频切换播放），子元素单独恢复
 .cin-ui {
   position: absolute;
@@ -255,6 +267,11 @@
   &:hover {
     color: #ffffff;
     background: rgb(255 255 255 / 16%);
+  }
+
+  // 开关型按钮的「开着」态（弹幕）
+  &.is-active {
+    color: var(--cin-accent);
   }
 }
 
@@ -651,6 +668,12 @@
   width: 34px;
   height: 34px;
   border-width: 3px;
+}
+
+// 下载按钮进行中：百分比文字替代图标
+.cin-dl-pct {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 // 切集遮罩：盖住底部进度条+按钮区，拦截全部点击

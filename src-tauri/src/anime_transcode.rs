@@ -78,7 +78,7 @@ struct EndPayload {
 ///
 /// 不把 75MB 的二进制塞进仓库，用户装了 ffmpeg（或系统自带）就能用；
 /// 将来要随包分发，把 `ffmpeg.exe` 放进 `resources/anime/` 即可自动命中。
-fn find_ffmpeg(app: &tauri::AppHandle) -> Option<PathBuf> {
+pub(crate) fn find_ffmpeg(app: &tauri::AppHandle) -> Option<PathBuf> {
 	use tauri::Manager;
 	if let Ok(dir) = app.path().resource_dir() {
 		let bundled = dir.join("resources/anime/ffmpeg.exe");

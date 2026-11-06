@@ -22,8 +22,17 @@ import CinemaControls, {
   fmt,
   useCinemaHotkeys
 } from "@/anime/components/CinemaControls";
-import type { CinemaQualityOption } from "@/anime/components/CinemaControls";
+import type {
+  CinemaHint,
+  CinemaQualityOption
+} from "@/anime/components/CinemaControls";
 import type { AnimeEpisode } from "@/anime/lib/types";
+import {
+  danmuColor,
+  danmuMode
+} from "@/anime/lib/danmu";
+import type { DanmuComment } from "@/anime/lib/danmu";
+import Danmaku from "danmaku";
 
 export default function VideoPlayer({
   src,
@@ -40,7 +49,15 @@ export default function VideoPlayer({
   onNextEpisode,
   initialVolume,
   onVolumePersist,
-  switching
+  switching,
+  startAt,
+  onProgress,
+  onDownload,
+  downloadPct,
+  downloadHint,
+  danmuComments,
+  danmuOn,
+  onToggleDanmu
 }: {
   src: string;
   /** 顶部标题：「动漫名 · 集名」 */
@@ -64,6 +81,25 @@ export default function VideoPlayer({
   switching?: boolean;
   /** 音量变化（防抖在调用方做）：写盘持久化 */
   onVolumePersist?: (volume: number) => void;
+  /** 续播起点（秒）：元数据加载后跳过去 */
+  startAt?: number;
+  /** 播放进度上报（timeupdate 驱动，节流在调用方做） */
+  onProgress?: (
+    sec: number,
+    duration?: number
+  ) => void;
+  /** 下载当前集（给了才在控制栏渲染下载按钮） */
+  onDownload?: () => void;
+  /** 下载进度（0..100，null=没在下） */
+  downloadPct?: number | null;
+  /** 下载完成等外部提示（经控制栏 toast 显示） */
+  downloadHint?: CinemaHint;
+  /** 当前集弹幕（null=不启用：没匹配上/没配凭证/开关关闭） */
+  danmuComments?: DanmuComment[] | null;
+  /** 弹幕开关（控制栏按钮态） */
+  danmuOn?: boolean;
+  /** 弹幕开关切换（可选；给了才渲染弹幕按钮） */
+  onToggleDanmu?: () => void;
 }) {
   const t = useT();
   const videoRef =
@@ -91,6 +127,40 @@ export default function VideoPlayer({
     text: string;
     nonce: number;
   } | null>(null);
+  /** 弹幕层宿主（盖在视频上、控制栏下的透明层） */
+  const danmuHostRef =
+    useRef<HTMLDivElement | null>(null);
+
+  // 弹幕引擎：弹幕列表或视频元素变化时重建（media 模式自己跟 timeupdate/seek/倍速）
+  useEffect(() => {
+    const host = danmuHostRef.current;
+    const video = videoRef.current;
+    if (!host || !video) return;
+    if (!danmuComments?.length) return;
+    const engine = new Danmaku({
+      container: host,
+      media: video,
+      engine: "canvas",
+      comments: danmuComments.map(comment => ({
+        text: comment.text,
+        mode: danmuMode(comment.mode),
+        time: comment.t,
+        style: {
+          fillStyle: danmuColor(comment.color),
+          font: "22px sans-serif"
+        }
+      }))
+    });
+    // 窗口/全屏尺寸变化时重算弹幕速度与轨道
+    const observer = new ResizeObserver(() =>
+      engine.resize()
+    );
+    observer.observe(host);
+    return () => {
+      observer.disconnect();
+      engine.destroy();
+    };
+  }, [danmuComments]);
 
   // —— 源装载：直链直挂 / m3u8 取回转 blob 后交给 hls.js ——
   useEffect(() => {
@@ -328,6 +398,10 @@ export default function VideoPlayer({
           const video = videoRef.current;
           if (!video) return;
           setCurrent(video.currentTime);
+          onProgress?.(
+            video.currentTime,
+            video.duration || undefined
+          );
           const ranges = video.buffered;
           const segs: Array<[number, number]> =
             [];
@@ -360,6 +434,15 @@ export default function VideoPlayer({
           ) {
             video.volume = initialVolume;
           }
+          // 续播：跳到上次观看位置（只在本集开头生效，避免误伤手动重播）
+          if (
+            video &&
+            startAt &&
+            startAt > 1 &&
+            video.currentTime < 1
+          ) {
+            video.currentTime = startAt;
+          }
           if (video) {
             setVolume(video.volume);
             setMuted(video.muted);
@@ -373,6 +456,11 @@ export default function VideoPlayer({
           )
         }
       />
+      <div
+        ref={danmuHostRef}
+        className="cin-danmu"
+        aria-hidden="true"
+      />
       <CinemaControls
         rootRef={rootRef}
         state={{
@@ -385,7 +473,9 @@ export default function VideoPlayer({
           muted,
           rate,
           loopOn,
-          switching: switching ?? false
+          switching: switching ?? false,
+          downloadPct,
+          danmuOn
         }}
         actions={{
           onTogglePlay: togglePlay,
@@ -397,6 +487,8 @@ export default function VideoPlayer({
           onFullscreen: toggleFullscreen,
           onScreenshot: screenshot,
           onPip: pip,
+          onToggleDanmu,
+          onDownload,
           onBack,
           onNext: onNextEpisode
             ? () => {
@@ -414,7 +506,7 @@ export default function VideoPlayer({
           activeEpisodeNum,
           onPlayEpisode
         }}
-        hint={hint}
+        hint={downloadHint ?? hint}
       />
     </div>
   );

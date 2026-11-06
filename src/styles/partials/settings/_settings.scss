@@ -499,6 +499,12 @@
   border-color: var(--accent);
 }
 
+// 一格里竖排多个输入（弹弹play AppId/AppSecret）
+.settings-stack {
+  display: grid;
+  gap: 8px;
+}
+
 // ---- 数据存储路径 ----
 
 // 文件夹图标 + 路径输入框排一行；图标不参与收缩

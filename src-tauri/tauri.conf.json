@@ -10,7 +10,8 @@
       "msi"
     ],
     "externalBin": [
-      "binaries/tera-shell-mcp"
+      "binaries/tera-shell-mcp",
+      "binaries/tera-shell-nre"
     ],
     "icon": [
       "icons/32x32.png",
