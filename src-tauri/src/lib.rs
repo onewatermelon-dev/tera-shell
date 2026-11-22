@@ -256,6 +256,36 @@ pub fn run() {
                                             )
                                         });
                                 }
+                                // 自动放行「读取剪贴板」权限：否则首次 Ctrl+V
+                                // 粘贴会弹 WebView2 的「想要查看剪贴板的文本和
+                                // 图像」授权框。写剪贴板本来就不弹，只放行读。
+                                let mut token: i64 = 0;
+                                let _ = webview2.add_PermissionRequested(
+                                    &webview2_com::PermissionRequestedEventHandler::create(
+                                        Box::new(|_, args| {
+                                            let Some(args) = args else {
+                                                return Ok(())
+                                            };
+                                            use webview2_com::Microsoft::Web::WebView2::Win32::{
+                                                COREWEBVIEW2_PERMISSION_KIND,
+                                                COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ,
+                                                COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+                                            };
+                                            let mut kind =
+                                                COREWEBVIEW2_PERMISSION_KIND::default();
+                                            args.PermissionKind(&mut kind)?;
+                                            if kind
+                                                == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ
+                                            {
+                                                args.SetState(
+                                                    COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+                                                )?;
+                                            }
+                                            Ok(())
+                                        }),
+                                    ),
+                                    &mut token,
+                                );
                             }
                         }
                     });

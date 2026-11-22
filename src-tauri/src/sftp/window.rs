@@ -46,6 +46,8 @@ pub async fn open_sftp_window(
 		label,
 		WebviewUrl::App(url.into()),
 	)
+	// 放行剪贴板读取：粘贴不弹 WebView2 授权框（主窗口同款）
+	.enable_clipboard_access()
 	.title(format!("SFTP · {title}"))
 	// 不要系统标题栏：主窗口也是自绘的（tauri.conf.json 里 decorations: false），
 	// 保持一致 —— 否则系统按钮与自绘按钮两套并存，外观也对不上。

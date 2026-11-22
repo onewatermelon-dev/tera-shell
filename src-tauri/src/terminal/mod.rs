@@ -977,6 +977,8 @@ pub async fn open_terminal_window(
 		label,
 		tauri::WebviewUrl::App(url.into()),
 	)
+	// 放行剪贴板读取：粘贴不弹 WebView2 授权框（主窗口同款）
+	.enable_clipboard_access()
 	.title(format!("终端 · {title}"))
 	// 与主窗口一致：自绘标题栏
 	.decorations(false)
