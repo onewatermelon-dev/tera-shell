@@ -312,14 +312,9 @@ export default function SessionGroupSection({
   onRemoteDesktop
 }: Props) {
   const t = useT();
-  // 搜索时强制展开；折叠分组里若有活动会话也展开，否则点不到
+  // 搜索时强制展开：搜到的会话不能藏在收起的分组里
   const open =
-    searching ||
-    view.builtin ||
-    !view.collapsed ||
-    view.sessions.some(
-      session => session.id === activeId
-    );
+    searching || view.builtin || !view.collapsed;
 
   return (
     <section
