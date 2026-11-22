@@ -41,9 +41,17 @@ import {
  * 用 `matchChord` 而不是 `matchAction`：后者是给 AppHeader 用的
  * （遍历整表找命中项），这里要的是「指定动作命中了吗」。
  */
+export type TerminalShortcutAction =
+  | "find"
+  | "devtools"
+  | "historySearch"
+  | "commandDrawer"
+  | "drawerFind";
+
 export function matchTerminalShortcut(
-  event: KeyboardEvent,
-  actionId: "find" | "devtools" | "historySearch"
+  // KeyEventLike：React 合成事件也能直接传（Drawer 里用）
+  event: import("@/shared/lib/appShortcuts").KeyEventLike,
+  actionId: TerminalShortcutAction
 ): boolean {
   const chord = parseChord(
     effectiveShortcuts()[actionId] ?? ""

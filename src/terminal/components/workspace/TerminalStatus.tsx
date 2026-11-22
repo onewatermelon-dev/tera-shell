@@ -11,6 +11,8 @@ import type { BottomDrawerMode } from "@/terminal/components/drawers/BottomDrawe
 import type { OpenSession } from "@/terminal/lib/session/terminalTypes";
 import type { StatusMode } from "@/settings/lib/settings";
 import type { TerminalMacro } from "@/terminal/lib/macro/terminalMacros";
+import { CodeOutlined } from "@ant-design/icons";
+import { useT } from "@/settings/lib/i18n";
 
 export function TerminalStatus({
   active,
@@ -61,6 +63,7 @@ export function TerminalStatus({
   bottomDrawer: BottomDrawerMode;
   onOpenDrawer: (mode: BottomDrawerMode) => void;
 }) {
+  const t = useT();
   if (!active || active.kind === "local")
     return null;
   return (
@@ -118,6 +121,26 @@ export function TerminalStatus({
           </div>
         </>
       )}
+      {/* 命令抽屉开关：两种形态都挂在最右，原布局不动 */}
+      <button
+        type="button"
+        className={`sys-icon-btn status-cmd-btn${
+          bottomDrawer === "cmd"
+            ? " is-active"
+            : ""
+        }`}
+        aria-label={t("status.cmd")}
+        title={t("status.cmd")}
+        onClick={() =>
+          onOpenDrawer(
+            bottomDrawer === "cmd"
+              ? "none"
+              : "cmd"
+          )
+        }
+      >
+        <CodeOutlined />
+      </button>
     </div>
   );
 }

@@ -76,6 +76,8 @@ export function useTerminalGlobalListeners(options: {
   resizeObserverRef: RefObject<
     ResizeObserver | undefined
   >;
+  /** 快捷键「命令抽屉」开关（Ctrl+Shift+J，可在设置页改）。 */
+  onToggleCommandDrawer?: () => void;
   /** resize 的 ref 镜像（来自 usePtyResizeSync）：observer 回调取最新值 */
   resizeRef: RefObject<
     (current?: OpenSession) => void
@@ -235,12 +237,38 @@ export function useTerminalGlobalListeners(options: {
         return;
       }
       unlisteners.current = listeners;
+      const toggleDrawerRef =
+        options.onToggleCommandDrawer;
       documentShortcutHandler.current = (
         event: KeyboardEvent
       ) => {
         // ⚠️ **键位全部从生效表读**：这两个动作不在 AppHeader 的绑定
         // 范围里（handledElsewhere 跳过），这里是它们唯一的执行路径 ——
         // 硬编码会让用户在设置页的改动完全失效。
+        //
+        // 「命令抽屉」开关：任何语境都响应（含焦点在抽屉输入框里，
+        // 那样才能一键关回）。跳过抽屉内目标的判断放它后面
+        if (
+          toggleDrawerRef &&
+          matchTerminalShortcut(
+            event,
+            "commandDrawer"
+          )
+        ) {
+          event.preventDefault();
+          toggleDrawerRef();
+          return;
+        }
+        // ⚠️ 目标在命令抽屉输入区里时**交还给抽屉**：抽屉的 textarea
+        // 自带 Ctrl+F/Ctrl+H 查找替换挂件，终端查找不抢（否则抽屉的
+        // Enter 等逻辑也会被这层捕获先吃掉）
+        const cmdTarget = event.target;
+        if (
+          cmdTarget instanceof Element &&
+          cmdTarget.closest(".cmd-input-wrap")
+        ) {
+          return;
+        }
         if (
           matchTerminalShortcut(event, "find")
         ) {

@@ -1,9 +1,11 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
   type CSSProperties
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   OpenSession,
   PaneState
@@ -301,10 +303,59 @@ export default function TerminalWorkspace({
       });
   }, [active?.id]);
 
-  // 底部抽屉：none / 系统信息 / 进程信息 / 网络信息
+  // 底部抽屉：none / 命令 / 系统信息 / 进程信息 / 网络信息
   const [bottomDrawer, setBottomDrawer] =
     useState<BottomDrawerMode>("none");
   const drawerOpen = bottomDrawer !== "none";
+
+  // 快捷键「命令抽屉」（Ctrl+Shift+J，设置页可改）：开关动作在
+  // useTerminals 的捕获监听里，经窗口事件跨层通知到这里切换
+  useEffect(() => {
+    const toggle = () =>
+      setBottomDrawer(prev =>
+        prev === "cmd" ? "none" : "cmd"
+      );
+    window.addEventListener(
+      "cmd-drawer-toggle",
+      toggle
+    );
+    return () =>
+      window.removeEventListener(
+        "cmd-drawer-toggle",
+        toggle
+      );
+  }, []);
+
+  // 命令抽屉的发送出口：写 PTY 时带上 command 字段（与快捷宏 / AI
+  // 终端执行同一条路，命令历史与日志才记得住）。broadcast 时用
+  // broadcastTargets 选点（全部已打开会话，断线跳过），返回跳过数
+  // 给抽屉做反馈。
+  const onSendDrawerCommand = useCallback(
+    (command: string, broadcast: boolean) => {
+      const targets = broadcast
+        ? broadcastTargets(
+            opened,
+            disconnected,
+            active?.id
+          )
+        : {
+            ids: active ? [active.id] : [],
+            skipped: 0
+          };
+      for (const id of targets.ids) {
+        void invoke("terminal_write", {
+          id,
+          // 多行命令（替换注入的 \n）按终端 Enter 编码逐行下发
+          data: `${command.replace(/\n/g, "\r")}\r`,
+          command
+        }).catch(() => {});
+        // 单发失败静默：写已断开的会话后端会报「终端会话不存在」，
+        // 与宏广播的口径一致（活动会话失败由后端错误气泡兜底）
+      }
+      return targets.skipped;
+    },
+    [opened, disconnected, active]
+  );
   // SSH 欢迎卡片：记录已关闭的会话 id
   const [welcomeClosedFor, setWelcomeClosedFor] =
     useState<string | null>(null);
@@ -591,6 +642,8 @@ export default function TerminalWorkspace({
         <BottomDrawer
           session={active}
           mode={bottomDrawer}
+          onSendCommand={onSendDrawerCommand}
+          broadcastCount={broadcastCount}
           onClose={() => setBottomDrawer("none")}
         />
 

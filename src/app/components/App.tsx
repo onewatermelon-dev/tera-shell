@@ -219,7 +219,14 @@ export default function App() {
     setTerminalFontSize,
     // 跳板链解析的数据源：会话列表变化时重连/新连都拿最新值
     sessionStore.sessions,
-    notifications.notifyCommand
+    notifications.notifyCommand,
+    // 快捷键「命令抽屉」开关：抽屉状态在 TerminalWorkspace，
+    // 用窗口事件跨层通知（App 到 Workspace 传回调要钻三层）
+    () => {
+      window.dispatchEvent(
+        new CustomEvent("cmd-drawer-toggle")
+      );
+    }
   );
 
   /**

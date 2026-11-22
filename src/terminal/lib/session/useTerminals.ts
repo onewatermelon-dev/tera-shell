@@ -99,7 +99,9 @@ export function useTerminals(
   onLongCommand?: (
     command: string,
     elapsedMs: number
-  ) => void
+  ) => void,
+  /** 快捷键「命令抽屉」开关：捕获监听命中后调它（状态在 TerminalWorkspace）。 */
+  onToggleCommandDrawer?: () => void
 ) {
   const t = useT();
   const [opened, setOpened] = useState<
@@ -1143,7 +1145,8 @@ export function useTerminals(
     handleDisconnect,
     cancelAllReconnects,
     search,
-    t
+    t,
+    onToggleCommandDrawer
   });
 
   return {

@@ -38,7 +38,11 @@ import { useSyncExternalStore } from "react";
 const HANDLED_ELSEWHERE = new Set([
   "find",
   "devtools",
-  "historySearch"
+  "historySearch",
+  // 命令抽屉：开关在 useTerminals 的捕获监听里，查找挂件在抽屉的
+  // textarea keydown 里 —— 都不在 AppHeader，避免一次按键触发两遍
+  "commandDrawer",
+  "drawerFind"
 ]);
 
 /**
@@ -103,6 +107,13 @@ export const APP_SHORTCUTS: Record<
   // 如需恢复，加回这里 + `HeaderActions` 的 handler + 设置页映射即可。
   // M = MaxiMize。
   toggleMaximize: "Ctrl+Shift+M",
+  // J = 抽屉（底部命令输入抽屉的开关）。Ctrl+Shift 空间里 J 空着；
+  // 抽屉内的查找替换挂件另有 drawerFind（在抽屉输入框聚焦时生效）。
+  commandDrawer: "Ctrl+Shift+J",
+  // 抽屉内的查找替换挂件（VSCode 习惯 Ctrl+F）。与终端 find 同键位
+  // 但**不同生效语境**：焦点在命令抽屉输入框里才是它 —— 终端捕获
+  // 监听对抽屉内的按键直接放行（见 useTerminalGlobalListeners）。
+  drawerFind: "Ctrl+F",
 
   // ---- 工具 ----
   // S = SFTP / Secure。
@@ -193,6 +204,8 @@ export const ACTION_LABELS: Record<
   devtools: "Developer tools",
   reconnect: "Reconnect",
   toggleFocusMode: "Fullscreen",
+  commandDrawer: "Command drawer",
+  drawerFind: "Command drawer find",
   sftpGoBack: "SFTP back",
   sftpGoForward: "SFTP forward"
 };

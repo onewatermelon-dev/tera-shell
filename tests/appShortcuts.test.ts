@@ -89,13 +89,18 @@ function plainCtrlLetters(): string[] {
  *   没选区时必须是 SIGINT —— 改成全局绑定反而把中断功能抢走。
  * - `find`：查找功能的标准键位，且**已由 `useTerminals` 实现**，改键位等于
  *   改既有行为。它在 readline 里是「向前一个字符」，但本项目的查找优先。
+ * - `drawerFind`：命令抽屉输入框里的查找替换（VSCode 同键）。与 `find`
+ *   **同键不同焦点域**——它只在焦点位于抽屉输入框时生效（终端捕获
+ *   监听对抽屉内的按键直接放行），远端 readline 根本收不到这次按键，
+ *   所以不构成对行编辑键的抢占。
  *
  * ⚠️ 别把这个集合当「可以随便加」的先例：新动作一律走 `Ctrl+Shift+X`。
  */
 const PLAIN_CTRL_OK: Record<string, string> = {
   copy: "c",
   paste: "v",
-  find: "f"
+  find: "f",
+  drawerFind: "f"
 };
 
 describe("parseChord", () => {
@@ -191,15 +196,19 @@ describe("matchChord", () => {
 });
 
 describe("APP_SHORTCUTS 表", () => {
-  it("裸 Ctrl 只有 copy/paste/find 三个，且值正确", () => {
+  it("裸 Ctrl 只有 copy/paste/find/drawerFind 四个，且值正确", () => {
     expect(plainCtrlLetters()).toEqual([
       "c",
+      "f",
       "f",
       "v"
     ]);
     expect(APP_SHORTCUTS.copy).toBe("Ctrl+C");
     expect(APP_SHORTCUTS.paste).toBe("Ctrl+V");
     expect(APP_SHORTCUTS.find).toBe("Ctrl+F");
+    expect(APP_SHORTCUTS.drawerFind).toBe(
+      "Ctrl+F"
+    );
   });
 
   it("没有裸 Ctrl 占用 readline 的行编辑键", () => {
@@ -267,13 +276,22 @@ describe("APP_SHORTCUTS 表", () => {
   });
 
   it("不存在重复键位（同一个键不能映射两个动作）", () => {
+    // find 与 drawerFind 同绑 Ctrl+F 是有意的语境区分：焦点在命令
+    // 抽屉输入框里是抽屉的查找挂件，其余是终端查找（见 PLAIN_CTRL_OK）
+    const allowedPair = new Set([
+      "find||drawerFind",
+      "drawerFind||find"
+    ]);
     const seen = new Map<string, string>();
     for (const [id, chordStr] of Object.entries(
       APP_SHORTCUTS
     )) {
       const previous = seen.get(chordStr);
+      const pairKey = `${previous}||${id}`;
       expect(
-        previous,
+        previous && !allowedPair.has(pairKey)
+          ? previous
+          : undefined,
         `${previous} 与 ${id} 都绑了 ${chordStr}`
       ).toBeUndefined();
       seen.set(chordStr, id);
@@ -926,6 +944,12 @@ describe("handledElsewhere", () => {
 
 describe("SFTP_SHORTCUTS 表", () => {
   it("与终端表无重复键位（两表合并后同一键只归一个动作）", () => {
+    // find 与 drawerFind 同绑 Ctrl+F 是有意的语境区分（见
+    // PLAIN_CTRL_OK 注释），白名单放行这一对
+    const allowedPair = new Set([
+      "find||drawerFind",
+      "drawerFind||find"
+    ]);
     const seen = new Map<string, string>();
     for (const table of [
       APP_SHORTCUTS,
@@ -935,8 +959,11 @@ describe("SFTP_SHORTCUTS 表", () => {
         table
       )) {
         const previous = seen.get(chordStr);
+        const pairKey = `${previous}||${id}`;
         expect(
-          previous,
+          previous && !allowedPair.has(pairKey)
+            ? previous
+            : undefined,
           `${previous} 与 ${id} 都绑了 ${chordStr}`
         ).toBeUndefined();
         seen.set(chordStr, id);

@@ -416,3 +416,191 @@
     transform: rotate(360deg);
   }
 }
+
+// 命令抽屉：底部输入命令（{{占位符}} 批量替换）发到终端执行。
+// 外壳与信息抽屉同款（.sys-drawer-head/.sys-drawer-body），只是更矮。
+.cmd-drawer {
+  height: 220px;
+}
+
+.cmd-session {
+  color: var(--muted);
+}
+
+.cmd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.cmd-input {
+  padding: 8px 10px;
+  font:
+    13px/1.5 Consolas,
+    monospace;
+  color: var(--foreground);
+  resize: none;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+// VSCode 式查找/替换行：查找词 + 替换为 并排，正则开关 + 全部替换在后
+.cmd-find-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+// 发送动作浮在输入框右下角（与右上角 ⌕ 唤起钮对称），
+// 盖过文字：z-index 高于 textarea，底部留 6px 贴角
+.cmd-actions {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 2px 4px;
+  background: rgb(0 0 0 / 25%);
+  border-radius: 6px;
+}
+
+.cmd-send {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--background);
+  cursor: pointer;
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+}
+
+.cmd-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+// 命令抽屉开关的选中态（状态栏里那只按钮）
+.terminal-status .status-cmd-btn.is-active {
+  color: var(--accent);
+}
+
+// ⚠️ 状态栏字号是 9px，按钮里的 svg 跟着 1em 缩成 9px 灰点——
+// 实测「看不见按钮」。这里显式放大提亮，悬停/选中给足反馈。
+.terminal-status .status-cmd-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+
+.terminal-status .status-cmd-btn:hover {
+  color: var(--foreground);
+  background: var(--surface-secondary);
+}
+
+// 命令框的查找替换挂件：浮在输入框右上角（VSCode 查找挂件同位）。
+// .cmd-input-wrap 是定位锚，textarea 聚焦时 Ctrl+F / Ctrl+H 唤起。
+// 外观（底色/描边/阴影/圆角）交给 HeroUI Surface，与终端查找框同源。
+.cmd-input-wrap {
+  position: relative;
+
+  // 撑满抽屉剩余高度（动作浮在右下角，不再占一行）
+  flex: 1;
+  min-height: 0;
+}
+
+.cmd-input-wrap .cmd-input {
+  width: 100%;
+  height: 100%;
+}
+
+.cmd-find-trigger {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+
+  // textarea 带 z-index:2 且铺满整个输入区，不给层级点击会被它吃掉
+  z-index: 3;
+}
+
+.cmd-find-pop {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: 100%;
+  padding: 6px;
+}
+
+.cmd-find-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+// 挂件里的输入框与 .find-input 同款但允许收缩（窄窗格不撑破挂件）
+.cmd-find-pop .find-input {
+  flex: 1 1 150px;
+  width: auto;
+  min-width: 0;
+}
+
+// 文字按钮（替换 / 全部替换）：.find-btn 是 22×22 图标框，
+// 文字按钮放宽到内容宽，保留描边/字号/悬停
+.find-text-btn {
+  width: auto;
+  padding: 0 8px;
+}
+
+// 匹配高亮层：垫在 textarea 文字底下的透明标记层。
+// ⚠️ 排版常量（13px/20px Consolas + 内边距 8px 10px）必须与
+// .cmd-input 完全一致，CommandDrawer 里按同一组常量算坐标。
+.cmd-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  font:
+    13px/20px Consolas,
+    monospace;
+  pointer-events: none;
+}
+
+.cmd-mark {
+  position: absolute;
+  background: rgb(234 179 8 / 28%);
+  border-radius: 2px;
+}
+
+// 当前选中的那处：更实的主色底，一眼分清
+.cmd-mark.is-current {
+  background: rgb(234 179 8 / 55%);
+}
+
+// textarea 提到高亮层之上、底色透出高亮标记
+.cmd-input-wrap .cmd-input {
+  position: relative;
+  z-index: 2;
+  line-height: 20px;
+  background-color: transparent;
+}

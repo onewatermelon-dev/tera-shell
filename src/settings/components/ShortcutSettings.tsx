@@ -348,6 +348,8 @@ const ACTION_I18N_KEYS: Record<
   devtools: "app.action.devtools",
   reconnect: "terminal.reconnect.action",
   toggleFocusMode: "terminal.fullscreen.action",
+  commandDrawer: "shortcuts.action.commandDrawer",
+  drawerFind: "shortcuts.action.drawerFind",
   sftpGoBack: "shortcuts.action.sftpBack",
   sftpGoForward: "shortcuts.action.sftpForward"
 };
