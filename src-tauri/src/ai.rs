@@ -21,7 +21,7 @@ use std::{
 };
 use tauri::State;
 use tokio::sync::oneshot;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::ssh::{JumpHop, SshTarget, establish_session};
@@ -253,8 +253,10 @@ fn execute(
 	if command.trim().is_empty() {
 		return Err(ExecError::Failed("命令为空".into()));
 	}
-	// 只记目标与命令文本，密码绝不进日志
-	info!(
+	// 只记目标与命令文本，密码绝不进日志。
+	// debug 级：状态栏/watch 等探针每几秒轮询一次，info 级会把
+	// 多行命令正文刷进滚动日志，挤掉真正有用的记录
+	debug!(
 		target = %ssh.describe(),
 		jumps = ssh.jump.len(),
 		command = %command,
@@ -302,7 +304,7 @@ fn execute(
 	};
 	match attempt(&session) {
 		Ok(outcome) => {
-			info!(
+			debug!(
 				key = %key,
 				exit = outcome.exit_code,
 				"AI 命令执行完成"
@@ -343,7 +345,8 @@ fn obtain(
 		.get(&key)
 		.cloned()
 	{
-		info!(%key, "复用缓存的 AI exec 连接");
+		// debug 级：轮询探针每次命中缓存都会走到这里，info 级纯刷屏
+		debug!(%key, "复用缓存的 AI exec 连接");
 		return Ok(session);
 	}
 	info!(%key, "新建 AI exec 连接");
