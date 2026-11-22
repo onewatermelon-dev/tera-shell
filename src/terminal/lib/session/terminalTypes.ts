@@ -1,6 +1,7 @@
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SearchAddon } from "@xterm/addon-search";
+import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { SavedSession } from "@/sessions/lib/session";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
 import type { CompletionController } from "@/terminal/lib/commandCompletion";
@@ -11,6 +12,8 @@ export type OpenSession = SavedSession & {
   terminal: Terminal;
   fit: FitAddon;
   search: SearchAddon;
+  /** 缓冲快照器：PTY resize 前存底、ConPTY 重发丢历史后重灌（见 ptyResize） */
+  serializer: SerializeAddon;
   /** 命令补全控制器（PSReadLine 内联预测风格，见 commandCompletion） */
   completion: CompletionController;
   /**

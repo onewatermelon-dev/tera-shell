@@ -16,6 +16,7 @@ import {
   useRef
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { Terminal } from "@xterm/xterm";
 import type { OpenSession } from "./terminalTypes";
 import type { PaneState } from "./paneGrid";
 
@@ -30,6 +31,30 @@ const PTY_RESIZE_DEBOUNCE = 400;
 
 /** 连续多少帧尺寸不变才算「稳定」，见 waitForStableSize。 */
 const STABLE_FRAMES = 3;
+
+/**
+ * 缓冲的纯文本指纹：逐行取文本（去行尾空白）拼接，末尾空行掐掉。
+ *
+ * 用于 resize 前后的**内容**比对——ConPTY 重发既有「行数骤减」也有
+ * 「等行数替换」两种破坏形态，只比行数会漏掉后者。逐行取而不是
+ * translateToString 整段取：后者不含换行，前缀比对会误判。
+ */
+function bufferFingerprint(
+  terminal: Terminal
+): string {
+  const buffer = terminal.buffer.active;
+  const lines: string[] = [];
+  for (let y = 0; y < buffer.length; y++) {
+    lines.push(
+      buffer
+        .getLine(y)
+        ?.translateToString(true) ?? ""
+    );
+  }
+  while (lines.length > 0 && lines.at(-1) === "")
+    lines.pop();
+  return lines.join("\n");
+}
 
 /**
  * 等终端容器尺寸稳定再让 PTY 出生。
@@ -101,6 +126,76 @@ export function usePtyResizeSync(
   const syncedSizes = useRef(
     new Map<string, string>()
   );
+  /** 丢历史恢复的收尾定时器（按会话 id），见 scheduleHistoryRestore */
+  const restoreTimers = useRef(
+    new Map<
+      string,
+      ReturnType<typeof setTimeout>
+    >()
+  ); /**
+   * ConPTY 重发丢历史后的重灌。
+   *
+   * ConPTY 收到 resize 会「整屏重发」：清掉自己的缓冲再从当前视口
+   * 画起。破坏有两种形态——
+   * - 行数骤减（探针实锤：`[8;t;c] + [H] + 整屏覆盖`），回滚整段蒸发；
+   * - **等行数替换**：ConPTY 自己的缓冲在缩放 reflow 时就把中段弄丢
+   *   了，重发把 xterm 视口 1:1 换成损坏内容，行数不变、内容被啃
+   *   （实测 MOTD 的 System load / Usage of 几行消失）。
+   * 因此不能只比行数：同步前给缓冲取一份纯文本指纹，重绘落地后
+   * 用**前缀比对**——当前内容若以指纹开头 = 只有新增输出，没坏，不动；
+   * 前缀失配 = 视口被换/被啃，reset + 重灌快照。快照按**新列数**序列化
+   * （同步前本地 fit 已跑过），重灌后无需再重排。
+   *
+   * ponytail: 500ms 静默窗是经验值——更晚到的重绘仍会覆盖恢复结果；
+   * 真要根治得在 PTY 层挡掉 ConPTY 的清屏序列，代价大收益小。
+   */
+  const scheduleHistoryRestore = useCallback(
+    (
+      session: OpenSession,
+      snapshot: string | null,
+      fingerprint: string
+    ) => {
+      const pending = restoreTimers.current.get(
+        session.id
+      );
+      if (pending) clearTimeout(pending);
+      if (snapshot === null) return;
+      restoreTimers.current.set(
+        session.id,
+        setTimeout(() => {
+          restoreTimers.current.delete(
+            session.id
+          );
+          // 会话期间被关掉/断开：terminal 可能已 dispose，别碰
+          if (
+            disconnectedRef.current[session.id] ||
+            !openedRef.current.includes(session)
+          )
+            return;
+          const terminal = session.terminal;
+          if (
+            terminal.buffer.active.type !==
+            "normal"
+          )
+            return;
+          // 前缀匹配 = 快照之后只有新增输出，内容没坏
+          if (
+            bufferFingerprint(
+              terminal
+            ).startsWith(fingerprint)
+          )
+            return;
+          console.warn(
+            `[terminal] resize 内容被换/丢失 ${session.id}，从快照重灌`
+          );
+          terminal.reset();
+          terminal.write(snapshot);
+          terminal.scrollToBottom();
+        }, 500)
+      );
+    },
+    [disconnectedRef, openedRef]
+  );
   /**
    * 把尺寸变化延后到稳定后再通知 PTY。
    *
@@ -129,10 +224,22 @@ export function usePtyResizeSync(
           ) {
             return;
           }
-          // 记一下缓冲长度：resize 前后若它变短，说明 ConPTY 重发把
-          // 内容挤掉了（用户报「开合 AI 面板后内容变少」）
-          const before =
-            session.terminal.buffer.active.length;
+          // ConPTY 重发丢历史的存底：serialize 整个缓冲（含回滚与颜色）。
+          // ⚠️ 只存主缓冲——vim/top 的备用屏由 ConPTY 重发自己画对，
+          // 快照重灌反而会把全屏应用的内容叠一份
+          const snapshot =
+            session.terminal.buffer.active
+              .type === "normal"
+              ? session.serializer.serialize()
+              : null;
+          // 内容指纹：重绘落地后做前缀比对（只比行数会漏掉
+          // 「等行数替换」的破坏形态，见 scheduleHistoryRestore）
+          const fingerprint =
+            snapshot === null
+              ? ""
+              : bufferFingerprint(
+                  session.terminal
+                );
           const sizeKey = `${session.terminal.rows}x${session.terminal.cols}`;
           if (
             syncedSizes.current.get(
@@ -153,17 +260,12 @@ export function usePtyResizeSync(
             cols: session.terminal.cols
           })
             .then(() => {
-              // 这里**不要**再发 Ctrl+L 清屏重画：输出重复的根因是孤儿
-              // 监听器（已修复），resize 本身的 ConPTY 重绘内容是完整的，
-              // 每次都清屏反而把用户正在看的屏幕抹掉
-              const after =
-                session.terminal.buffer.active
-                  .length;
-              console.debug(
-                `[terminal] resize 后缓冲 ${before} → ${after} 行` +
-                  (after < before
-                    ? ` ⚠️ 少了 ${before - after} 行`
-                    : "")
+              // ConPTY 重绘是异步到达的，真正的破坏检测在
+              // scheduleHistoryRestore 的收尾比对里做
+              scheduleHistoryRestore(
+                session,
+                snapshot,
+                fingerprint
               );
             })
             .catch(reason => {
@@ -177,7 +279,11 @@ export function usePtyResizeSync(
         }, PTY_RESIZE_DEBOUNCE)
       );
     },
-    [disconnectedRef, openedRef]
+    [
+      disconnectedRef,
+      openedRef,
+      scheduleHistoryRestore
+    ]
   );
   /** 取消某个会话待发送的尺寸同步（关闭标签时调用）。 */
   const cancelPtyResize = useCallback(
@@ -187,6 +293,11 @@ export function usePtyResizeSync(
       if (pending) clearTimeout(pending);
       ptyResizeTimers.current.delete(id);
       syncedSizes.current.delete(id);
+      // 丢历史恢复也一样：会话没了，收尾定时器只会打在空处
+      const restoring =
+        restoreTimers.current.get(id);
+      if (restoring) clearTimeout(restoring);
+      restoreTimers.current.delete(id);
     },
     []
   );
@@ -232,6 +343,13 @@ export function usePtyResizeSync(
           }
           session.fit.fit();
           session.terminal.scrollToBottom();
+          // 强制全量重绘：容器突变（分屏/折叠）后 WebGL 的 canvas 偶发
+          // 停在旧尺寸——缓冲与行列都对，画面却被裁掉一块。刷新一行
+          // 代价极小，能盖掉这种「日志全对、看着不对」的渲染残影
+          session.terminal.refresh(
+            0,
+            session.terminal.rows - 1
+          );
           console.debug(
             `[terminal] fit ${session.id} → ${session.terminal.cols}x${session.terminal.rows}` +
               ` 缓冲 ${session.terminal.buffer.active.length} 行` +

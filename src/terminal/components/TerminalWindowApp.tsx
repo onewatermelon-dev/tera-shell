@@ -19,12 +19,14 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { loadSession } from "@/sessions/lib/useSessions";
 import { loadSettings } from "@/settings/lib/settings";
 import { useT } from "@/settings/lib/i18n";
 import {
   logError,
-  logInfo
+  logInfo,
+  logWarn
 } from "@/shared/lib/log";
 import "@xterm/xterm/css/xterm.css";
 import "@/styles/app.scss";
@@ -73,6 +75,10 @@ export default function TerminalWindowApp({
     });
     const fit = new FitAddon();
     terminal.loadAddon(fit);
+    // ConPTY resize 整屏重发会丢掉视口以上的历史，同步前存底、落地后
+    // 按行数比对重灌（与主窗口 ptyResize 的机制一致）
+    const serializer = new SerializeAddon();
+    terminal.loadAddon(serializer);
     terminal.open(host);
     fit.fit();
 
@@ -80,22 +86,75 @@ export default function TerminalWindowApp({
     let resizeTimer: ReturnType<
       typeof setTimeout
     > | null = null;
+    let restoreTimer: ReturnType<
+      typeof setTimeout
+    > | null = null;
     const unlisteners: Array<() => void> = [];
+
+    /** 缓冲纯文本指纹（见 ptyResize 的 bufferFingerprint）。 */
+    const fingerprint = () => {
+      const buffer = terminal.buffer.active;
+      const lines: string[] = [];
+      for (let y = 0; y < buffer.length; y++) {
+        lines.push(
+          buffer
+            .getLine(y)
+            ?.translateToString(true) ?? ""
+        );
+      }
+      while (
+        lines.length > 0 &&
+        lines.at(-1) === ""
+      )
+        lines.pop();
+      return lines.join("\n");
+    };
 
     /** 把当前尺寸同步给 PTY（同尺寸由后端跳过）。 */
     const syncSize = () => {
       if (disposed) return;
       fit.fit();
+      // 快照按新列数序列化（fit 已先跑），丢了直接重灌无需重排
+      const snapshot =
+        terminal.buffer.active.type === "normal"
+          ? serializer.serialize()
+          : null;
+      const before =
+        snapshot === null ? "" : fingerprint();
       void invoke("terminal_resize", {
         id: sessionId,
         rows: terminal.rows,
         cols: terminal.cols
-      }).catch(reason => {
-        logError(
-          "[term-window] resize 失败",
-          reason
-        );
-      });
+      })
+        .then(() => {
+          if (restoreTimer)
+            clearTimeout(restoreTimer);
+          if (snapshot === null) return;
+          restoreTimer = setTimeout(() => {
+            if (disposed) return;
+            if (
+              terminal.buffer.active.type !==
+              "normal"
+            )
+              return;
+            // 前缀匹配 = 快照之后只有新增输出，内容没坏；
+            // 失配 = ConPTY 重发把视口换/啃了，重灌
+            if (fingerprint().startsWith(before))
+              return;
+            logWarn(
+              "[term-window] resize 内容被换/丢失，从快照重灌"
+            );
+            terminal.reset();
+            terminal.write(snapshot);
+            terminal.scrollToBottom();
+          }, 500);
+        })
+        .catch(reason => {
+          logError(
+            "[term-window] resize 失败",
+            reason
+          );
+        });
     };
 
     const observer = new ResizeObserver(() => {
@@ -171,6 +230,8 @@ export default function TerminalWindowApp({
       disposed = true;
       if (resizeTimer !== null)
         clearTimeout(resizeTimer);
+      if (restoreTimer !== null)
+        clearTimeout(restoreTimer);
       observer.disconnect();
       for (const off of unlisteners) off();
       terminal.dispose();

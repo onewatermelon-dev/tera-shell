@@ -9,6 +9,7 @@ import { logWarn } from "@/shared/lib/log";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import type { SavedSession } from "@/sessions/lib/session";
 import type { SshTarget } from "@/sessions/lib/sshTarget";
 import type { AppSettings } from "@/settings/lib/settings";
@@ -192,6 +193,10 @@ export function createTerminalInstance(
   terminal.loadAddon(fit);
   const searchAddon = new SearchAddon();
   terminal.loadAddon(searchAddon);
+  // 缓冲快照：PTY resize 触发 ConPTY 整屏重发丢历史，同步前用它存底，
+  // 丢了就重灌（见 ptyResize 的 restore 逻辑）
+  const serializer = new SerializeAddon();
+  terminal.loadAddon(serializer);
   searchAddon.onDidChangeResults(event =>
     reportSearchResults(
       session.id,
@@ -503,6 +508,7 @@ export function createTerminalInstance(
     terminal,
     fit,
     search: searchAddon,
+    serializer,
     completion: input.completion,
     integration,
     element,

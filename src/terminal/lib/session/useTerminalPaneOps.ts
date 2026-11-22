@@ -117,17 +117,30 @@ export function useTerminalPaneOps(options: {
           disconnectedRef.current[current.id]
         )
           return undefined;
-        // 只取会话定义字段（密码若是明文直接复用，不再弹密码框）；
-        // 运行时字段（terminal/element 等）不能进后端 config
+        // ⚠️ 会话定义字段要**整份拷**（跳板 / 转发规则 / TOTP 密钥等）：
+        // 早年逐字段手抄漏了 forwards，拆出去的会话悄悄丢掉 R 转发，
+        // 用户对出「两侧登录内容不一样」才发现。current 是 OpenSession
+        // （带着 terminal/element 等运行时字段），不能整体展开进 config，
+        // 先摘掉运行时字段再展开 —— SavedSession 的字段自动跟全。
+        const {
+          terminal: _t,
+          fit: _f,
+          search: _s,
+          serializer: _ser,
+          completion: _c,
+          integration: _i,
+          element: _e,
+          mounted: _m,
+          sourceSessionId: _ss,
+          execTarget: _x,
+          disposeListeners: _d,
+          ...saved
+        } = current;
         const stamp = Date.now();
         const config: SavedSession = {
+          ...saved,
           id: `split-${current.id}-${stamp}`,
-          name: nextDupName(current.name),
-          kind: current.kind,
-          host: current.host,
-          port: current.port,
-          username: current.username,
-          password: current.password
+          name: nextDupName(current.name)
         };
         const ok = await startSession(
           config,
@@ -136,13 +149,13 @@ export function useTerminalPaneOps(options: {
         );
         if (!ok) return undefined;
         const newPaneId = `pane-${stamp}`;
-        // ⚠️ **拆分也必须挂起 PTY 同步**（此前漏掉，只有 AI 面板开合和
-        // 窗格折叠挂了）。拆分让被拆会话的行数骤减（实测 35 → 17 行），
-        // xterm 会因此做一次 reflow（行合并）——**丢的是屏幕显示的中段，
-        // 缓冲行数不变**（日志 `resize 后缓冲 35 → 35 行`），所以只看
-        // 缓冲行数是查不出来的。而同步给 PTY 会再招来一轮 ConPTY 重发，
-        // 与 reflow 错位叠加。远端不需要知道新行数：本地 fit 已让显示正确。
-        pausePtySync(600);
+        // 拆分后挂起 PTY 同步到布局稳定，**但收尾必须补一次 flush**：
+        // 拆分改变的是列数（149 → 73），远端不知道新列数的话 readline /
+        // `ls` / vim 全按旧宽度排版，窄窗格里就是「内容被剪掉一段」。
+        // 早年在此跳过同步，是因为把 ConPTY 重发的清屏误判成 reflow 丢
+        // 内容（缓冲行数确实会 35 → 17）——那轮丢历史如今由 ptyResize
+        // 的快照重灌兜住，这里可以放心把真实几何同步给远端。
+        pausePtySync(600, true);
         // 同 close 里的折叠：拆分也是父容器 grid 行轨变化 + 新宿主插入，
         // ResizeObserver 容易只命中中间态 → 两帧 rAF 补一次显式 fit
         requestAnimationFrame(() => {
