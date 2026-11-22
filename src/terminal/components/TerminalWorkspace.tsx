@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties
 } from "react";
@@ -303,18 +304,65 @@ export default function TerminalWorkspace({
       });
   }, [active?.id]);
 
-  // 底部抽屉：none / 命令 / 系统信息 / 进程信息 / 网络信息
+  // 底部抽屉：none / 命令 / 网络诊断 / 系统信息 / 进程信息 / 网络信息
+  // 打开即挂载，关闭先播 190ms 滑出动画再卸载（closing 期间内容保留）
   const [bottomDrawer, setBottomDrawer] =
     useState<BottomDrawerMode>("none");
-  const drawerOpen = bottomDrawer !== "none";
+  const [drawerClosing, setDrawerClosing] =
+    useState(false);
+  const drawerCloseTimer = useRef(0);
+  const drawerOpen =
+    bottomDrawer !== "none" || drawerClosing;
+  const bottomDrawerRef = useRef(bottomDrawer);
+  const drawerClosingRef = useRef(drawerClosing);
+  useEffect(() => {
+    bottomDrawerRef.current = bottomDrawer;
+    drawerClosingRef.current = drawerClosing;
+  }, [bottomDrawer, drawerClosing]);
+
+  /** 关闭抽屉：先播滑出动画，播完再真正卸载。 */
+  const closeBottomDrawer = useCallback(() => {
+    if (bottomDrawerRef.current === "none")
+      return;
+    window.clearTimeout(drawerCloseTimer.current);
+    setDrawerClosing(true);
+    drawerCloseTimer.current = window.setTimeout(
+      () => {
+        setDrawerClosing(false);
+        setBottomDrawer("none");
+      },
+      190
+    );
+  }, []);
+
+  /** 打开指定抽屉：取消进行中的关闭动画（切换抽屉不打架）；
+   * 传 "none" = 关闭，同样走动画（状态栏 ⚡ 开关的关闭路径）。 */
+  const openBottomDrawer = useCallback(
+    (mode: BottomDrawerMode) => {
+      window.clearTimeout(
+        drawerCloseTimer.current
+      );
+      if (mode === "none") {
+        closeBottomDrawer();
+        return;
+      }
+      setDrawerClosing(false);
+      setBottomDrawer(mode);
+    },
+    [closeBottomDrawer]
+  );
 
   // 快捷键「命令抽屉」（Ctrl+Shift+J，设置页可改）：开关动作在
   // useTerminals 的捕获监听里，经窗口事件跨层通知到这里切换
   useEffect(() => {
-    const toggle = () =>
-      setBottomDrawer(prev =>
-        prev === "cmd" ? "none" : "cmd"
-      );
+    const toggle = () => {
+      if (
+        bottomDrawerRef.current === "cmd" &&
+        !drawerClosingRef.current
+      )
+        closeBottomDrawer();
+      else openBottomDrawer("cmd");
+    };
     window.addEventListener(
       "cmd-drawer-toggle",
       toggle
@@ -324,7 +372,21 @@ export default function TerminalWorkspace({
         "cmd-drawer-toggle",
         toggle
       );
-  }, []);
+  }, [closeBottomDrawer, openBottomDrawer]);
+
+  // 工具菜单「网络诊断」：同样经窗口事件打开诊断抽屉
+  useEffect(() => {
+    const open = () => openBottomDrawer("diag");
+    window.addEventListener(
+      "net-diag-open",
+      open
+    );
+    return () =>
+      window.removeEventListener(
+        "net-diag-open",
+        open
+      );
+  }, [openBottomDrawer]);
 
   // 命令抽屉的发送出口：写 PTY 时带上 command 字段（与快捷宏 / AI
   // 终端执行同一条路，命令历史与日志才记得住）。broadcast 时用
@@ -397,13 +459,32 @@ export default function TerminalWorkspace({
     [setAiCollapsed]
   );
 
+  // AI 面板收起动画：先播 170ms 滑出（容器挂 ai-closing 类），
+  // 播完再真正置 collapsed（has-panel 撤掉 + 浮窗出现）
+  const [aiClosing, setAiClosing] =
+    useState(false);
+  const aiCloseTimer = useRef(0);
+  const collapseAiWithAnim = useCallback(() => {
+    setAiClosing(true);
+    window.clearTimeout(aiCloseTimer.current);
+    aiCloseTimer.current = window.setTimeout(
+      () => {
+        setAiClosing(false);
+        setAiCollapsed(true);
+      },
+      170
+    );
+  }, [setAiCollapsed]);
+
   return (
     // SSH 会话激活时右侧并排 AI 聊天面板（占位态），本地会话只有终端卡片
     <div
       ref={aiHostRef}
       className={
         active?.kind === "ssh" && !aiCollapsed
-          ? "terminal-with-ai has-panel"
+          ? `terminal-with-ai has-panel${
+              aiClosing ? " ai-closing" : ""
+            }`
           : "terminal-with-ai"
       }
       style={
@@ -644,7 +725,8 @@ export default function TerminalWorkspace({
           mode={bottomDrawer}
           onSendCommand={onSendDrawerCommand}
           broadcastCount={broadcastCount}
-          onClose={() => setBottomDrawer("none")}
+          onClose={closeBottomDrawer}
+          closing={drawerClosing}
         />
 
         <TerminalStatus
@@ -662,7 +744,7 @@ export default function TerminalWorkspace({
           onReorderMacro={onReorderMacro}
           onNotify={onNotify}
           bottomDrawer={bottomDrawer}
-          onOpenDrawer={setBottomDrawer}
+          onOpenDrawer={openBottomDrawer}
         />
 
         {searchOpen && (
@@ -705,7 +787,7 @@ export default function TerminalWorkspace({
           collapsed={aiCollapsed}
           session={active}
           onAddMacroCommand={onAddMacroCommand}
-          onCollapse={() => setAiCollapsed(true)}
+          onCollapse={collapseAiWithAnim}
         />
       )}
       {active?.kind === "ssh" && aiCollapsed && (

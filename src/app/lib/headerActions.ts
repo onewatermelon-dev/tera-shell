@@ -72,6 +72,12 @@ export function buildHeaderActions(options: {
     devtools: () => {
       invoke("open_devtools").catch(fail);
     },
+    // 网络诊断工具箱：抽屉状态在 TerminalWorkspace，跨层走窗口事件
+    netDiag: () => {
+      window.dispatchEvent(
+        new CustomEvent("net-diag-open")
+      );
+    },
     // 右键菜单里点「重新连接」传的是会话自己的 id；全局键位只能作用于
     // 活动会话（快捷键没有「鼠标指哪儿」的上下文）
     reconnect: () => {

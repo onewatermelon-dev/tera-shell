@@ -131,6 +131,30 @@ const zhCN = {
     "命令抽屉（开/关）",
   "shortcuts.action.drawerFind":
     "命令抽屉查找替换",
+  "app.action.netDiag": "网络诊断工具箱",
+  "diag.title": "网络诊断",
+  "diag.sshOnly":
+    "网络诊断需要 SSH 会话——请先在侧栏连接一台服务器，再打开本工具。",
+  "diag.tool.ping": "Ping",
+  "diag.tool.port": "端口探测",
+  "diag.tool.dns": "DNS 解析",
+  "diag.tool.trace": "路由跟踪",
+  "diag.tool.curl": "HTTP 请求",
+  "diag.ph.ping": "目标 IP 或域名，如 1.1.1.1",
+  "diag.ph.port": "主机:端口，如 example.com:443",
+  "diag.ph.dns": "域名，如 example.com",
+  "diag.ph.trace": "IP 或域名",
+  "diag.ph.curl": "URL，如 https://example.com",
+  "diag.run": "执行",
+  "diag.cancel": "取消",
+  "diag.running": "诊断执行中…",
+  "diag.idle":
+    "选择工具并填目标，回车执行（在当前会话的服务器上发起）",
+  "diag.empty": "（无输出）",
+  "diag.failed": "执行失败",
+  "diag.badTarget": "目标格式不合法",
+  "diag.cancelled": "已取消",
+  "diag.ai": "让 AI 解读结果",
   "status.cmd": "命令抽屉",
   "cmd.title": "命令抽屉",
   "cmd.placeholder":
@@ -1173,6 +1197,32 @@ const enUS: Record<MessageKey, string> = {
     "Command drawer (toggle)",
   "shortcuts.action.drawerFind":
     "Command drawer find & replace",
+  "app.action.netDiag": "Network diagnostics",
+  "diag.title": "Network Diagnostics",
+  "diag.sshOnly":
+    "Network diagnostics needs an SSH session — connect a server in the sidebar first.",
+  "diag.tool.ping": "Ping",
+  "diag.tool.port": "Port probe",
+  "diag.tool.dns": "DNS lookup",
+  "diag.tool.trace": "Traceroute",
+  "diag.tool.curl": "HTTP request",
+  "diag.ph.ping":
+    "Target IP or domain, e.g. 1.1.1.1",
+  "diag.ph.port":
+    "host:port, e.g. example.com:443",
+  "diag.ph.dns": "Domain, e.g. example.com",
+  "diag.ph.trace": "IP or domain",
+  "diag.ph.curl": "URL, e.g. https://example.com",
+  "diag.run": "Run",
+  "diag.cancel": "Cancel",
+  "diag.running": "Running…",
+  "diag.idle":
+    "Pick a tool, enter a target, press Enter (runs on the session's server)",
+  "diag.empty": "(no output)",
+  "diag.failed": "Failed",
+  "diag.badTarget": "Invalid target",
+  "diag.cancelled": "Cancelled",
+  "diag.ai": "Ask AI to interpret",
   "status.cmd": "Command drawer",
   "cmd.title": "Command Drawer",
   "cmd.placeholder":

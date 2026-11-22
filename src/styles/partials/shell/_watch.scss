@@ -265,6 +265,18 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
+  transition:
+    transform 0.19s ease,
+    opacity 0.16s ease;
+
+  // 开合动画：右缘滑入/滑出（与 AI 面板、底部抽屉同节奏）。
+  // ⚠️ App 层用 closing 两阶段关闭：动画播完才真正卸载
+  animation: watch-panel-in 0.19s ease;
+
+  &.is-closing {
+    opacity: 0;
+    transform: translateX(24px);
+  }
 }
 
 // 头部高度 / 内边距 / 分隔线与 `.ai-panel-head` 对齐（44px + 1px 底边），
@@ -612,4 +624,11 @@
   vertical-align: middle;
   content: "";
   border-top: 1px dashed var(--danger);
+}
+
+@keyframes watch-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
 }

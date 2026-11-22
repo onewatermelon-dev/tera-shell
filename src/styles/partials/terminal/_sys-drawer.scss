@@ -604,3 +604,124 @@
   line-height: 20px;
   background-color: transparent;
 }
+
+// 网络诊断工具箱：工具 tab + 目标行 + 结果输出区
+.netdiag-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.netdiag-tool {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+
+  &:hover {
+    color: var(--foreground);
+    border-color: var(--accent);
+  }
+
+  &.is-active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+}
+
+.netdiag-run-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.netdiag-target {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  font:
+    12px/1.4 Consolas,
+    monospace;
+  color: var(--foreground);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+.netdiag-out {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px;
+  overflow-y: auto;
+  font:
+    12px/1.6 Consolas,
+    monospace;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  @include thin-scrollbar;
+}
+
+.netdiag-ai-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+
+  &:hover {
+    color: var(--accent-foreground);
+    background: var(--accent);
+  }
+}
+
+// 诊断抽屉的正文布局：纵向排列、元素间留缝——
+// 否则输入行与结果框贴成一块（实测连成一个框）
+.netdiag-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+// 抽屉开合过渡：滑入/滑出 + 淡入淡出（190ms）。
+// 关闭动画期间内容保留（TerminalWorkspace 的 closing 态），播完卸载。
+// 开合都动 max-height：行高平滑收起/展开（终端跟着长高/压缩）。
+// ⚠️ max-height 用 --drawer-h（各模式真实高度，BottomDrawer 注入）：
+// 起算值若虚高（420px），过渡前半段会空转、看起来「没有动画」。
+.drawer-slide {
+  max-height: var(--drawer-h, 420px);
+  overflow: hidden;
+  transition:
+    max-height 0.19s ease,
+    opacity 0.16s ease;
+  animation: drawer-in 0.19s ease;
+}
+
+.drawer-slide.is-closing {
+  max-height: 0;
+  opacity: 0;
+}
+
+@keyframes drawer-in {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+}

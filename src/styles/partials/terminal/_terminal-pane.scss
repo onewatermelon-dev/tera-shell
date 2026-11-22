@@ -67,6 +67,15 @@
   height: 100%;
   min-height: 0;
 
+  // AI 面板开合动画：展开从右缘滑入，收起向外滑出（与底部抽屉同节奏）
+  &.has-panel .ai-panel {
+    animation: ai-panel-in 0.19s ease;
+  }
+
+  &.ai-closing.has-panel .ai-panel {
+    animation: ai-panel-out 0.17s ease forwards;
+  }
+
   &.has-panel {
     // 面板宽度由拖拽分隔条控制（--ai-panel-width，见 TerminalWorkspace）；
     // min(…, 50vw) 兜底窗口缩小时不吞掉终端
@@ -98,5 +107,19 @@
 
   &:hover::after {
     background: var(--muted);
+  }
+}
+
+@keyframes ai-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes ai-panel-out {
+  to {
+    opacity: 0;
+    transform: translateX(24px);
   }
 }

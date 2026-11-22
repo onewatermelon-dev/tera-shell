@@ -174,6 +174,10 @@ export function buildMenus(
           label: t("app.action.openSftp")
         }),
         withKey({
+          id: "netDiag",
+          label: t("app.action.netDiag")
+        }),
+        withKey({
           id: "openAnime",
           label: t("app.action.openAnime")
         }),

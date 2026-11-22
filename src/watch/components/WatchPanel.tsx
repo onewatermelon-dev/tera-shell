@@ -43,6 +43,8 @@ type Props = {
   /** App 层的巡检实例（心跳、状态、采样序列都在它手里） */
   watch: ReturnType<typeof useWatch>;
   onClose: () => void;
+  /** 关闭动画播放中（内容保留，播完再卸载）。 */
+  closing?: boolean;
   onConfigure: (session: SavedSession) => void;
   /**
    * 把归因文本送进 AI 面板。
@@ -83,6 +85,7 @@ export default function WatchPanel({
   sessions,
   watch,
   onClose,
+  closing,
   onConfigure,
   onAskAi,
   onError
@@ -240,7 +243,9 @@ export default function WatchPanel({
 
   return (
     <aside
-      className="watch-panel"
+      className={`watch-panel${
+        closing ? " is-closing" : ""
+      }`}
       style={
         {
           "--watch-panel-width": `${panelWidth}px`

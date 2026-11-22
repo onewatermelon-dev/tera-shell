@@ -24,13 +24,40 @@
   padding: 8px;
   background: var(--background);
 
-  // 会话栏收起：整栏直接退出布局（开关在左侧竖条上）
+  // 会话栏开合动画：列宽 224 ⇄ 0 平滑过渡（两列轨道数一致可插值）。
+  // ⚠️ 面板（.sidebar）保持常挂载，靠宽度收起而非 display:none
+  transition:
+    grid-template-columns 0.19s ease,
+    gap 0.19s ease;
+
+  // 会话栏收起：第一列收到 0，内容被 overflow 裁掉（开关在左侧竖条上）
   &.sidebar-closed {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 0 minmax(0, 1fr);
+    gap: 0;
 
     .sidebar {
-      display: none;
+      // 宽度为 0 时边框会剩一条竖线，关掉
+      border: none;
     }
+  }
+}
+
+// 会话列表 ⇆ 跟随目录的切换：容器按模式 key 重挂，挂载即播滑入。
+// 高度撑满由这里补（.sidebar 不再是 grid 直接子项，失去 stretch）
+.sidebar-swap {
+  height: 100%;
+  min-height: 0;
+  animation: sidebar-swap-in 0.19s ease;
+}
+
+.sidebar-swap .sidebar {
+  height: 100%;
+}
+
+@keyframes sidebar-swap-in {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
   }
 }
 

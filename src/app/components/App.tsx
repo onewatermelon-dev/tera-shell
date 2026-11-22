@@ -3,8 +3,10 @@ import {
   logWarn
 } from "@/shared/lib/log";
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -112,6 +114,22 @@ export default function App() {
   /** 右侧值守面板（状态 / 班报）是否展开 */
   const [watchOpen, setWatchOpen] =
     useState(false);
+  /** 关闭动画播放中：面板保留，播完再卸载 */
+  const [watchClosing, setWatchClosing] =
+    useState(false);
+  const watchCloseTimer = useRef(0);
+  /** 关闭值守面板：先播滑出动画，播完再真正卸载。 */
+  const closeWatchPanel = useCallback(() => {
+    window.clearTimeout(watchCloseTimer.current);
+    setWatchClosing(true);
+    watchCloseTimer.current = window.setTimeout(
+      () => {
+        setWatchClosing(false);
+        setWatchOpen(false);
+      },
+      190
+    );
+  }, []);
   // 编辑中的宏；为 null 表示本次弹窗是「新增」
   const [editingMacro, setEditingMacro] =
     useState<TerminalMacro | null>(null);
@@ -722,9 +740,13 @@ export default function App() {
         statusMode={statusMode}
         onToggleStatus={toggleStatusMode}
         watchOpen={watchOpen}
-        onToggleWatch={() =>
-          setWatchOpen(open => !open)
-        }
+        onToggleWatch={() => {
+          window.clearTimeout(
+            watchCloseTimer.current
+          );
+          setWatchClosing(false);
+          setWatchOpen(true);
+        }}
         hideMenus={settingsOpen}
         onMenuClosed={() =>
           refocusAfterAction(refocusActive)
@@ -737,48 +759,59 @@ export default function App() {
             : "workspace sidebar-closed"
         }
       >
-        {sidebarMode === "sessions" ? (
-          <SessionSidebar
-            sessions={filteredSessions}
-            groups={groups}
-            activeId={
-              terminals.active?.sourceSessionId ??
-              ""
-            }
-            openedCount={terminals.opened.length}
-            query={query}
-            onQueryChange={setQuery}
-            onDuplicate={terminals.duplicate}
-            onEdit={dialogs.openEdit}
-            onRemove={dialogs.setSessionToRemove}
-            onCreate={dialogs.openCreate}
-            onToggleGroup={toggleGroup}
-            onCreateGroup={
-              dialogs.openCreateGroup
-            }
-            onEditGroup={dialogs.openEditGroup}
-            onRemoveGroup={
-              dialogs.setGroupToRemove
-            }
-            onWatch={setWatchSession}
-            onRemoteDesktop={setRdpSession}
-            onCreateInGroup={
-              dialogs.openCreateInGroup
-            }
-            onMove={move}
-          />
-        ) : (
-          <DirectoryPanel
-            // cwd 一变就重挂：组件内部无需「跟随」effect，
-            // 顺带把列表与滚动位置一起重置到新目录
-            key={`${terminals.active?.id ?? ""}:${terminals.activeCwd}`}
-            session={terminals.active}
-            cwd={terminals.activeCwd}
-            onInsertPath={insertPath}
-            onEnterDirectory={enterDirectory}
-            onOpenSftp={openSftpAt}
-          />
-        )}
+        {/* 会话列表 ⇆ 跟随目录的切换动画：key 随模式变化重挂容器，
+            容器播放滑入动画；内部组件自己的重挂（cwd 变化）不重播 */}
+        <div
+          className="sidebar-swap"
+          key={sidebarMode}
+        >
+          {sidebarMode === "sessions" ? (
+            <SessionSidebar
+              sessions={filteredSessions}
+              groups={groups}
+              activeId={
+                terminals.active
+                  ?.sourceSessionId ?? ""
+              }
+              openedCount={
+                terminals.opened.length
+              }
+              query={query}
+              onQueryChange={setQuery}
+              onDuplicate={terminals.duplicate}
+              onEdit={dialogs.openEdit}
+              onRemove={
+                dialogs.setSessionToRemove
+              }
+              onCreate={dialogs.openCreate}
+              onToggleGroup={toggleGroup}
+              onCreateGroup={
+                dialogs.openCreateGroup
+              }
+              onEditGroup={dialogs.openEditGroup}
+              onRemoveGroup={
+                dialogs.setGroupToRemove
+              }
+              onWatch={setWatchSession}
+              onRemoteDesktop={setRdpSession}
+              onCreateInGroup={
+                dialogs.openCreateInGroup
+              }
+              onMove={move}
+            />
+          ) : (
+            <DirectoryPanel
+              // cwd 一变就重挂：组件内部无需「跟随」effect，
+              // 顺带把列表与滚动位置一起重置到新目录
+              key={`${terminals.active?.id ?? ""}:${terminals.activeCwd}`}
+              session={terminals.active}
+              cwd={terminals.activeCwd}
+              onInsertPath={insertPath}
+              onEnterDirectory={enterDirectory}
+              onOpenSftp={openSftpAt}
+            />
+          )}
+        </div>
         <TerminalWorkspace
           opened={terminals.opened}
           active={terminals.active}
@@ -861,11 +894,12 @@ export default function App() {
         />
         {/* 值守面板：右侧覆盖层（不挤压终端网格，见 _watch.scss 注释）。
             放在 SettingsPage 之前 —— 设置页 z-index 更高，打开时把它盖住。 */}
-        {watchOpen && (
+        {(watchOpen || watchClosing) && (
           <WatchPanel
             sessions={sessionStore.sessions}
             watch={watch}
-            onClose={() => setWatchOpen(false)}
+            closing={watchClosing}
+            onClose={closeWatchPanel}
             onConfigure={setWatchSession}
             onAskAi={askAiFromWatch}
             onError={setError}

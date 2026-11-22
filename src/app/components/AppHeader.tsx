@@ -103,6 +103,8 @@ export type HeaderActions = {
   openSftp: () => void;
   /** 打开动漫播放弹层（独立于会话，走公网 API）。 */
   openAnime: () => void;
+  /** 打开网络诊断工具箱抽屉（工具菜单）。 */
+  netDiag: () => void;
   /** 把当前会话与分组导出到 JSON 文件（文件菜单）。 */
   exportSessions: () => void;
   /** 从 JSON 文件导入会话，选完文件先弹确认框（文件菜单）。 */

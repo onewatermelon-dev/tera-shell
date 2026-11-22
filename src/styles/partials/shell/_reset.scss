@@ -29,6 +29,7 @@
 }
 
 // AI 面板的对话文字要能划选复制；输入控件同理。
+// 网络诊断的结果输出也是复制大户（ping/路由原文往外贴）。
 // ⚠️ 终端子树**不**开这个白名单（2026-10-15 移除）：
 // xterm 的拖选、双击选词、复制全走自己的 buffer 选区（其 bundle 里
 // `user-select` 与 `getSelection` 零调用，本项目的复制路径也全是
@@ -39,7 +40,8 @@
 .ai-panel *,
 input,
 textarea,
-[contenteditable="true"] {
+[contenteditable="true"],
+.netdiag-out {
   user-select: text;
 }
 
