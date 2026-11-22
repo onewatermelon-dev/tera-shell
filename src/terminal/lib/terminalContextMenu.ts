@@ -14,6 +14,7 @@ import {
   ClearOutlined,
   CodeOutlined,
   CopyOutlined,
+  FileImageOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
   FullscreenOutlined,
@@ -26,6 +27,7 @@ import {
   SnippetsOutlined,
   StopOutlined
 } from "@ant-design/icons";
+import { copySelectionAsImage } from "@/terminal/lib/terminalSnapshot";
 
 type LogStatus = {
   recording: boolean;
@@ -71,6 +73,7 @@ export function createTerminalMenu({
 }: TerminalMenuOptions) {
   let menu: HTMLDivElement | undefined;
   let copyItem: HTMLDivElement | undefined;
+  let snapshotItem: HTMLDivElement | undefined;
   let fullscreenItem: HTMLDivElement | undefined;
   /** 「解释这条 / 让 AI 看看」两项：show 时按有无可选内容置灰 */
   const askItems: HTMLDivElement[] = [];
@@ -357,6 +360,26 @@ export function createTerminalMenu({
     });
     copyItem = copy;
 
+    // 选区渲染成 Carbon 风格图片写进剪贴板（发文档/博客用）
+    const snapshot = makeItem(
+      "复制为图片",
+      "",
+      FileImageOutlined
+    );
+    snapshot.addEventListener("click", () => {
+      if (
+        !snapshot.classList.contains("disabled")
+      ) {
+        copySelectionAsImage(
+          target?.getSelection() ?? ""
+        ).catch(onError);
+      }
+      hide();
+      target?.focus();
+    });
+    // 与「复制」共用置灰条件：没有选区就没有图片可出
+    snapshotItem = snapshot;
+
     const paste = makeItem(
       "粘贴",
       "paste",
@@ -468,6 +491,7 @@ export function createTerminalMenu({
       log,
       separator,
       copy,
+      snapshot,
       paste,
       askSeparator,
       explain,
@@ -564,11 +588,17 @@ export function createTerminalMenu({
         )
           ? "退出全屏"
           : "全屏";
-    // 没有选中内容时"复制"置灰
+    // 没有选中内容时"复制"置灰（"复制为图片"同条件）
+    const hasSelection =
+      terminal.hasSelection() &&
+      !!terminal.getSelection().trim();
     copyItem?.classList.toggle(
       "disabled",
-      !terminal.hasSelection() ||
-        !terminal.getSelection().trim()
+      !hasSelection
+    );
+    snapshotItem?.classList.toggle(
+      "disabled",
+      !hasSelection
     );
     // 「解释这条 / 让 AI 看看」：解析本次要问的文本（选区优先，否则
     // 指针所在行），并按「有内容 + 有面板在听」置灰 —— 本地会话不挂
