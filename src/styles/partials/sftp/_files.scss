@@ -226,7 +226,12 @@ body.sftp-dragging {
   flex-direction: column;
   gap: 14px;
   max-height: min(62vh, 540px);
-  padding-right: 6px;
+
+  // 左右各留 6px：overflow 滚动容器会把元素外扩的 2px 聚焦环裁掉
+  // （左角被切成直角；右侧原本就有 6px 所以是好的）。负 margin 抵消，
+  // 内容与头部标签保持原对齐
+  padding-inline: 6px;
+  margin-inline: -6px;
   overflow-y: auto;
 
   @include thin-scrollbar;
